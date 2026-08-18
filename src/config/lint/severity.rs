@@ -26,6 +26,14 @@ impl Named for Severity {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Level(Option<Severity>);
 
+/// A rule that named no severity of its own reads as on, which is what its
+/// boolean spelling means.
+impl From<Level> for crate::config::Value {
+    fn from(level: Level) -> Self {
+        level.0.map_or(Self::Flag(true), Self::named)
+    }
+}
+
 impl Level {
     /// A rule that follows `strict`: the state every rule starts in.
     pub const DEFAULT: Self = Self(None);

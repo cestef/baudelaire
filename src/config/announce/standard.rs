@@ -64,6 +64,7 @@ impl Section for StandardConfig {
             "handle",
             Text,
             "The atproto handle the site is announced under.",
+            |c| c.handle.clone().into(),
             |c, n, t| {
                 c.handle = n.string(t, 0)?;
                 Ok(())
@@ -73,6 +74,7 @@ impl Section for StandardConfig {
             "did",
             Text,
             "That handle's DID, if it should not be resolved at build time.",
+            |c| c.did.clone().into(),
             |c, n, t| {
                 c.did = Some(n.string(t, 0)?);
                 Ok(())
@@ -82,6 +84,7 @@ impl Section for StandardConfig {
             "pds",
             Url,
             "The personal data server the record is written to.",
+            |c| c.pds.clone().into(),
             |c, n, t| {
                 c.pds = n.url(t, 0)?;
                 Ok(())
@@ -91,6 +94,7 @@ impl Section for StandardConfig {
             "discover",
             Flag,
             "Show the publication on standard.site's discovery surfaces.",
+            |c| c.discover.into(),
             |c, n, t| {
                 c.discover = n.boolean(t, 0)?;
                 Ok(())
@@ -100,6 +104,7 @@ impl Section for StandardConfig {
             "icon",
             Path,
             "An icon published with the record.",
+            |c| c.icon.clone().into(),
             |c, n, t| {
                 c.icon = Some(n.string(t, 0)?.into());
                 Ok(())
@@ -109,6 +114,7 @@ impl Section for StandardConfig {
             "verify",
             Nested(VerifyConfig::rows),
             "Which handle-verification artifacts the build emits.",
+            |c| c.verify.values(),
             |c, n, t| c.verify.fill(n, t),
         ),
     ]);
@@ -120,6 +126,7 @@ impl Section for VerifyConfig {
             "wellknown",
             Flag,
             "Write `/.well-known/site.standard.publication`, naming the publication record.",
+            |c| c.wellknown.into(),
             |c, n, t| {
                 c.wellknown = n.boolean(t, 0)?;
                 Ok(())
@@ -129,6 +136,7 @@ impl Section for VerifyConfig {
             "links",
             Flag,
             "Add the verification links to the page head.",
+            |c| c.links.into(),
             |c, n, t| {
                 c.links = n.boolean(t, 0)?;
                 Ok(())

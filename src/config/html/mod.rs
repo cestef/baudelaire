@@ -87,14 +87,21 @@ impl Default for HtmlConfig {
 
 impl Section for HtmlConfig {
     const RULES: Block<Self> = Block(&[
-        ("pretty", Flag, "Indent the emitted HTML.", |c, n, t| {
-            c.pretty = n.boolean(t, 0)?;
-            Ok(())
-        }),
+        (
+            "pretty",
+            Flag,
+            "Indent the emitted HTML.",
+            |c| c.pretty.into(),
+            |c, n, t| {
+                c.pretty = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
         (
             "embed",
             Flag,
             "Inline processed assets into the page as `data:` URIs.",
+            |c| c.embed.into(),
             |c, n, t| {
                 c.embed = n.boolean(t, 0)?;
                 Ok(())
@@ -104,30 +111,35 @@ impl Section for HtmlConfig {
             "meta",
             Nested(MetaConfig::rows),
             "The `<meta>` description, Open Graph and Twitter tags. On by default; `#false` turns them off.",
+            |c| c.meta.values(),
             |c, n, t| c.meta.fill(n, t),
         ),
         (
             "anchors",
             Nested(AnchorConfig::rows),
             "Give every heading an `id`, and optionally a link back to it. On by default; `#false` turns it off.",
+            |c| c.anchors.values(),
             |c, n, t| c.anchors.fill(n, t),
         ),
         (
             "region",
             Nested(RegionConfig::rows),
             "Which part of a rendered page is its prose.",
+            |c| c.region.values(),
             |c, n, t| c.region.fill(n, t),
         ),
         (
             "math",
             Nested(MathConfig::rows),
             "Where the CSS that typst's MathML output depends on lives.",
+            |c| c.math.values(),
             |c, n, t| c.math.fill(n, t),
         ),
         (
             "jsonld",
             Flag,
             "Emit JSON-LD structured data for each page.",
+            |c| c.jsonld.into(),
             |c, n, t| {
                 c.jsonld = n.boolean(t, 0)?;
                 Ok(())
@@ -137,6 +149,7 @@ impl Section for HtmlConfig {
             "spans",
             Flag,
             "Stamp each element with the source span it came from, so `serve` can open it.",
+            |c| c.spans.into(),
             |c, n, t| {
                 c.spans = n.boolean(t, 0)?;
                 Ok(())
@@ -146,6 +159,7 @@ impl Section for HtmlConfig {
             "footnotes",
             Texts,
             "The elements a page's footnotes belong inside, most specific first.",
+            |c| c.footnotes.targets().iter().cloned().collect(),
             |c, n, t| {
                 let span = NodeExt::span(n);
                 let names = n.words(t)?;
@@ -161,6 +175,7 @@ impl Section for HtmlConfig {
             "highlight",
             Nested(HighlightConfig::rows),
             "Class a code block's tokens (`sx-keyword`, ..) instead of colouring them inline.",
+            |c| c.highlight.values(),
             |c, n, t| c.highlight.fill(n, t),
         ),
     ]);

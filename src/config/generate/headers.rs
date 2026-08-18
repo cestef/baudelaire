@@ -22,6 +22,19 @@ pub struct HeadersConfig {
 }
 
 impl HeadersConfig {
+    /// The rules read back: one entry per path pattern, each holding the
+    /// headers written under it, or the flag its own line carries when it is
+    /// off, as a [`Section`](crate::config::dispatch::Section) with a switch
+    /// reads.
+    pub(super) fn written(&self) -> crate::config::Value {
+        if !self.enabled {
+            return crate::config::Value::Flag(false);
+        }
+        crate::config::Value::each(&self.rules, |headers| {
+            crate::config::Value::each(headers, |value| value.clone().into())
+        })
+    }
+
     /// Read the flag on the node's own line, then the rules in the block
     /// beneath it. Not a [`Section`](crate::config::dispatch::Section), because
     /// neither level has a fixed key table: the outer nodes are path patterns

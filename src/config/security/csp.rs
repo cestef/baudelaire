@@ -56,13 +56,17 @@ impl Default for CspConfig {
 }
 
 impl Section for CspConfig {
-    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
+    const SWITCH: Option<Switch<Self>> = Some(Switch {
+        set: |c, on| c.enabled = on,
+        on: |c| c.enabled,
+    });
 
     const RULES: Block<Self> = Block(&[
         (
             "enforce",
             Flag,
             "Enforce the policy. Off reports violations without blocking anything.",
+            |c| c.enforce.into(),
             |c, n, t| {
                 c.enforce = n.boolean(t, 0)?;
                 Ok(())
@@ -72,6 +76,7 @@ impl Section for CspConfig {
             "hashes",
             Flag,
             "Add the digest of every inline script and style the build produced. Turns `html { pretty }` off, since a digest has to cover the bytes as served.",
+            |c| c.hashes.into(),
             |c, n, t| {
                 c.hashes = n.boolean(t, 0)?;
                 Ok(())
@@ -81,43 +86,87 @@ impl Section for CspConfig {
             "default",
             Text,
             "`default-src`: what every unstated fetch directive falls back to.",
+            |c| c.default.clone().into(),
             |c, n, t| {
                 c.default = Some(n.string(t, 0)?);
                 Ok(())
             },
         ),
-        ("script", Text, "`script-src`.", |c, n, t| {
-            c.script = Some(n.string(t, 0)?);
-            Ok(())
-        }),
-        ("style", Text, "`style-src`.", |c, n, t| {
-            c.style = Some(n.string(t, 0)?);
-            Ok(())
-        }),
-        ("img", Text, "`img-src`.", |c, n, t| {
-            c.img = Some(n.string(t, 0)?);
-            Ok(())
-        }),
-        ("font", Text, "`font-src`.", |c, n, t| {
-            c.font = Some(n.string(t, 0)?);
-            Ok(())
-        }),
-        ("connect", Text, "`connect-src`.", |c, n, t| {
-            c.connect = Some(n.string(t, 0)?);
-            Ok(())
-        }),
-        ("frame", Text, "`frame-src`.", |c, n, t| {
-            c.frame = Some(n.string(t, 0)?);
-            Ok(())
-        }),
-        ("object", Text, "`object-src`.", |c, n, t| {
-            c.object = Some(n.string(t, 0)?);
-            Ok(())
-        }),
+        (
+            "script",
+            Text,
+            "`script-src`.",
+            |c| c.script.clone().into(),
+            |c, n, t| {
+                c.script = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "style",
+            Text,
+            "`style-src`.",
+            |c| c.style.clone().into(),
+            |c, n, t| {
+                c.style = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "img",
+            Text,
+            "`img-src`.",
+            |c| c.img.clone().into(),
+            |c, n, t| {
+                c.img = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "font",
+            Text,
+            "`font-src`.",
+            |c| c.font.clone().into(),
+            |c, n, t| {
+                c.font = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "connect",
+            Text,
+            "`connect-src`.",
+            |c| c.connect.clone().into(),
+            |c, n, t| {
+                c.connect = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "frame",
+            Text,
+            "`frame-src`.",
+            |c| c.frame.clone().into(),
+            |c, n, t| {
+                c.frame = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "object",
+            Text,
+            "`object-src`.",
+            |c| c.object.clone().into(),
+            |c, n, t| {
+                c.object = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
         (
             "base",
             Text,
             "`base-uri`: what a `<base>` may repoint relative URLs at.",
+            |c| c.base.clone().into(),
             |c, n, t| {
                 c.base = Some(n.string(t, 0)?);
                 Ok(())
@@ -127,6 +176,7 @@ impl Section for CspConfig {
             "form",
             Text,
             "`form-action`: where a form may submit.",
+            |c| c.form.clone().into(),
             |c, n, t| {
                 c.form = Some(n.string(t, 0)?);
                 Ok(())
@@ -136,6 +186,7 @@ impl Section for CspConfig {
             "report",
             Url,
             "`report-uri`: where a violation report is posted.",
+            |c| c.report.clone().into(),
             |c, n, t| {
                 c.report = Some(n.url(t, 0)?);
                 Ok(())

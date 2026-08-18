@@ -3,6 +3,7 @@
 pub mod s3;
 pub mod ssh;
 
+use crate::config::Value;
 use crate::config::dispatch::Kind::Block as Nested;
 use crate::config::dispatch::{Block, Section};
 use crate::config::{S3Config, SshConfig};
@@ -24,12 +25,14 @@ impl Section for DeployConfig {
             "s3",
             Nested(S3Config::rows),
             "Upload to S3 or an S3-compatible bucket. Its presence turns it on.",
+            |c| c.s3.as_ref().map_or(Value::Unset, Section::values),
             |c, n, t| S3Config::optional(&mut c.s3, n, t),
         ),
         (
             "ssh",
             Nested(SshConfig::rows),
             "Upload over SSH. Its presence turns it on.",
+            |c| c.ssh.as_ref().map_or(Value::Unset, Section::values),
             |c, n, t| SshConfig::optional(&mut c.ssh, n, t),
         ),
     ]);

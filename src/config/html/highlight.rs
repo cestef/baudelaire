@@ -1,6 +1,7 @@
 //! `html { highlight { } }`: syntax highlighting as CSS classes.
 
 use crate::config::Named;
+use crate::config::Value;
 use crate::config::dispatch::Kind::{Flag, Table, Text, Toggled};
 use crate::config::dispatch::{Block, Keys, Section, Switch};
 use crate::config::node::NodeExt;
@@ -122,13 +123,17 @@ impl HighlightConfig {
 }
 
 impl Section for HighlightConfig {
-    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
+    const SWITCH: Option<Switch<Self>> = Some(Switch {
+        set: |c, on| c.enabled = on,
+        on: |c| c.enabled,
+    });
 
     const RULES: Block<Self> = Block(&[
         (
             "prefix",
             Text,
             "What every emitted class starts with. Empty for none.",
+            |c| c.prefix.clone().into(),
             |c, n, t| {
                 c.prefix = n.string(t, 0)?;
                 Ok(())
@@ -138,6 +143,7 @@ impl Section for HighlightConfig {
             "tokens",
             Toggled(Token::names, Token::names),
             "The tokens that reach the page, or `-name` to drop one. All are on.",
+            |c| c.tokens.iter().copied().map(Value::named).collect(),
             |c, n, t| {
                 c.tokens = n.toggled::<Token>(t, &Token::all())?;
                 Ok(())
@@ -147,6 +153,14 @@ impl Section for HighlightConfig {
             "classes",
             Table,
             "Per-token class names, prefix aside: `keyword \"kw\"` writes `sx-kw`.",
+            |c| {
+                Value::block(
+                    c.classes
+                        .iter()
+                        .map(|(token, class)| (token.name().to_owned(), class.clone().into()))
+                        .collect(),
+                )
+            },
             |c, n, t| {
                 c.classes = n
                     .block(t)?
@@ -167,6 +181,7 @@ impl Section for HighlightConfig {
             "scopes",
             Flag,
             "Also stamp each span with the grammar's own scope, as `data-scope`.",
+            |c| c.scopes.into(),
             |c, n, t| {
                 c.scopes = n.boolean(t, 0)?;
                 Ok(())

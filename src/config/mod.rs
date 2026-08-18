@@ -39,6 +39,7 @@ mod tests;
 pub mod typst;
 mod url;
 mod value;
+pub mod values;
 
 use std::path::{Path, PathBuf};
 
@@ -118,6 +119,7 @@ pub use serve::ServeConfig;
 pub use typst::TypstConfig;
 pub use typst::fonts::FontConfig;
 pub use url::{BaseUrl, Basename, Percent, UrlStyle};
+pub use values::Value;
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -221,13 +223,28 @@ impl Config {
             root: root.to_path_buf(),
             ..Self::parse(text)?
         });
-        let Some(resolved) = crate::theme::Theme::of(&config)? else {
+        let Some(floor) = config.beneath()? else {
             return Ok(config);
+        };
+        Self::parse_over(floor, text).map(requested)
+    }
+
+    /// What this config holds, key by key: every dispatch table read back, so
+    /// a value can be reported under the key that parses it.
+    pub fn values(&self) -> Value {
+        <Self as Section>::values(self)
+    }
+
+    /// The theme's own config, read as the floor this one stands on, or `None`
+    /// where no theme is named or the one named ships no `theme.kdl`.
+    pub fn beneath(&self) -> Result<Option<Self>> {
+        let Some(resolved) = crate::theme::Theme::of(self)? else {
+            return Ok(None);
         };
         let Some(defaults) = resolved.config() else {
-            return Ok(config);
+            return Ok(None);
         };
-        Self::parse_over(Self::floor(&defaults, config.root)?, text).map(requested)
+        Self::floor(&defaults, self.root.clone()).map(Some)
     }
 
     /// A theme's `theme.kdl`, read as the floor the site's own config stands on.
@@ -934,6 +951,7 @@ impl Section for Config {
             "site",
             Text,
             "The site's name, used in titles, feeds and metadata.",
+            |c| c.site.clone().into(),
             |c, n, t| {
                 c.site = Some(n.string(t, 0)?);
                 Ok(())
@@ -943,6 +961,7 @@ impl Section for Config {
             "description",
             Text,
             "What the site is, in one line, for the feed channel. Not a per-page `<meta>` fallback.",
+            |c| c.description.clone().into(),
             |c, n, t| {
                 c.description = Some(n.string(t, 0)?);
                 Ok(())
@@ -952,6 +971,7 @@ impl Section for Config {
             "url",
             Url,
             "The absolute base URL. Sitemaps, feeds and social cards cannot be generated without it.",
+            |c| c.url.clone().into(),
             |c, n, t| {
                 c.url = Some(n.base_url(t, 0)?);
                 Ok(())
@@ -961,6 +981,7 @@ impl Section for Config {
             "lang",
             Text,
             "The default language code, e.g. `en`.",
+            |c| c.lang.clone().into(),
             |c, n, t| {
                 c.lang = n.string(t, 0)?;
                 Ok(())
@@ -970,6 +991,7 @@ impl Section for Config {
             "author",
             Text,
             "The default author, used by any page naming none.",
+            |c| c.author.clone().into(),
             |c, n, t| {
                 c.author = Some(n.string(t, 0)?);
                 Ok(())
@@ -979,6 +1001,7 @@ impl Section for Config {
             "theme",
             Text,
             "A theme directory whose templates and assets this site layers over.",
+            |c| c.theme.clone().into(),
             |c, n, t| {
                 c.theme = Some(n.string(t, 0)?);
                 Ok(())
@@ -988,18 +1011,21 @@ impl Section for Config {
             Self::PATHS,
             Nested(Paths::rows),
             "Where the content, output and asset trees live.",
+            |c| c.paths.values(),
             |c, n, t| c.paths.fill(n, t),
         ),
         (
             "content",
             Nested(ContentConfig::rows),
             "What the content tree holds and how it is read.",
+            |c| c.content.values(),
             |c, n, t| c.content.fill(n, t),
         ),
         (
             "languages",
             Items(LanguageConfig::rows),
             "One block per language, each named by its code.",
+            |c| Value::each(&c.languages, Section::values),
             |c, n, t| {
                 c.languages = n.unique(t, "language", LanguageConfig::item)?;
                 Ok(())
@@ -1009,24 +1035,28 @@ impl Section for Config {
             "assets",
             Nested(AssetConfig::rows),
             "The pipeline applied to the asset tree.",
+            |c| c.assets.values(),
             |c, n, t| c.assets.fill(n, t),
         ),
         (
             "html",
             Nested(HtmlConfig::rows),
             "Post-processing of typst's HTML output.",
+            |c| c.html.values(),
             |c, n, t| c.html.fill(n, t),
         ),
         (
             "links",
             Nested(LinkConfig::rows),
             "The shape of generated URLs, and how strictly links are checked.",
+            |c| c.links.values(),
             |c, n, t| c.links.fill(n, t),
         ),
         (
             "redirect",
             Lines(RedirectConfig::rows),
             "Old paths no page owns, each forwarded to where its content moved.",
+            |c| Value::each(&c.redirect, Attributed::values),
             |c, n, t| {
                 c.redirect = n.unique(t, "redirect", RedirectConfig::item)?;
                 Ok(())
@@ -1036,54 +1066,63 @@ impl Section for Config {
             Self::LINT,
             Nested(LintConfig::rows),
             "Checks run over the built pages. Its presence turns them on; `#false` turns them off again.",
+            |c| c.lint.values(),
             |c, n, t| c.lint.fill(n, t),
         ),
         (
             "security",
             Nested(SecurityConfig::rows),
             "What the built pages tell a browser to trust.",
+            |c| c.security.values(),
             |c, n, t| c.security.fill(n, t),
         ),
         (
             "generate",
             Nested(GenerateConfig::rows),
             "The files a build emits beside the pages.",
+            |c| c.generate.values(),
             |c, n, t| c.generate.fill(n, t),
         ),
         (
             "navigation",
             Nested(NavigationConfig::rows),
             "How a visitor moves between the built pages.",
+            |c| c.navigation.values(),
             |c, n, t| c.navigation.fill(n, t),
         ),
         (
             "prune",
             Nested(PruneConfig::rows),
             "Delete anything under the output directory that this build did not produce. On by default; `#false` turns it off, and `keep` narrows it.",
+            |c| c.prune.values(),
             |c, n, t| c.prune.fill(n, t),
         ),
         (
             "cache",
             Nested(CacheConfig::rows),
             "Where incremental build state lives, and whether to use it.",
+            |c| c.cache.values(),
             |c, n, t| c.cache.fill(n, t),
         ),
         (
             "caching",
             Nested(CacheControl::rows),
             "The `Cache-Control` policy uploaded files are given. Its presence turns it on; `#false` turns it off again.",
+            |c| c.caching.values(),
             |c, n, t| c.caching.fill(n, t),
         ),
         (
             "typst",
             Nested(TypstConfig::rows),
             "Typst engine knobs: language features, inputs, fonts, package registry.",
+            |c| c.typst.values(),
             |c, n, t| c.typst.fill(n, t),
         ),
         (
             "client",
             Table,
             "Constants exposed to client-side JavaScript, one `key value` line per entry.",
+            |c| Value::each(&c.client, |value| value.into()),
             |c, n, t| {
                 c.client = n.table(t)?;
                 Ok(())
@@ -1093,30 +1132,35 @@ impl Section for Config {
             Self::HOOKS,
             Nested(HooksConfig::rows),
             "External commands run before and after the build.",
+            |c| c.hooks.values(),
             |c, n, t| c.hooks.fill(n, t),
         ),
         (
             Self::ANNOUNCE,
             Nested(AnnounceConfig::rows),
             "Where to announce the site's metadata.",
+            |c| c.announce.values(),
             |c, n, t| c.announce.fill(n, t),
         ),
         (
             Self::DEPLOY,
             Nested(DeployConfig::rows),
             "Where `baudelaire deploy` uploads the built site.",
+            |c| c.deploy.values(),
             |c, n, t| c.deploy.fill(n, t),
         ),
         (
             "serve",
             Nested(ServeConfig::rows),
             "The development server.",
+            |c| c.serve.values(),
             |c, n, t| c.serve.fill(n, t),
         ),
         (
             Self::PROFILES,
             Overlay,
             "Named overlays, each selected with `--profile` and each accepting any key on this page.",
+            |c| c.profiles.iter().map(|(name, _)| name.clone()).collect(),
             |c, n, t| {
                 c.profiles = n.unique(t, "profile", |child, t| {
                     Ok((child.name().value().to_owned(), child.block(t)?.clone()))

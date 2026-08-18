@@ -342,18 +342,43 @@ impl Cli {
     /// apply per-command, not this.
     pub fn config(&self) -> Result<Config> {
         let text = self.read()?;
-        let named = |e: BaudelaireErrorKind| match e {
+        let mut config = Config::load(&text, Self::root(), self.global.theme.as_deref())
+            .map_err(|e| self.named(e))?;
+        if let Some(profile) = &self.global.profile {
+            config = config.with_profile(profile).map_err(|e| self.named(e))?;
+        }
+        Ok(config)
+    }
+
+    /// The project directory every path is resolved against, which is the one
+    /// the command was run in.
+    fn root() -> &'static Path {
+        Path::new(".")
+    }
+
+    /// A config error, naming the file it was read from.
+    fn named(&self, error: BaudelaireErrorKind) -> BaudelaireErrorKind {
+        match error {
             BaudelaireErrorKind::Config(config) => {
                 BaudelaireErrorKind::Config(Box::new(config.named(&self.global.config)))
             }
             other => other,
-        };
-        let mut config =
-            Config::load(&text, Path::new("."), self.global.theme.as_deref()).map_err(named)?;
-        if let Some(profile) = &self.global.profile {
-            config = config.with_profile(profile).map_err(named)?;
         }
-        Ok(config)
+    }
+
+    /// Every layer of the config, from the built-in defaults up to the active
+    /// profile: what a value's origin is read out of.
+    pub fn sources(&self) -> Result<crate::config::values::source::Sources> {
+        use crate::config::values::source::Sources;
+
+        let text = self.read()?;
+        Sources::of(
+            &text,
+            Self::root(),
+            self.global.theme.as_deref(),
+            self.global.profile.as_deref(),
+        )
+        .map_err(|e| self.named(e))
     }
 
     /// Read the config file, mapping only a genuinely missing file to a

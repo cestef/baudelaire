@@ -12,6 +12,7 @@ use crate::config::dispatch::{Attributed, Block, Section};
 use crate::config::node::NodeExt;
 use crate::config::{
     CollectionConfig, DraftConfig, MarkdownConfig, ReadingConfig, RegistryConfig, TaxonomyConfig,
+    Value,
 };
 use crate::error::{ConfigError, ConfigErrorKind};
 
@@ -55,6 +56,7 @@ impl Section for ContentConfig {
             "index",
             Text,
             "The filename stem that publishes at its directory's own URL, without extension.",
+            |c| c.index.clone().into(),
             |c, n, t| {
                 let stem = n.string(t, 0)?;
                 if let Some(stem) = stem.strip_suffix(".typ").filter(|s| !s.is_empty()) {
@@ -76,6 +78,7 @@ impl Section for ContentConfig {
             "future",
             Flag,
             "Build pages dated later than now.",
+            |c| c.future.into(),
             |c, n, t| {
                 c.future = n.boolean(t, 0)?;
                 Ok(())
@@ -85,12 +88,14 @@ impl Section for ContentConfig {
             "drafts",
             Nested(DraftConfig::rows),
             "Whether drafts are built, and how one is marked. `drafts #true` is `drafts { build #true }`.",
+            |c| c.drafts.values(),
             |c, n, t| c.drafts.shorthand(n, t, "build"),
         ),
         (
             "collections",
             Items(CollectionConfig::rows),
             "One block per collection, each named by its id.",
+            |c| Value::each(&c.collections, Section::values),
             |c, n, t| {
                 c.collections = n.unique(t, "collection", CollectionConfig::item)?;
                 Ok(())
@@ -100,6 +105,7 @@ impl Section for ContentConfig {
             "taxonomies",
             Lines(TaxonomyConfig::rows),
             "One line per taxonomy, each named by its id.",
+            |c| Value::each(&c.taxonomies, Attributed::values),
             |c, n, t| {
                 c.taxonomies = n.unique(t, "taxonomy", TaxonomyConfig::item)?;
                 Ok(())
@@ -109,6 +115,7 @@ impl Section for ContentConfig {
             "entities",
             Items(RegistryConfig::rows),
             "One block per registry, each named by its id: what its entities carry and where they come from.",
+            |c| Value::each(&c.entities, Section::values),
             |c, n, t| {
                 c.entities = n.unique(t, "registry", RegistryConfig::item)?;
                 Ok(())
@@ -118,12 +125,14 @@ impl Section for ContentConfig {
             "reading",
             Nested(ReadingConfig::rows),
             "How a page's reading estimate is measured.",
+            |c| c.reading.values(),
             |c, n, t| c.reading.fill(n, t),
         ),
         (
             "markdown",
             Nested(MarkdownConfig::rows),
             "Whether `.md` files are pages, and what one may contain. `markdown #false` is `markdown { enabled #false }`.",
+            |c| c.markdown.values(),
             |c, n, t| c.markdown.shorthand(n, t, "enabled"),
         ),
     ]);

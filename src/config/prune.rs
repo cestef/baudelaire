@@ -24,12 +24,16 @@ impl Default for PruneConfig {
 }
 
 impl Section for PruneConfig {
-    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
+    const SWITCH: Option<Switch<Self>> = Some(Switch {
+        set: |c, on| c.enabled = on,
+        on: |c| c.enabled,
+    });
 
     const RULES: Block<Self> = Block(&[(
         "keep",
         Texts,
         "Globs, relative to the output directory, that the sweep never deletes: `keep \"themes/**\"`.",
+        |c| c.keep.clone().into(),
         |c, n, t| {
             c.keep = n.words(t)?;
             Ok(())

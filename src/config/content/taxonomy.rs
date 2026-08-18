@@ -2,6 +2,7 @@
 
 use kdl::KdlNode;
 
+use crate::config::Value;
 use crate::config::dispatch::Kind::{Choice, Flag, Number, Text};
 use crate::config::dispatch::{Attributed, Attrs};
 use crate::config::node::NodeExt;
@@ -105,6 +106,7 @@ impl Attributed for TaxonomyConfig {
             "key",
             Text,
             "The frontmatter field its terms are read from. Defaults to the taxonomy's own id.",
+            |c| c.key.clone().into(),
             |c, v, t, s| {
                 c.key = v.as_str(t, s)?;
                 Ok(())
@@ -114,6 +116,7 @@ impl Attributed for TaxonomyConfig {
             "entities",
             Text,
             "The `content { entities { } }` registry its terms are ids in.",
+            |c| c.entities.clone().into(),
             |c, v, t, s| {
                 c.entities = Some(v.as_str(t, s)?);
                 Ok(())
@@ -123,6 +126,7 @@ impl Attributed for TaxonomyConfig {
             "credit",
             Choice(Credit::names),
             "What a page claims about the entities it names here, for the surfaces that can spell it.",
+            |c| c.credit.map(Value::named).into(),
             |c, v, t, s| {
                 c.credit = Some(v.one::<Credit>(t, s)?);
                 Ok(())
@@ -132,6 +136,7 @@ impl Attributed for TaxonomyConfig {
             "listing",
             Flag,
             "Generate a page per term, and an index of the terms.",
+            |c| c.listing.into(),
             |c, v, t, s| {
                 c.listing = v.boolean(t, s)?;
                 Ok(())
@@ -141,6 +146,7 @@ impl Attributed for TaxonomyConfig {
             "describe",
             Flag,
             "Let a term written as a profile page be described by it, instead of generating a listing beside it.",
+            |c| c.describe.into(),
             |c, v, t, s| {
                 c.describe = v.boolean(t, s)?;
                 Ok(())
@@ -150,6 +156,7 @@ impl Attributed for TaxonomyConfig {
             "template",
             Text,
             "The layout those listings render through.",
+            |c| c.template.clone().into(),
             |c, v, t, s| {
                 c.template = Some(v.as_str(t, s)?);
                 Ok(())
@@ -159,6 +166,7 @@ impl Attributed for TaxonomyConfig {
             "paginate",
             Number,
             "Pages per term listing.",
+            |c| c.paginate.into(),
             |c, v, t, s| {
                 let n = v.integer(t, s)?;
                 if n < 1 {
@@ -172,6 +180,7 @@ impl Attributed for TaxonomyConfig {
             "sort",
             Choice(SortKey::names),
             "What a term's members are ordered by. Defaults to `title`, since a term spans collections.",
+            |c| Value::named(c.sort),
             |c, v, t, s| {
                 c.sort = v.one::<SortKey>(t, s)?;
                 Ok(())
@@ -181,6 +190,7 @@ impl Attributed for TaxonomyConfig {
             "reverse",
             Flag,
             "Reverse that order, for the newest-first a dated term listing wants.",
+            |c| c.reverse.into(),
             |c, v, t, s| {
                 c.reverse = v.boolean(t, s)?;
                 Ok(())
@@ -190,6 +200,7 @@ impl Attributed for TaxonomyConfig {
             "prefix",
             Text,
             "The path segment before a term page's number, as in `/tags/rust/page/2/`.",
+            |c| c.prefix.clone().into(),
             |c, v, t, s| {
                 c.prefix = v.template(t, s)?;
                 Ok(())

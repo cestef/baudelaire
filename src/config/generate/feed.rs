@@ -1,5 +1,6 @@
 //! `generate { feed { } }`: syndication feeds and their file names.
 
+use crate::config::Value;
 use crate::config::dispatch::Kind::{Block as Nested, Choice, Choices, Flag, Number, Path};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
@@ -133,6 +134,7 @@ impl Section for FeedConfig {
             "formats",
             Choices(FeedKind::names),
             "Which feed formats to write, one word each.",
+            |c| c.formats.iter().copied().map(Value::named).collect(),
             |c, n, t| {
                 c.formats = n.mapped::<FeedKind>(t)?;
                 Ok(())
@@ -142,6 +144,7 @@ impl Section for FeedConfig {
             "limit",
             Number,
             "How many of the newest pages a feed carries.",
+            |c| c.limit.into(),
             |c, n, t| {
                 c.limit = n.count(t, 0)?;
                 Ok(())
@@ -151,6 +154,7 @@ impl Section for FeedConfig {
             "content",
             Choice(Content::names),
             "How much of each page an entry carries: its summary, or its prose as well.",
+            |c| Value::named(c.content),
             |c, n, t| {
                 c.content = n.arg(t, 0)?.one::<Content>(t, NodeExt::span(n))?;
                 Ok(())
@@ -160,6 +164,7 @@ impl Section for FeedConfig {
             "terms",
             Flag,
             "Also write a feed per taxonomy term.",
+            |c| c.terms.into(),
             |c, n, t| {
                 c.terms = n.boolean(t, 0)?;
                 Ok(())
@@ -169,6 +174,7 @@ impl Section for FeedConfig {
             "names",
             Nested(FeedNames::rows),
             "What each format's file is called, if not the conventional name.",
+            |c| c.names.values(),
             |c, n, t| c.names.fill(n, t),
         ),
     ]);
@@ -184,6 +190,7 @@ impl Section for FeedNames {
             "rss",
             Path,
             "The RSS file's name, e.g. `index.xml`. Defaults to `rss.xml`.",
+            |c| c.rss.clone().into(),
             |c, n, t| {
                 c.rss = Some(n.contained(t)?);
                 Ok(())
@@ -193,6 +200,7 @@ impl Section for FeedNames {
             "atom",
             Path,
             "The Atom file's name. Defaults to `atom.xml`.",
+            |c| c.atom.clone().into(),
             |c, n, t| {
                 c.atom = Some(n.contained(t)?);
                 Ok(())
@@ -202,6 +210,7 @@ impl Section for FeedNames {
             "json",
             Path,
             "The JSON Feed file's name. Defaults to `feed.json`.",
+            |c| c.json.clone().into(),
             |c, n, t| {
                 c.json = Some(n.contained(t)?);
                 Ok(())

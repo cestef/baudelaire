@@ -45,31 +45,51 @@ impl Default for SshConfig {
 
 impl Section for SshConfig {
     const RULES: Block<Self> = Block(&[
-        ("host", Text, "The host uploaded to.", |c, n, t| {
-            c.host = n.string(t, 0)?;
-            Ok(())
-        }),
+        (
+            "host",
+            Text,
+            "The host uploaded to.",
+            |c| c.host.clone().into(),
+            |c, n, t| {
+                c.host = n.string(t, 0)?;
+                Ok(())
+            },
+        ),
         (
             "path",
             Text,
             "The remote directory the site is written into.",
+            |c| c.path.clone().into(),
             |c, n, t| {
                 c.path = n.string(t, 0)?;
                 Ok(())
             },
         ),
-        ("port", Number, "The SSH port.", |c, n, t| {
-            c.port = n.port(t, 0)?;
-            Ok(())
-        }),
-        ("user", Text, "The user to connect as.", |c, n, t| {
-            c.user = Some(n.string(t, 0)?);
-            Ok(())
-        }),
+        (
+            "port",
+            Number,
+            "The SSH port.",
+            |c| c.port.into(),
+            |c, n, t| {
+                c.port = n.port(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "user",
+            Text,
+            "The user to connect as.",
+            |c| c.user.clone().into(),
+            |c, n, t| {
+                c.user = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
         (
             "key",
             Path,
             "The private key to authenticate with. Prefer an ed25519 key.",
+            |c| c.key.clone().into(),
             |c, n, t| {
                 c.key = Some(n.string(t, 0)?.into());
                 Ok(())
@@ -79,6 +99,7 @@ impl Section for SshConfig {
             "strict",
             Flag,
             "Refuse to connect to a host whose key is not already known.",
+            |c| c.strict.into(),
             |c, n, t| {
                 c.strict = n.boolean(t, 0)?;
                 Ok(())
@@ -88,6 +109,7 @@ impl Section for SshConfig {
             "delete",
             Flag,
             "Delete remote files this build did not produce.",
+            |c| c.delete.into(),
             |c, n, t| {
                 c.delete = n.boolean(t, 0)?;
                 Ok(())

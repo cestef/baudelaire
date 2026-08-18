@@ -20,6 +20,7 @@ impl Section for HooksConfig {
             "before",
             Texts,
             "Commands run before the asset pipeline, so what they generate is picked up.",
+            |c| c.before.clone().into(),
             |c, n, t| {
                 c.before = n.words(t)?;
                 Ok(())
@@ -29,6 +30,7 @@ impl Section for HooksConfig {
             "after",
             Texts,
             "Commands run once the output directory is written.",
+            |c| c.after.clone().into(),
             |c, n, t| {
                 c.after = n.words(t)?;
                 Ok(())

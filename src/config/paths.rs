@@ -3,6 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::codegen::bindable;
+use crate::config::Value;
 use crate::config::dispatch::Kind::Path as Directory;
 use crate::config::dispatch::Kind::Table;
 use crate::config::dispatch::{Block, Section};
@@ -117,6 +118,7 @@ impl Section for Paths {
             "content",
             Directory,
             "The content tree of `.typ` pages.",
+            |c| c.content.clone().into(),
             |c, n, t| {
                 c.content = n.string(t, 0)?.into();
                 Ok(())
@@ -126,6 +128,7 @@ impl Section for Paths {
             "dist",
             Directory,
             "Where the built site is written.",
+            |c| c.dist.clone().into(),
             |c, n, t| {
                 c.dist = n.string(t, 0)?.into();
                 Ok(())
@@ -135,6 +138,7 @@ impl Section for Paths {
             "assets",
             Directory,
             "Assets that go through the pipeline: CSS, JS, images.",
+            |c| c.assets.clone().into(),
             |c, n, t| {
                 c.assets = n.string(t, 0)?.into();
                 Ok(())
@@ -144,6 +148,7 @@ impl Section for Paths {
             "static",
             Directory,
             "Files copied to the output verbatim, untouched by the pipeline.",
+            |c| c.r#static.clone().into(),
             |c, n, t| {
                 c.r#static = n.string(t, 0)?.into();
                 Ok(())
@@ -153,6 +158,7 @@ impl Section for Paths {
             "templates",
             Directory,
             "Where layouts and partials are imported from.",
+            |c| c.templates.clone().into(),
             |c, n, t| {
                 c.templates = n.string(t, 0)?.into();
                 Ok(())
@@ -162,6 +168,7 @@ impl Section for Paths {
             "sources",
             Table,
             "Files a page may take as its body, each under a name: a page names the name, never the path.",
+            |c| Value::each(&c.sources, |path| path.clone().into()),
             |c, n, t| {
                 let mut seen: Vec<String> = Vec::new();
                 for entry in n.block(t)?.nodes() {

@@ -3,6 +3,7 @@
 pub mod standard;
 
 use crate::config::StandardConfig;
+use crate::config::Value;
 use crate::config::dispatch::Kind::Block as Nested;
 use crate::config::dispatch::{Block, Section};
 
@@ -20,6 +21,7 @@ impl Section for AnnounceConfig {
         "standard",
         Nested(StandardConfig::rows),
         "Announce to standard.site over atproto. Its presence turns it on.",
+        |c| c.standard.as_ref().map_or(Value::Unset, Section::values),
         |c, n, t| StandardConfig::optional(&mut c.standard, n, t),
     )]);
 }

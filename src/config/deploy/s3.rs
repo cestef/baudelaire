@@ -48,27 +48,41 @@ impl Default for S3Config {
 
 impl Section for S3Config {
     const RULES: Block<Self> = Block(&[
-        ("bucket", Text, "The bucket uploaded into.", |c, n, t| {
-            c.bucket = n.string(t, 0)?;
-            Ok(())
-        }),
+        (
+            "bucket",
+            Text,
+            "The bucket uploaded into.",
+            |c| c.bucket.clone().into(),
+            |c, n, t| {
+                c.bucket = n.string(t, 0)?;
+                Ok(())
+            },
+        ),
         (
             "endpoint",
             Url,
             "The API endpoint, for an S3-compatible host such as R2.",
+            |c| c.endpoint.clone().into(),
             |c, n, t| {
                 c.endpoint = Some(n.url(t, 0)?);
                 Ok(())
             },
         ),
-        ("region", Text, "The bucket's region.", |c, n, t| {
-            c.region = Some(n.string(t, 0)?);
-            Ok(())
-        }),
+        (
+            "region",
+            Text,
+            "The bucket's region.",
+            |c| c.region.clone().into(),
+            |c, n, t| {
+                c.region = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
         (
             "prefix",
             Text,
             "A key prefix every uploaded object goes under.",
+            |c| c.prefix.clone().into(),
             |c, n, t| {
                 c.prefix = n.string(t, 0)?;
                 Ok(())
@@ -78,6 +92,7 @@ impl Section for S3Config {
             "delete",
             Flag,
             "Delete remote objects this build did not produce.",
+            |c| c.delete.into(),
             |c, n, t| {
                 c.delete = n.boolean(t, 0)?;
                 Ok(())

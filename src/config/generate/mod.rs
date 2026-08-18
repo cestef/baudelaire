@@ -16,7 +16,7 @@ use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
 use crate::config::{
     BundleConfig, CardsConfig, FeedConfig, HeadersConfig, LlmsConfig, ManifestConfig, PdfConfig,
-    RobotsConfig, SearchConfig,
+    RobotsConfig, SearchConfig, Value,
 };
 
 /// Each field is opt-in: either a flag or a block whose presence turns it on.
@@ -43,14 +43,21 @@ pub struct GenerateConfig {
 
 impl Section for GenerateConfig {
     const RULES: Block<Self> = Block(&[
-        ("sitemap", Flag, "Write `sitemap.xml`.", |c, n, t| {
-            c.sitemap = n.boolean(t, 0)?;
-            Ok(())
-        }),
+        (
+            "sitemap",
+            Flag,
+            "Write `sitemap.xml`.",
+            |c| c.sitemap.into(),
+            |c, n, t| {
+                c.sitemap = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
         (
             "redirects",
             Flag,
             "Write a `_redirects` file from each page's declared aliases.",
+            |c| c.redirects.into(),
             |c, n, t| {
                 c.redirects = n.boolean(t, 0)?;
                 Ok(())
@@ -60,54 +67,63 @@ impl Section for GenerateConfig {
             "headers",
             Tables,
             "Write a `_headers` file from the caching policy. A block adds rules of the site's own: a path pattern, and the headers it sends.",
+            |c| c.headers.written(),
             |c, n, t| c.headers.fill(n, t),
         ),
         (
             "robots",
             Nested(RobotsConfig::rows),
             "Write `robots.txt`. Its presence turns it on; `#false` turns it off again.",
+            |c| c.robots.values(),
             |c, n, t| c.robots.fill(n, t),
         ),
         (
             "llms",
             Nested(LlmsConfig::rows),
             "Write `llms.txt`. Its presence turns it on; `#false` turns it off again.",
+            |c| c.llms.values(),
             |c, n, t| c.llms.fill(n, t),
         ),
         (
             "manifest",
             Nested(ManifestConfig::rows),
             "Write `manifest.webmanifest`. Its presence turns it on; `#false` turns it off again.",
+            |c| c.manifest.values(),
             |c, n, t| c.manifest.fill(n, t),
         ),
         (
             "feed",
             Nested(FeedConfig::rows),
             "Write syndication feeds.",
+            |c| c.feed.values(),
             |c, n, t| c.feed.fill(n, t),
         ),
         (
             "search",
             Nested(SearchConfig::rows),
             "Write a client-side search index.",
+            |c| c.search.values(),
             |c, n, t| c.search.fill(n, t),
         ),
         (
             "cards",
             Nested(CardsConfig::rows),
             "Draw a social card per page. Its presence turns it on; `#false` turns it off again.",
+            |c| c.cards.values(),
             |c, n, t| c.cards.fill(n, t),
         ),
         (
             "pdf",
             Nested(PdfConfig::rows),
             "Typeset PDFs beside the pages.",
+            |c| c.pdf.values(),
             |c, n, t| c.pdf.fill(n, t),
         ),
         (
             "bundles",
             Items(BundleConfig::rows),
             "One block per bound document, each named by the id its files are written under.",
+            |c| Value::each(&c.bundles, Section::values),
             |c, n, t| {
                 c.bundles = n.unique(t, "bundle", BundleConfig::item)?;
                 Ok(())

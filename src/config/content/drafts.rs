@@ -23,14 +23,21 @@ impl Default for DraftConfig {
 
 impl Section for DraftConfig {
     const RULES: Block<Self> = Block(&[
-        ("build", Flag, "Build draft pages at all.", |c, n, t| {
-            c.build = n.boolean(t, 0)?;
-            Ok(())
-        }),
+        (
+            "build",
+            Flag,
+            "Build draft pages at all.",
+            |c| c.build.into(),
+            |c, n, t| {
+                c.build = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
         (
             "suffix",
             Text,
             "The filename marker that flags a draft, peeled off the stem: `post.draft.typ`.",
+            |c| c.suffix.clone().into(),
             |c, n, t| {
                 c.suffix = n.string(t, 0)?;
                 Ok(())

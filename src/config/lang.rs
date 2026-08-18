@@ -2,6 +2,7 @@
 
 use kdl::KdlNode;
 
+use crate::config::Value;
 use crate::config::dispatch::Kind::{Number, Table, Text};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
@@ -64,6 +65,7 @@ impl Section for LanguageConfig {
             "name",
             Text,
             "The language's name in its own language, for a switcher.",
+            |c| c.name.clone().into(),
             |c, n, t| {
                 c.name = Some(n.string(t, 0)?);
                 Ok(())
@@ -73,6 +75,7 @@ impl Section for LanguageConfig {
             "dir",
             Text,
             "Writing direction, `ltr` or `rtl`.",
+            |c| c.dir.clone().into(),
             |c, n, t| {
                 c.dir = Some(n.string(t, 0)?);
                 Ok(())
@@ -82,6 +85,7 @@ impl Section for LanguageConfig {
             "site",
             Text,
             "The site name in this language.",
+            |c| c.site.clone().into(),
             |c, n, t| {
                 c.site = Some(n.string(t, 0)?);
                 Ok(())
@@ -91,6 +95,7 @@ impl Section for LanguageConfig {
             "author",
             Text,
             "The default author in this language.",
+            |c| c.author.clone().into(),
             |c, n, t| {
                 c.author = Some(n.string(t, 0)?);
                 Ok(())
@@ -100,6 +105,7 @@ impl Section for LanguageConfig {
             "description",
             Text,
             "What the site is, in this language.",
+            |c| c.description.clone().into(),
             |c, n, t| {
                 c.description = Some(n.string(t, 0)?);
                 Ok(())
@@ -109,6 +115,7 @@ impl Section for LanguageConfig {
             "wpm",
             Number,
             "Words a reader of this language gets through in a minute.",
+            |c| c.wpm.into(),
             |c, n, t| {
                 c.wpm = Some(usize::from(n.arg(t, 0)?.bounded::<u16>(
                     t,
@@ -123,6 +130,7 @@ impl Section for LanguageConfig {
             "strings",
             Table,
             "This language's UI string table, one `key value` line per entry.",
+            |c| Value::each(&c.strings, |value| value.into()),
             |c, n, t| {
                 c.strings = n.table(t)?;
                 Ok(())

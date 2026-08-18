@@ -24,6 +24,7 @@ impl Section for HeadingConfig {
             "level",
             Loud(Severity::names),
             "How loud a skipped level is.",
+            |c| c.level.into(),
             |c, n, t| {
                 c.level = n.level(t, 0)?;
                 Ok(())
@@ -33,6 +34,7 @@ impl Section for HeadingConfig {
             "start",
             Number,
             "The level a page's own sections open at, as `1` to `6`. The first heading under the layout's own may land there without counting as a skip.",
+            |c| c.start.into(),
             |c, n, t| {
                 c.start = Some(n.arg(t, 0)?.bounded(t, NodeExt::span(n), 1, 6)?);
                 Ok(())

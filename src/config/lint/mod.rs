@@ -6,6 +6,7 @@ pub mod rule;
 pub mod severity;
 pub mod snippets;
 
+use crate::config::Value;
 use crate::config::dispatch::Kind::Block as Nested;
 use crate::config::dispatch::Kind::{Flag, Level as Loud, Lines};
 use crate::config::dispatch::{Attributed, Block, Section, Switch};
@@ -56,13 +57,17 @@ impl Default for LintConfig {
 }
 
 impl Section for LintConfig {
-    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
+    const SWITCH: Option<Switch<Self>> = Some(Switch {
+        set: |c, on| c.enabled = on,
+        on: |c| c.enabled,
+    });
 
     const RULES: Block<Self> = Block(&[
         (
             "strict",
             Flag,
             "Fail the build on a finding instead of warning. A rule naming its own severity keeps it.",
+            |c| c.strict.into(),
             |c, n, t| {
                 c.strict = n.boolean(t, 0)?;
                 Ok(())
@@ -72,12 +77,14 @@ impl Section for LintConfig {
             Rule::Headings.key(),
             Nested(HeadingConfig::rows),
             "Report a heading that skips a level, e.g. `h2` straight to `h4`. `headings \"warn\"` is `headings { level \"warn\" }`.",
+            |c| c.headings.values(),
             |c, n, t| c.headings.shorthand(n, t, "level"),
         ),
         (
             Rule::Alt.key(),
             Loud(Severity::names),
             "Report an image with no `alt` attribute at all (an empty one marks it decorative).",
+            |c| c.alt.into(),
             |c, n, t| {
                 c.alt = n.level(t, 0)?;
                 Ok(())
@@ -87,6 +94,7 @@ impl Section for LintConfig {
             Rule::Ids.key(),
             Loud(Severity::names),
             "Report an `id` used more than once on a page.",
+            |c| c.ids.into(),
             |c, n, t| {
                 c.ids = n.level(t, 0)?;
                 Ok(())
@@ -96,6 +104,7 @@ impl Section for LintConfig {
             Rule::Aria.key(),
             Loud(Severity::names),
             "Report an unknown ARIA role or attribute, and one referring to an id that is not there.",
+            |c| c.aria.into(),
             |c, n, t| {
                 c.aria = n.level(t, 0)?;
                 Ok(())
@@ -105,12 +114,14 @@ impl Section for LintConfig {
             "budget",
             Nested(BudgetConfig::rows),
             "How many bytes one page may ship.",
+            |c| c.budget.values(),
             |c, n, t| c.budget.fill(n, t),
         ),
         (
             Rule::Snippets.key(),
             Lines(SnippetConfig::rows),
             "One line per code fence language, saying how a snippet of it is checked.",
+            |c| Value::each(&c.snippets, Attributed::values),
             |c, n, t| {
                 c.snippets = n.unique(t, "snippet language", SnippetConfig::item)?;
                 Ok(())

@@ -28,6 +28,20 @@ impl Version {
     }
 }
 
+/// Written back as `major.minor.patch`, which is what a config line spells.
+impl std::fmt::Display for Version {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let [_, major, minor, patch] = self.0.to_be_bytes();
+        write!(f, "{major}.{minor}.{patch}")
+    }
+}
+
+impl From<Version> for crate::config::Value {
+    fn from(version: Version) -> Self {
+        Self::written(version)
+    }
+}
+
 /// The oldest browser version the CSS must run on, per browser. Naming any
 /// turns lightningcss's *transform* on (nesting flattened, prefixes added,
 /// colour fallbacks); without one it only minifies.
@@ -53,42 +67,96 @@ impl TargetConfig {
 
 impl Section for TargetConfig {
     const RULES: Block<Self> = Block(&[
-        ("android", Ver, "Oldest Android WebView.", |c, n, t| {
-            c.android = Some(n.version(t, 0)?);
-            Ok(())
-        }),
-        ("chrome", Ver, "Oldest Chrome.", |c, n, t| {
-            c.chrome = Some(n.version(t, 0)?);
-            Ok(())
-        }),
-        ("edge", Ver, "Oldest Edge.", |c, n, t| {
-            c.edge = Some(n.version(t, 0)?);
-            Ok(())
-        }),
-        ("firefox", Ver, "Oldest Firefox.", |c, n, t| {
-            c.firefox = Some(n.version(t, 0)?);
-            Ok(())
-        }),
-        ("ie", Ver, "Oldest Internet Explorer.", |c, n, t| {
-            c.ie = Some(n.version(t, 0)?);
-            Ok(())
-        }),
-        ("ios", Ver, "Oldest Safari on iOS.", |c, n, t| {
-            c.ios = Some(n.version(t, 0)?);
-            Ok(())
-        }),
-        ("opera", Ver, "Oldest Opera.", |c, n, t| {
-            c.opera = Some(n.version(t, 0)?);
-            Ok(())
-        }),
-        ("safari", Ver, "Oldest Safari.", |c, n, t| {
-            c.safari = Some(n.version(t, 0)?);
-            Ok(())
-        }),
-        ("samsung", Ver, "Oldest Samsung Internet.", |c, n, t| {
-            c.samsung = Some(n.version(t, 0)?);
-            Ok(())
-        }),
+        (
+            "android",
+            Ver,
+            "Oldest Android WebView.",
+            |c| c.android.into(),
+            |c, n, t| {
+                c.android = Some(n.version(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "chrome",
+            Ver,
+            "Oldest Chrome.",
+            |c| c.chrome.into(),
+            |c, n, t| {
+                c.chrome = Some(n.version(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "edge",
+            Ver,
+            "Oldest Edge.",
+            |c| c.edge.into(),
+            |c, n, t| {
+                c.edge = Some(n.version(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "firefox",
+            Ver,
+            "Oldest Firefox.",
+            |c| c.firefox.into(),
+            |c, n, t| {
+                c.firefox = Some(n.version(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "ie",
+            Ver,
+            "Oldest Internet Explorer.",
+            |c| c.ie.into(),
+            |c, n, t| {
+                c.ie = Some(n.version(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "ios",
+            Ver,
+            "Oldest Safari on iOS.",
+            |c| c.ios.into(),
+            |c, n, t| {
+                c.ios = Some(n.version(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "opera",
+            Ver,
+            "Oldest Opera.",
+            |c| c.opera.into(),
+            |c, n, t| {
+                c.opera = Some(n.version(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "safari",
+            Ver,
+            "Oldest Safari.",
+            |c| c.safari.into(),
+            |c, n, t| {
+                c.safari = Some(n.version(t, 0)?);
+                Ok(())
+            },
+        ),
+        (
+            "samsung",
+            Ver,
+            "Oldest Samsung Internet.",
+            |c| c.samsung.into(),
+            |c, n, t| {
+                c.samsung = Some(n.version(t, 0)?);
+                Ok(())
+            },
+        ),
     ]);
 }
 

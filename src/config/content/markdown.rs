@@ -1,6 +1,7 @@
 //! `content { markdown { } }`: what a `.md` page may contain.
 
 use crate::config::Named;
+use crate::config::Value;
 use crate::config::dispatch::Kind::{Choice, Flag, Toggled};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
@@ -98,6 +99,7 @@ impl Section for MarkdownConfig {
             "enabled",
             Flag,
             "Whether a `.md` file under `content/` is a page at all.",
+            |c| c.enabled.into(),
             |c, n, t| {
                 c.enabled = n.boolean(t, 0)?;
                 Ok(())
@@ -107,6 +109,7 @@ impl Section for MarkdownConfig {
             "extensions",
             Toggled(Extension::names, Extension::defaults),
             "Parser extensions to enable, or `-name` to disable one. A `*` marks the ones already on.",
+            |c| c.extensions.iter().copied().map(Value::named).collect(),
             |c, n, t| {
                 c.extensions = n.toggled::<Extension>(t, Extension::DEFAULT)?;
                 Ok(())
@@ -116,6 +119,7 @@ impl Section for MarkdownConfig {
             "html",
             Choice(RawHtml::names),
             "What raw HTML in a page does: `refuse` the build, or `drop` it.",
+            |c| Value::named(c.html),
             |c, n, t| {
                 c.html = n.arg(t, 0)?.one::<RawHtml>(t, NodeExt::span(n))?;
                 Ok(())
@@ -125,6 +129,7 @@ impl Section for MarkdownConfig {
             "eval",
             Flag,
             "Whether a fence marked `eval` runs as Typst. Turn it off for content you did not write: it runs at build time.",
+            |c| c.eval.into(),
             |c, n, t| {
                 c.eval = n.boolean(t, 0)?;
                 Ok(())

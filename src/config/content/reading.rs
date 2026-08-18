@@ -24,6 +24,7 @@ impl Section for ReadingConfig {
         "wpm",
         Number,
         "Words a reader gets through in a minute, for `page.reading.minutes`.",
+        |c| c.wpm.into(),
         |c, n, t| {
             c.wpm = usize::from(
                 n.arg(t, 0)?

@@ -61,18 +61,23 @@ impl Section for PdfConfig {
         "pages",
         Nested(PdfPages::rows),
         "A PDF per page, beside its HTML. Its presence turns it on; `#false` turns it off again.",
+        |c| c.pages.values(),
         |c, n, t| c.pages.fill(n, t),
     )]);
 }
 
 /// The `pages { }` block, whose presence enables the per-page PDF.
 impl Section for PdfPages {
-    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
+    const SWITCH: Option<Switch<Self>> = Some(Switch {
+        set: |c, on| c.enabled = on,
+        on: |c| c.enabled,
+    });
 
     const RULES: Block<Self> = Block(&[(
         "template",
         Text,
         "The typst template each page is typeset with.",
+        |c| c.template.clone().into(),
         |c, n, t| {
             c.template = n.string(t, 0)?;
             Ok(())

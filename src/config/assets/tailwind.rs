@@ -45,13 +45,17 @@ impl Default for TailwindConfig {
 }
 
 impl Section for TailwindConfig {
-    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
+    const SWITCH: Option<Switch<Self>> = Some(Switch {
+        set: |c, on| c.enabled = on,
+        on: |c| c.enabled,
+    });
 
     const RULES: Block<Self> = Block(&[
         (
             "path",
             Asset,
             "Where the sheet is served from, relative to the asset root.",
+            |c| c.path.clone().into(),
             |c, n, t| {
                 c.path = n.asset(t, 0)?;
                 Ok(())
@@ -61,6 +65,7 @@ impl Section for TailwindConfig {
             "scan",
             Texts,
             "The trees and files read to find class names. Unset, the content and template trees.",
+            |c| c.scan.clone().into(),
             |c, n, t| {
                 c.scan = n.words(t)?.into_iter().map(PathBuf::from).collect();
                 Ok(())
@@ -70,6 +75,7 @@ impl Section for TailwindConfig {
             "config",
             PathKind,
             "An encre-css configuration file (TOML): theme, safelist, shortcuts, preflight.",
+            |c| c.config.clone().into(),
             |c, n, t| {
                 c.config = Some(n.string(t, 0)?.into());
                 Ok(())
@@ -79,6 +85,7 @@ impl Section for TailwindConfig {
             "preflight",
             Flag,
             "Whether the sheet opens with the reset rules Tailwind puts in front of its utilities.",
+            |c| c.preflight.into(),
             |c, n, t| {
                 c.preflight = n.boolean(t, 0)?;
                 Ok(())

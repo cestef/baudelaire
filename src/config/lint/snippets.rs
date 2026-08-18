@@ -68,11 +68,16 @@ impl Attributed for SnippetConfig {
     /// The level, which [`SnippetConfig::item`] reads before the attributes.
     const LEADING: usize = 1;
 
+    fn unkeyed(&self) -> Vec<crate::config::Value> {
+        vec![self.level.into()]
+    }
+
     const ATTRS: Attrs<Self> = Attrs(&[
         (
             "run",
             Text,
             "The command that checks one snippet, `{file}` standing for the file it is written to and `{lang}` for its language. Without one, this build's parser for the language checks it.",
+            |c| c.run.clone().into(),
             |c, v, t, s| {
                 c.run = Some(v.as_str(t, s)?);
                 Ok(())
@@ -82,6 +87,7 @@ impl Attributed for SnippetConfig {
             "hidden",
             Text,
             "A line prefix that checks a line without showing it, for the context a fragment needs to stand on its own. Only at the very start of a line.",
+            |c| c.hidden.clone().into(),
             |c, v, t, s| {
                 c.hidden = Some(v.as_str(t, s)?);
                 Ok(())

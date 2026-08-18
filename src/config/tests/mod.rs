@@ -5,6 +5,7 @@ mod entities;
 mod images;
 mod languages;
 mod links;
+mod provenance;
 mod remote;
 mod schema;
 mod sourcemaps;

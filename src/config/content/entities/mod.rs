@@ -10,6 +10,7 @@ pub mod source;
 
 use kdl::KdlNode;
 
+use crate::config::Value;
 use crate::config::dispatch::Kind::{Block as Nested, Choice, Items, Line};
 use crate::config::dispatch::{Attributed, Block, Keys, Section};
 use crate::config::node::NodeExt;
@@ -128,6 +129,7 @@ impl Section for RegistryConfig {
             "shape",
             Choice(Shape::names),
             "A named field set to take instead of declaring one.",
+            |c| c.shape.map(Value::named).into(),
             |c, n, t| {
                 c.shape = Some(n.arg(t, 0)?.one::<Shape>(t, NodeExt::span(n))?);
                 Ok(())
@@ -137,6 +139,7 @@ impl Section for RegistryConfig {
             "fields",
             Items(FieldSchema::rows),
             "What every entity carries, one line per field. Declaring a field requires it; with a `shape`, a field of the same name replaces that shape's and any other is added.",
+            |c| Value::each(&c.fields, Attributed::values),
             |c, n, t| {
                 c.fields = n.unique(t, "field", FieldSchema::item)?;
                 Ok(())
@@ -146,12 +149,14 @@ impl Section for RegistryConfig {
             "slots",
             Line(Slots::rows),
             "Which field answers each question a renderer asks of an entity.",
+            |c| c.slots.values(),
             |c, n, t| c.slots.read(n, t),
         ),
         (
             "sources",
             Nested(SourcesConfig::rows),
             "Where the entities come from, read in the order written.",
+            |c| SourcesConfig(c.sources.clone()).values(),
             |c, n, t| {
                 let mut sources = SourcesConfig::default();
                 sources.fill(n, t)?;
@@ -163,6 +168,7 @@ impl Section for RegistryConfig {
             "unknown",
             Choice(Unknown::names),
             "What a reference to an entity nobody declared means. Defaults to `error` where there is a roster, `synthesize` where there is not.",
+            |c| Value::named(c.unknown()),
             |c, n, t| {
                 c.unknown = Some(n.arg(t, 0)?.one::<Unknown>(t, NodeExt::span(n))?);
                 Ok(())

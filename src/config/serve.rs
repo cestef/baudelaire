@@ -43,6 +43,7 @@ impl Section for ServeConfig {
             "port",
             Number,
             "The port the dev server listens on.",
+            |c| c.port.into(),
             |c, n, t| {
                 c.port = n.port(t, 0)?;
                 Ok(())
@@ -52,6 +53,7 @@ impl Section for ServeConfig {
             "bind",
             Text,
             "The address it binds. Defaults to loopback; it has no authentication.",
+            |c| c.bind.clone().into(),
             |c, n, t| {
                 c.bind = n.string(t, 0)?;
                 Ok(())
@@ -61,6 +63,7 @@ impl Section for ServeConfig {
             "open",
             Flag,
             "Open a browser when the server starts.",
+            |c| c.open.into(),
             |c, n, t| {
                 c.open = n.boolean(t, 0)?;
                 Ok(())
@@ -70,6 +73,7 @@ impl Section for ServeConfig {
             "watch",
             Flag,
             "Watch the sources and rebuild. Off, it serves what is already built.",
+            |c| c.watch.into(),
             |c, n, t| {
                 c.watch = n.boolean(t, 0)?;
                 Ok(())
@@ -79,6 +83,7 @@ impl Section for ServeConfig {
             "include",
             Texts,
             "Extra paths to watch, one word each.",
+            |c| c.include.clone().into(),
             |c, n, t| {
                 c.include = n.words(t)?;
                 Ok(())
@@ -88,6 +93,7 @@ impl Section for ServeConfig {
             "exclude",
             Texts,
             "Paths to leave unwatched, one word each.",
+            |c| c.exclude.clone().into(),
             |c, n, t| {
                 c.exclude = n.words(t)?;
                 Ok(())
@@ -97,6 +103,7 @@ impl Section for ServeConfig {
             "editor",
             Texts,
             "The command alt-clicking a preview element runs, program and arguments as separate words.",
+            |c| c.editor.clone().into(),
             |c, n, t| {
                 let span = NodeExt::span(n);
                 let words = n.words(t)?;

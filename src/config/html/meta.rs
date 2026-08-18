@@ -28,13 +28,17 @@ impl Default for MetaConfig {
 }
 
 impl Section for MetaConfig {
-    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
+    const SWITCH: Option<Switch<Self>> = Some(Switch {
+        set: |c, on| c.enabled = on,
+        on: |c| c.enabled,
+    });
 
     const RULES: Block<Self> = Block(&[
         (
             "twitter",
             Text,
             "The site's account for `twitter:site`, as `@handle`.",
+            |c| c.twitter.clone().into(),
             |c, n, t| {
                 c.twitter = Some(n.string(t, 0)?);
                 Ok(())
@@ -44,6 +48,7 @@ impl Section for MetaConfig {
             "image",
             Text,
             "The preview image for a page that names none and gets no generated card.",
+            |c| c.image.clone().into(),
             |c, n, t| {
                 c.image = Some(n.string(t, 0)?);
                 Ok(())

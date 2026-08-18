@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 
 use crate::config::Named;
+use crate::config::Value;
 use crate::config::dispatch::Kind::{Asset, Choice};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
@@ -76,6 +77,7 @@ impl Section for MathConfig {
             "styles",
             Choice(MathStyles::names),
             "Where the CSS that MathML needs lives: a served `link`, typst's `inline` block, or `none`.",
+            |c| Value::named(c.styles),
             |c, n, t| {
                 c.styles = n.arg(t, 0)?.one::<MathStyles>(t, NodeExt::span(n))?;
                 Ok(())
@@ -85,6 +87,7 @@ impl Section for MathConfig {
             "path",
             Asset,
             "Where the stylesheet is served from, relative to the asset root.",
+            |c| c.path.clone().into(),
             |c, n, t| {
                 c.path = n.asset(t, 0)?;
                 Ok(())

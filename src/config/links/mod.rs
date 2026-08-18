@@ -2,6 +2,7 @@
 
 pub mod external;
 
+use crate::config::Value;
 use crate::config::dispatch::Kind::{Block as Nested, Choice, Flag};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
@@ -76,6 +77,7 @@ impl Section for LinkConfig {
             "style",
             Choice(UrlStyle::names),
             "Whether URLs are directories (`clean`) or `.html` files (`flat`).",
+            |c| Value::named(c.style),
             |c, n, t| {
                 c.style = n.arg(t, 0)?.one::<UrlStyle>(t, NodeExt::span(n))?;
                 Ok(())
@@ -85,6 +87,7 @@ impl Section for LinkConfig {
             "strict",
             Flag,
             "Fail the build on a broken internal link instead of warning.",
+            |c| c.strict.into(),
             |c, n, t| {
                 c.strict = n.boolean(t, 0)?;
                 Ok(())
@@ -94,12 +97,14 @@ impl Section for LinkConfig {
             "external",
             Nested(ExternalConfig::rows),
             "Check outbound `http(s)` links over the network. Its presence turns it on; `#false` turns it off again.",
+            |c| c.external.values(),
             |c, n, t| c.external.fill(n, t),
         ),
         (
             "backlinks",
             Flag,
             "Hand each page the pages whose content links to it, as `page.backlinks`.",
+            |c| c.backlinks.into(),
             |c, n, t| {
                 c.backlinks = n.boolean(t, 0)?;
                 Ok(())
@@ -109,6 +114,7 @@ impl Section for LinkConfig {
             "orphans",
             Choice(Linked::names),
             "Report the pages nothing links to, counting `any` page's links or only those an author wrote.",
+            |c| c.orphans.map(Value::named).into(),
             |c, n, t| {
                 c.orphans = Some(n.arg(t, 0)?.one::<Linked>(t, NodeExt::span(n))?);
                 Ok(())

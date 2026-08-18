@@ -37,6 +37,7 @@ impl Section for RegionConfig {
             "element",
             Text,
             "The element whose contents are the page's prose, by tag name. A page without one counts whole.",
+            |c| c.element.clone().into(),
             |c, n, t| {
                 c.element = n.string(t, 0)?;
                 Ok(())
@@ -46,6 +47,7 @@ impl Section for RegionConfig {
             "ignore",
             Texts,
             "Elements to leave out of it, by tag name, one word each.",
+            |c| c.ignore.clone().into(),
             |c, n, t| {
                 c.ignore = n.words(t)?;
                 Ok(())

@@ -54,13 +54,17 @@ impl Default for ResponsiveConfig {
 }
 
 impl Section for ResponsiveConfig {
-    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
+    const SWITCH: Option<Switch<Self>> = Some(Switch {
+        set: |c, on| c.enabled = on,
+        on: |c| c.enabled,
+    });
 
     const RULES: Block<Self> = Block(&[
         (
             "widths",
             Numbers,
             "The pixel widths to emit a variant at.",
+            |c| c.widths.clone().into(),
             |c, n, t| {
                 let max_texture_width = 16384;
                 c.widths = n.bounds::<u32>(t, 1, max_texture_width)?;
@@ -71,6 +75,7 @@ impl Section for ResponsiveConfig {
             "quality",
             Number,
             "Encoder quality for the generated variants, 1 to 100.",
+            |c| c.quality.into(),
             |c, n, t| {
                 c.quality = n.arg(t, 0)?.bounded(t, NodeExt::span(n), 1, 100)?;
                 Ok(())
@@ -80,6 +85,7 @@ impl Section for ResponsiveConfig {
             "sizes",
             Text,
             "The `sizes` attribute put on every responsive image.",
+            |c| c.sizes.clone().into(),
             |c, n, t| {
                 c.sizes = Some(n.string(t, 0)?);
                 Ok(())

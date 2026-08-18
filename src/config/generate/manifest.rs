@@ -2,6 +2,7 @@
 
 use kdl::KdlNode;
 
+use crate::config::Value;
 use crate::config::dispatch::Kind::{Choice, Lines, Number, Text};
 use crate::config::dispatch::{Attributed, Attrs, Block, Section, Switch};
 use crate::config::node::NodeExt;
@@ -145,13 +146,17 @@ impl Named for IconPurpose {
 
 /// The `manifest { }` block, whose presence enables the manifest.
 impl Section for ManifestConfig {
-    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
+    const SWITCH: Option<Switch<Self>> = Some(Switch {
+        set: |c, on| c.enabled = on,
+        on: |c| c.enabled,
+    });
 
     const RULES: Block<Self> = Block(&[
         (
             "name",
             Text,
             "The installed app's name. Defaults to the site title.",
+            |c| c.name.clone().into(),
             |c, n, t| {
                 c.name = Some(n.string(t, 0)?);
                 Ok(())
@@ -161,6 +166,7 @@ impl Section for ManifestConfig {
             "short",
             Text,
             "The name a launcher shows when the full one does not fit.",
+            |c| c.short.clone().into(),
             |c, n, t| {
                 c.short = Some(n.string(t, 0)?);
                 Ok(())
@@ -170,6 +176,7 @@ impl Section for ManifestConfig {
             "description",
             Text,
             "One line about the app, shown by an install prompt.",
+            |c| c.description.clone().into(),
             |c, n, t| {
                 c.description = Some(n.string(t, 0)?);
                 Ok(())
@@ -179,6 +186,7 @@ impl Section for ManifestConfig {
             "display",
             Choice(DisplayMode::names),
             "How the installed app is presented.",
+            |c| Value::named(c.display),
             |c, n, t| {
                 c.display = n.arg(t, 0)?.one::<DisplayMode>(t, NodeExt::span(n))?;
                 Ok(())
@@ -188,6 +196,7 @@ impl Section for ManifestConfig {
             "theme",
             Text,
             "CSS colour of the browser UI around the app, and of every page's `theme-color`.",
+            |c| c.theme.clone().into(),
             |c, n, t| {
                 c.theme = Some(n.string(t, 0)?);
                 Ok(())
@@ -197,6 +206,7 @@ impl Section for ManifestConfig {
             "background",
             Text,
             "CSS colour painted before the first page has rendered.",
+            |c| c.background.clone().into(),
             |c, n, t| {
                 c.background = Some(n.string(t, 0)?);
                 Ok(())
@@ -206,6 +216,7 @@ impl Section for ManifestConfig {
             "start",
             Text,
             "Where launching the installed app lands, per language. Defaults to the language's root.",
+            |c| c.start.clone().into(),
             |c, n, t| {
                 c.start = Some(n.string(t, 0)?);
                 Ok(())
@@ -215,6 +226,7 @@ impl Section for ManifestConfig {
             "scope",
             Text,
             "The URLs the installed app covers, per language. Defaults to the language's root.",
+            |c| c.scope.clone().into(),
             |c, n, t| {
                 c.scope = Some(n.string(t, 0)?);
                 Ok(())
@@ -224,6 +236,14 @@ impl Section for ManifestConfig {
             "icons",
             Lines(IconConfig::rows),
             "One line per icon, each named by the path it is served from.",
+            |c| {
+                Value::block(
+                    c.icons
+                        .iter()
+                        .map(|icon| (icon.src.clone(), icon.values()))
+                        .collect(),
+                )
+            },
             |c, n, t| {
                 c.icons = n
                     .unique(t, "icon", IconConfig::item)?
@@ -253,6 +273,7 @@ impl Attributed for IconConfig {
             "size",
             Number,
             "The square edge in pixels. Absent means the image scales to any size.",
+            |c| c.size.into(),
             |c, v, t, s| {
                 c.size = Some(v.bounded(t, s, 1, 4096)?);
                 Ok(())
@@ -262,6 +283,7 @@ impl Attributed for IconConfig {
             "purpose",
             Choice(IconPurpose::names),
             "What a launcher may do with the image.",
+            |c| Value::named(c.purpose),
             |c, v, t, s| {
                 c.purpose = v.one::<IconPurpose>(t, s)?;
                 Ok(())

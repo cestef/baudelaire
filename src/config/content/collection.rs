@@ -2,6 +2,7 @@
 
 use kdl::KdlNode;
 
+use crate::config::Value;
 use crate::config::dispatch::Kind::{Block as Nested, Choice, Flag, Items, Number, Template, Text};
 use crate::config::dispatch::{Attributed, Block, Section, Switch};
 use crate::config::node::NodeExt;
@@ -128,6 +129,7 @@ impl Section for CollectionConfig {
             "glob",
             Text,
             "Which content files belong to this collection.",
+            |c| c.glob.clone().into(),
             |c, n, t| {
                 c.glob = Some(n.string(t, 0)?);
                 Ok(())
@@ -137,19 +139,27 @@ impl Section for CollectionConfig {
             "sort",
             Choice(SortKey::names),
             "What the collection's members are ordered by.",
+            |c| Value::named(c.sort),
             |c, n, t| {
                 c.sort = n.arg(t, 0)?.one::<SortKey>(t, NodeExt::span(n))?;
                 Ok(())
             },
         ),
-        ("reverse", Flag, "Reverse that order.", |c, n, t| {
-            c.reverse = n.boolean(t, 0)?;
-            Ok(())
-        }),
+        (
+            "reverse",
+            Flag,
+            "Reverse that order.",
+            |c| c.reverse.into(),
+            |c, n, t| {
+                c.reverse = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
         (
             "permalink",
             Template,
             "The URL pattern its pages publish at, e.g. `/{slug}/`.",
+            |c| c.permalink.clone().into(),
             |c, n, t| {
                 c.permalink = Some(n.template(t, 0)?);
                 Ok(())
@@ -159,6 +169,7 @@ impl Section for CollectionConfig {
             "template",
             Text,
             "The layout its pages render through.",
+            |c| c.template.clone().into(),
             |c, n, t| {
                 c.template = Some(n.string(t, 0)?);
                 Ok(())
@@ -168,12 +179,14 @@ impl Section for CollectionConfig {
             "paginate",
             Nested(PaginateConfig::rows),
             "Generate an index over the collection. Its presence turns the index on; `#false` turns it off again.",
+            |c| c.paginate.values(),
             |c, n, t| c.paginate.fill(n, t),
         ),
         (
             "feed",
             Flag,
             "Also write a feed of this collection's members, beside its index.",
+            |c| c.feed.into(),
             |c, n, t| {
                 c.feed = n.boolean(t, 0)?;
                 Ok(())
@@ -183,6 +196,7 @@ impl Section for CollectionConfig {
             "schema",
             Items(FieldSchema::rows),
             "What every member's frontmatter must declare, one line per field. A `dict` field takes a block of its own fields.",
+            |c| Value::each(&c.schema, Attributed::values),
             |c, n, t| {
                 c.schema = n.unique(t, "schema field", FieldSchema::item)?;
                 Ok(())
@@ -195,13 +209,17 @@ impl Section for CollectionConfig {
 }
 
 impl Section for PaginateConfig {
-    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
+    const SWITCH: Option<Switch<Self>> = Some(Switch {
+        set: |c, on| c.enabled = on,
+        on: |c| c.enabled,
+    });
 
     const RULES: Block<Self> = Block(&[
         (
             "size",
             Number,
             "Pages per index page. Omitted, the index is one page.",
+            |c| c.size.into(),
             |c, n, t| {
                 let n_ = n.arg(t, 0)?.integer(t, NodeExt::span(n))?;
                 if n_ < 1 {
@@ -215,6 +233,7 @@ impl Section for PaginateConfig {
             "template",
             Text,
             "The layout the index renders through.",
+            |c| c.template.clone().into(),
             |c, n, t| {
                 c.template = Some(n.string(t, 0)?);
                 Ok(())
@@ -224,6 +243,7 @@ impl Section for PaginateConfig {
             "mount",
             Text,
             "Where the index publishes, if not at the collection's own path.",
+            |c| c.mount.clone().into(),
             |c, n, t| {
                 c.mount = Some(n.template(t, 0)?);
                 Ok(())
@@ -233,6 +253,7 @@ impl Section for PaginateConfig {
             "prefix",
             Text,
             "The path segment before a page number, as in `/posts/page/2/`.",
+            |c| c.prefix.clone().into(),
             |c, n, t| {
                 c.prefix = n.template(t, 0)?;
                 Ok(())

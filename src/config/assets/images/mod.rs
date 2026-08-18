@@ -47,6 +47,7 @@ impl Section for ImagesConfig {
             "lazy",
             Flag,
             "Mark images `loading=\"lazy\"`.",
+            |c| c.lazy.into(),
             |c, n, t| {
                 c.lazy = n.boolean(t, 0)?;
                 Ok(())
@@ -56,6 +57,7 @@ impl Section for ImagesConfig {
             "extract",
             Flag,
             "Write images typst embedded in the page out as their own files.",
+            |c| c.extract.into(),
             |c, n, t| {
                 c.extract = n.boolean(t, 0)?;
                 Ok(())
@@ -65,12 +67,14 @@ impl Section for ImagesConfig {
             "optimize",
             Nested(OptimizeConfig::rows),
             "Per-format lossless recompression.",
+            |c| c.optimize.values(),
             |c, n, t| c.optimize.fill(n, t),
         ),
         (
             "responsive",
             Nested(ResponsiveConfig::rows),
             "Generate width variants and a `srcset`. Its presence turns them on; `#false` turns them off again.",
+            |c| c.responsive.values(),
             |c, n, t| c.responsive.fill(n, t),
         ),
     ]);

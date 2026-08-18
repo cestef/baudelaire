@@ -14,12 +14,16 @@ pub struct RobotsConfig {
 }
 
 impl Section for RobotsConfig {
-    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
+    const SWITCH: Option<Switch<Self>> = Some(Switch {
+        set: |c, on| c.enabled = on,
+        on: |c| c.enabled,
+    });
 
     const RULES: Block<Self> = Block(&[(
         "disallow",
         Texts,
         "Paths to disallow, one word each.",
+        |c| c.disallow.clone().into(),
         |c, n, t| {
             c.disallow = n.words(t)?;
             Ok(())

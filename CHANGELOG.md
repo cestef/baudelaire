@@ -14,6 +14,23 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **A config value knows where it came from.** Every dispatch row now says how
+  its key is *read* as well as how it is written, so a config can be asked what
+  it holds rather than only what its file says:
+
+  ```sh
+  baudelaire config get paths.dist            # public, default or not
+  baudelaire config get lint --written        # only what config.kdl writes
+  baudelaire config show --effective lint     # every layer resolved, as KDL
+  baudelaire config explain lint.headings.start
+  ```
+
+  The layers are `default`, the theme's `theme.kdl`, your `config.kdl` and the
+  profile `-p` names, in that order. `config explain` prints the value each one
+  held and the line it was written at, and `config get` answers with the last
+  layer that changed it. What is printed is the KDL that would parse back to it,
+  a switched-off section carrying the `#false` its own line would.
+
 - **The heading rule can be told which level a page's outline opens at.** A
   layout that writes the title as an `<h1>` leaves a page's own sections opening
   deeper, which read as a skipped level and made the rule unusable on such a

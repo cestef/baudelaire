@@ -48,8 +48,8 @@ impl Run for SetArgs {
             return Ok(());
         }
         crate::fs::write_atomic(path, written.as_bytes())?;
-        cx.ui
-            .done(markup!("`{}` set to `{}`", &self.key, &self.value));
+        let said = markup!("`{}` set to `{}`", &self.key, &self.value);
+        cx.ui.done(cx.ui.markup(&said));
         Ok(())
     }
 }

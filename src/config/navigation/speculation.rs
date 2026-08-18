@@ -1,6 +1,7 @@
 //! `navigation { speculation { } }`: browser-native prefetch hints.
 
 use crate::config::Named;
+use crate::config::Value;
 use crate::config::dispatch::Kind::Choice;
 use crate::config::dispatch::{Block, Section, Switch};
 use crate::config::node::NodeExt;
@@ -58,13 +59,17 @@ impl Default for SpeculationConfig {
 }
 
 impl Section for SpeculationConfig {
-    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
+    const SWITCH: Option<Switch<Self>> = Some(Switch {
+        set: |c, on| c.enabled = on,
+        on: |c| c.enabled,
+    });
 
     const RULES: Block<Self> = Block(&[
         (
             "prefetch",
             Choice(Eagerness::names),
             "How eagerly the browser fetches a linked page.",
+            |c| Value::named(c.prefetch),
             |c, n, t| {
                 c.prefetch = n.arg(t, 0)?.one::<Eagerness>(t, NodeExt::span(n))?;
                 Ok(())
@@ -74,6 +79,7 @@ impl Section for SpeculationConfig {
             "prerender",
             Choice(Eagerness::names),
             "How eagerly it renders one ahead of the click.",
+            |c| Value::named(c.prerender),
             |c, n, t| {
                 c.prerender = n.arg(t, 0)?.one::<Eagerness>(t, NodeExt::span(n))?;
                 Ok(())

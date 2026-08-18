@@ -44,10 +44,15 @@ impl Attributed for RedirectConfig {
     /// The target, which [`RedirectConfig::item`] reads before the attributes.
     const LEADING: usize = 1;
 
+    fn unkeyed(&self) -> Vec<crate::config::Value> {
+        vec![self.target.clone().into()]
+    }
+
     const ATTRS: Attrs<Self> = Attrs(&[(
         "status",
         Number,
         "The HTTP status the host answers with, `300` to `399`. Defaults to `301`.",
+        |c| c.status.into(),
         |c, v, t, s| {
             c.status = v.bounded::<u16>(t, s, 300, 399)?;
             Ok(())

@@ -1,6 +1,7 @@
 //! `navigation { standalone { } }`: the whole site as one file.
 
 use crate::config::Named;
+use crate::config::Value;
 use crate::config::dispatch::Kind::{Choice, Path, Text};
 use crate::config::dispatch::{Block, Section, Switch};
 use crate::config::node::NodeExt;
@@ -50,26 +51,37 @@ impl Default for StandaloneConfig {
 }
 
 impl Section for StandaloneConfig {
-    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
+    const SWITCH: Option<Switch<Self>> = Some(Switch {
+        set: |c, on| c.enabled = on,
+        on: |c| c.enabled,
+    });
 
     const RULES: Block<Self> = Block(&[
         (
             "file",
             Path,
             "The single file the site is written to.",
+            |c| c.file.clone().into(),
             |c, n, t| {
                 c.file = n.contained(t)?;
                 Ok(())
             },
         ),
-        ("entry", Text, "The page that file opens on.", |c, n, t| {
-            c.entry = Some(n.string(t, 0)?);
-            Ok(())
-        }),
+        (
+            "entry",
+            Text,
+            "The page that file opens on.",
+            |c| c.entry.clone().into(),
+            |c, n, t| {
+                c.entry = Some(n.string(t, 0)?);
+                Ok(())
+            },
+        ),
         (
             "router",
             Choice(Router::names),
             "How it addresses pages once opened.",
+            |c| Value::named(c.router),
             |c, n, t| {
                 c.router = n.arg(t, 0)?.one::<Router>(t, NodeExt::span(n))?;
                 Ok(())

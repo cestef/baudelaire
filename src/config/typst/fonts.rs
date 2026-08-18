@@ -45,6 +45,7 @@ impl Section for FontConfig {
             "paths",
             Texts,
             "Directories scanned recursively for fonts, searched before the system's own.",
+            |c| c.paths.clone().into(),
             |c, n, t| {
                 c.paths = n.words(t)?.into_iter().map(PathBuf::from).collect();
                 Ok(())
@@ -54,6 +55,7 @@ impl Section for FontConfig {
             "system",
             Flag,
             "Also use the fonts installed on the machine. Off, a build sees only what the project ships.",
+            |c| c.system.into(),
             |c, n, t| {
                 c.system = n.boolean(t, 0)?;
                 Ok(())

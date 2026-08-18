@@ -41,6 +41,7 @@ impl Section for CacheConfig {
             "dir",
             Path,
             "Where incremental build state is kept.",
+            |c| c.dir.clone().into(),
             |c, n, t| {
                 c.dir = n.string(t, 0)?.into();
                 Ok(())
@@ -50,6 +51,7 @@ impl Section for CacheConfig {
             "incremental",
             Flag,
             "Reuse that state. Off, every build is a cold one.",
+            |c| c.incremental.into(),
             |c, n, t| {
                 c.incremental = n.boolean(t, 0)?;
                 Ok(())

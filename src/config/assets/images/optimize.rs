@@ -1,6 +1,7 @@
 //! `assets { images { optimize { } } }`: per-format recompression.
 
 use crate::config::Named;
+use crate::config::Value;
 use crate::config::dispatch::Kind::{Choice, Line, Number};
 use crate::config::dispatch::{Attributed, Attrs, Block, Section};
 use crate::config::value::ValueExt;
@@ -86,12 +87,14 @@ impl Section for OptimizeConfig {
             "png",
             Line(PngConfig::rows),
             "Optimize PNGs. Its presence turns them on; the attributes tune it.",
+            |c| c.png.as_ref().map_or(Value::Unset, Attributed::values),
             |c, n, t| c.png.get_or_insert_default().read(n, t),
         ),
         (
             "jpeg",
             Line(JpegConfig::rows),
             "Optimize JPEGs. Its presence turns them on; the attributes tune it.",
+            |c| c.jpeg.as_ref().map_or(Value::Unset, Attributed::values),
             |c, n, t| c.jpeg.get_or_insert_default().read(n, t),
         ),
     ]);
@@ -103,6 +106,7 @@ impl Attributed for PngConfig {
             "level",
             Number,
             "Compression effort, 0 to 6. Higher is slower and smaller.",
+            |c| c.level.into(),
             |c, v, t, s| {
                 c.level = v.bounded(t, s, 0, 6)?;
                 Ok(())
@@ -112,6 +116,7 @@ impl Attributed for PngConfig {
             "strip",
             Choice(PngStrip::names),
             "Which ancillary chunks to discard.",
+            |c| Value::named(c.strip),
             |c, v, t, s| {
                 c.strip = v.one::<PngStrip>(t, s)?;
                 Ok(())
@@ -125,6 +130,7 @@ impl Attributed for JpegConfig {
         "quality",
         Number,
         "Encoder quality, 1 to 100.",
+        |c| c.quality.into(),
         |c, v, t, s| {
             c.quality = v.bounded(t, s, 1, 100)?;
             Ok(())

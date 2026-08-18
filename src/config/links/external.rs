@@ -50,13 +50,17 @@ impl Default for ExternalConfig {
 }
 
 impl Section for ExternalConfig {
-    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
+    const SWITCH: Option<Switch<Self>> = Some(Switch {
+        set: |c, on| c.enabled = on,
+        on: |c| c.enabled,
+    });
 
     const RULES: Block<Self> = Block(&[
         (
             "fresh",
             Time,
             "How long a link that answered is trusted before it is asked again.",
+            |c| c.fresh.into(),
             |c, n, t| {
                 c.fresh = n.duration(t, 0)?;
                 Ok(())
@@ -66,6 +70,7 @@ impl Section for ExternalConfig {
             "timeout",
             Time,
             "How long one request may take before the link counts as unreachable.",
+            |c| c.timeout.into(),
             |c, n, t| {
                 c.timeout = n.duration(t, 0)?;
                 Ok(())
@@ -75,6 +80,7 @@ impl Section for ExternalConfig {
             "concurrency",
             Number,
             "How many links are fetched at once. Unset, as many as the build has threads.",
+            |c| c.concurrency.into(),
             |c, n, t| {
                 let at_once: u16 = n.arg(t, 0)?.bounded(t, NodeExt::span(n), 1, u16::MAX)?;
                 c.concurrency = Some(usize::from(at_once));
@@ -85,6 +91,7 @@ impl Section for ExternalConfig {
             "ignore",
             Texts,
             "Globs, matched against each URL without its scheme, that are never requested: `ignore \"*.internal/**\"`.",
+            |c| c.ignore.clone().into(),
             |c, n, t| {
                 c.ignore = n.words(t)?;
                 Ok(())
@@ -94,6 +101,7 @@ impl Section for ExternalConfig {
             "accept",
             Numbers,
             "Status codes that count as alive, beyond the 2xx and 3xx that always do.",
+            |c| c.accept.clone().into(),
             |c, n, t| {
                 c.accept = n.bounds::<u16>(t, 100, 599)?;
                 Ok(())

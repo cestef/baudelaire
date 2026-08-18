@@ -2,6 +2,7 @@
 
 use kdl::KdlNode;
 
+use crate::config::Value;
 use crate::config::dispatch::Kind::{Choice, Choices, Flag, Text, Texts};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
@@ -124,6 +125,7 @@ impl Section for BundleConfig {
             "collections",
             Texts,
             "Which collections the bundle binds, one word each.",
+            |c| c.collections.clone().into(),
             |c, n, t| {
                 c.collections = n.words(t)?;
                 Ok(())
@@ -133,6 +135,7 @@ impl Section for BundleConfig {
             "site",
             Flag,
             "Bind every page in the site rather than named collections.",
+            |c| c.site.into(),
             |c, n, t| {
                 c.site = n.boolean(t, 0)?;
                 Ok(())
@@ -142,6 +145,7 @@ impl Section for BundleConfig {
             "title",
             Text,
             "The document's title. Unset, the bound collection's title, or the site's.",
+            |c| c.title.clone().into(),
             |c, n, t| {
                 c.title = Some(n.string(t, 0)?);
                 Ok(())
@@ -151,6 +155,7 @@ impl Section for BundleConfig {
             "sort",
             Choice(SortKey::names),
             "How the bound pages are ordered. Unset, each collection's own sort.",
+            |c| c.sort.map(Value::named).into(),
             |c, n, t| {
                 c.sort = Some(n.arg(t, 0)?.one::<SortKey>(t, NodeExt::span(n))?);
                 Ok(())
@@ -160,6 +165,7 @@ impl Section for BundleConfig {
             "reverse",
             Flag,
             "Reverse the order the pages are bound in.",
+            |c| c.reverse.into(),
             |c, n, t| {
                 c.reverse = n.boolean(t, 0)?;
                 Ok(())
@@ -169,6 +175,7 @@ impl Section for BundleConfig {
             "formats",
             Choices(BundleFormat::names),
             "What the bundle is written as. Unset, `pdf`.",
+            |c| c.formats.iter().copied().map(Value::named).collect(),
             |c, n, t| {
                 c.formats = n.mapped::<BundleFormat>(t)?;
                 Ok(())
@@ -178,6 +185,7 @@ impl Section for BundleConfig {
             "template",
             Text,
             "The paged typst template the PDF is laid out with.",
+            |c| c.template.clone().into(),
             |c, n, t| {
                 c.template = n.string(t, 0)?;
                 Ok(())

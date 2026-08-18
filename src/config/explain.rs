@@ -8,6 +8,7 @@
 use kdl::{KdlDocument, KdlNode};
 
 use super::Config;
+use super::key::Key;
 use super::reference::Reference;
 use crate::error::cli::UnknownKey;
 use crate::error::{ConfigError, Result};
@@ -40,10 +41,11 @@ impl Sightings {
     /// Where `key` is set in `text`, the config's own body first and each
     /// profile after it, in the order they are declared.
     ///
-    /// The key must be one the dispatch tables know; anything else is a
-    /// [`ConfigError::unknown_key`] rather than an empty answer.
+    /// The key must be one the dispatch tables know, by the path they spell or
+    /// by the one an author's own names spell; anything else is an
+    /// [`UnknownKey`] rather than an empty answer.
     pub fn of(config: &Config, key: &str) -> Result<Self> {
-        if Reference::at(key).is_none() {
+        if Key::new(key).resolved().is_none() {
             return Err(UnknownKey::at(key).into());
         }
         let text = config.text();
@@ -56,7 +58,7 @@ impl Sightings {
                 lines: &lines,
                 profile,
             }
-            .nodes(nodes, "", &mut Vec::new(), out);
+            .nodes(nodes, &Path::root(), out);
         };
         walk(doc.nodes(), None, &mut out);
         for (name, profile) in &config.profiles {
@@ -77,42 +79,78 @@ struct Walk<'a> {
     profile: Option<String>,
 }
 
+/// How far into the config one node sits, spelled both ways: the path the
+/// dispatch tables know, and the one the author's own names give it.
+struct Path {
+    table: String,
+    spelled: String,
+    named: Vec<String>,
+    /// Whether the tables know [`table`](Path::table), and so whether this node
+    /// is a key at all.
+    known: bool,
+}
+
+impl Path {
+    fn root() -> Self {
+        Self {
+            table: String::new(),
+            spelled: String::new(),
+            named: Vec::new(),
+            known: false,
+        }
+    }
+
+    /// The path one step further in, under `name`.
+    fn below(&self, name: &str) -> Self {
+        let spelled = Self::step(&self.spelled, name);
+        let table = Self::step(&self.table, name);
+        if Reference::at(&table).is_some() {
+            return Self {
+                table,
+                spelled,
+                named: self.named.clone(),
+                known: true,
+            };
+        }
+        let mut named = self.named.clone();
+        named.push(name.to_owned());
+        Self {
+            table: self.table.clone(),
+            spelled,
+            named,
+            known: false,
+        }
+    }
+
+    fn step(path: &str, name: &str) -> String {
+        if path.is_empty() {
+            name.to_owned()
+        } else {
+            format!("{path}.{name}")
+        }
+    }
+}
+
 impl Walk<'_> {
-    fn nodes(
-        &self,
-        nodes: &[KdlNode],
-        path: &str,
-        named: &mut Vec<String>,
-        out: &mut Vec<Sighting>,
-    ) {
+    fn nodes(&self, nodes: &[KdlNode], at: &Path, out: &mut Vec<Sighting>) {
         for node in nodes {
-            self.node(node, path, named, out);
+            self.node(node, at, out);
         }
     }
 
     /// Follow one node: a name the tables know continues the dotted path, and
-    /// one they do not is the author's, which leaves the path where it was.
-    fn node(&self, node: &KdlNode, path: &str, named: &mut Vec<String>, out: &mut Vec<Sighting>) {
+    /// one they do not is the author's, which leaves the path where it was and
+    /// only lengthens the spelling their own names give it.
+    fn node(&self, node: &KdlNode, at: &Path, out: &mut Vec<Sighting>) {
         let name = node.name().value();
-        let below = if path.is_empty() {
-            name.to_owned()
-        } else {
-            format!("{path}.{name}")
-        };
-        let known = Reference::at(&below).is_some();
-        if known && below == self.key {
-            out.push(self.sighting(node, named));
+        let below = at.below(name);
+        if below.known && (self.key == below.table || self.key == below.spelled) {
+            out.push(self.sighting(node, &below.named));
         }
         let Some(children) = node.children() else {
             return;
         };
-        if known {
-            self.nodes(children.nodes(), &below, named, out);
-        } else {
-            named.push(name.to_owned());
-            self.nodes(children.nodes(), path, named, out);
-            named.pop();
-        }
+        self.nodes(children.nodes(), &below, out);
     }
 
     fn sighting(&self, node: &KdlNode, named: &[String]) -> Sighting {
@@ -128,6 +166,7 @@ impl Walk<'_> {
                 .first()
                 .map_or_else(String::new, |entry| match entry.value() {
                     kdl::KdlValue::String(text) => text.clone(),
+                    kdl::KdlValue::Bool(on) => on.to_string(),
                     other => other.to_string(),
                 }),
             block: node.to_string().trim().to_owned(),

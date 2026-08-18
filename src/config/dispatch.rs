@@ -17,25 +17,37 @@ use crate::ui::{Code, markup};
 
 use super::node::{EntryExt, NodeExt};
 use super::value::Kdl;
+use super::values::Value;
 
-/// A `(key, kind, doc, handler)` rule for a node-keyed [`Block`] scope, in one
-/// tuple so that documenting a key and implementing it are the same edit.
+/// A `(key, kind, doc, read, write)` rule for a node-keyed [`Block`] scope, in
+/// one tuple so that documenting a key, reading it and writing it are the same
+/// edit.
 type Rule<T> = (
     &'static str,
     Kind,
     &'static str,
+    Read<T>,
     fn(&mut T, &KdlNode, &str) -> Result<()>,
 );
 
-/// The setter a switchable [`Section`] names for the flag its own presence turns
-/// on: see [`Section::SWITCH`].
-pub(super) type Switch<T> = fn(&mut T, bool);
+/// How a key is read back off the struct it was parsed into: the half of a row
+/// that answers what a config *holds*, defaults and all.
+pub(super) type Read<T> = fn(&T) -> Value;
 
-/// A `(key, kind, doc, handler)` rule for an attribute-keyed [`Attrs`] scope.
+/// The flag a switchable [`Section`] turns on by its own presence, read and
+/// written in one declaration: see [`Section::SWITCH`].
+pub(super) struct Switch<T> {
+    pub(super) set: fn(&mut T, bool),
+    pub(super) on: fn(&T) -> bool,
+}
+
+/// A `(key, kind, doc, read, write)` rule for an attribute-keyed [`Attrs`]
+/// scope.
 type Attr<T> = (
     &'static str,
     Kind,
     &'static str,
+    Read<T>,
     fn(&mut T, &KdlValue, &str, SourceSpan) -> Result<()>,
 );
 
@@ -256,10 +268,10 @@ pub struct Row {
 
 impl Row {
     /// The rows both [`Section`] and [`Attributed`] hand to the reference.
-    fn of<F>(table: &'static [(&'static str, Kind, &'static str, F)]) -> Vec<Self> {
+    fn of<R, W>(table: &'static [(&'static str, Kind, &'static str, R, W)]) -> Vec<Self> {
         table
             .iter()
-            .map(|&(key, kind, doc, _)| Self { key, kind, doc })
+            .map(|&(key, kind, doc, ..)| Self { key, kind, doc })
             .collect()
     }
 }
@@ -283,7 +295,7 @@ impl<T> Block<T> {
     /// it stands in for, so the two spellings run the very same handler.
     fn one(&self, value: &mut T, key: &str, node: &KdlNode, text: &str) -> Result<()> {
         match self.0.iter().find(|(k, ..)| *k == key) {
-            Some((_, kind, _, handler)) => {
+            Some((_, kind, _, _, handler)) => {
                 kind.takes().check(node, text)?;
                 handler(value, node, text)
             }
@@ -294,6 +306,14 @@ impl<T> Block<T> {
     /// This scope's keys, as the reference renders them.
     fn rows(&self) -> Vec<Row> {
         Row::of(self.0)
+    }
+
+    /// Every key of this scope read off `value`, in table order.
+    fn values(&self, value: &T) -> Vec<(String, Value)> {
+        self.0
+            .iter()
+            .map(|&(key, _, _, read, _)| (key.to_owned(), read(value)))
+            .collect()
     }
 }
 
@@ -312,6 +332,19 @@ pub(super) trait Section: Sized + 'static {
     /// child's key list.
     fn rows() -> Vec<Row> {
         Self::RULES.rows()
+    }
+
+    /// What this section holds, key by key: the read half of the same table
+    /// that parsed it.
+    ///
+    /// A switchable section that is off carries the boolean its own line would,
+    /// its keys still readable beneath it.
+    fn values(&self) -> Value {
+        let block = Value::block(Self::RULES.values(self));
+        match Self::SWITCH {
+            Some(switch) if !(switch.on)(self) => block.with(vec![Value::Flag(false)]),
+            _ => block,
+        }
     }
 
     /// How many leading positional arguments the *caller* reads itself before
@@ -347,10 +380,10 @@ pub(super) trait Section: Sized + 'static {
     /// Overridden only where presence records something the line's boolean is
     /// *not* (`MarkdownConfig::present`, `PdfBundle::present`).
     fn enable(&mut self, on: bool) -> bool {
-        let Some(set) = Self::SWITCH else {
+        let Some(switch) = Self::SWITCH else {
             return false;
         };
-        set(self, on);
+        (switch.set)(self, on);
         true
     }
 
@@ -425,6 +458,19 @@ pub(super) trait Attributed: Sized + 'static {
         Self::ATTRS.rows()
     }
 
+    /// What this item holds: the leading positionals no attribute of its own
+    /// reports, then every attribute.
+    fn values(&self) -> Value {
+        Value::line(self.unkeyed(), Self::ATTRS.values(self))
+    }
+
+    /// The leading positionals the caller reads itself and no attribute reports,
+    /// read back. [`LEADING`](Attributed::LEADING) says how many a line carries;
+    /// this says what they hold, for the items whose own value is one of them.
+    fn unkeyed(&self) -> Vec<Value> {
+        Vec::new()
+    }
+
     /// How many leading positional arguments the caller consumes itself (a
     /// collection's glob); any other positional is an error.
     const LEADING: usize = 0;
@@ -494,6 +540,14 @@ impl<T> Attrs<T> {
         Row::of(self.0)
     }
 
+    /// Every attribute of this scope read off `value`, in table order.
+    pub(super) fn values(&self, value: &T) -> Vec<(String, Value)> {
+        self.0
+            .iter()
+            .map(|&(key, _, _, read, _)| (key.to_owned(), read(value)))
+            .collect()
+    }
+
     /// The node written the way it parses, for the diagnostic that refuses a
     /// block, read out of the same table so the spelling it shows works.
     fn example(&self, node: &str) -> String {
@@ -519,8 +573,8 @@ impl<'a> Keys<'a> {
 impl Keys<'_> {
     /// Build an unknown-*key* error (a structural node/attribute name) from any
     /// dispatch `table`.
-    pub(super) fn unknown_key<F>(
-        table: &[(&'static str, Kind, &'static str, F)],
+    pub(super) fn unknown_key<R, W>(
+        table: &[(&'static str, Kind, &'static str, R, W)],
         text: &str,
         key: &str,
         span: SourceSpan,

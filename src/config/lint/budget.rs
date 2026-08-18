@@ -42,6 +42,7 @@ impl Section for BudgetConfig {
             "strict",
             Flag,
             "Fail the build when a page is over. Off, the same report is a warning.",
+            |c| c.strict.into(),
             |c, n, t| {
                 c.strict = n.boolean(t, 0)?;
                 Ok(())
@@ -51,6 +52,7 @@ impl Section for BudgetConfig {
             "html",
             Size,
             "The page's own markup, as written to the output directory.",
+            |c| c.html.into(),
             |c, n, t| {
                 c.html = Some(n.size(t, 0)?);
                 Ok(())
@@ -60,6 +62,7 @@ impl Section for BudgetConfig {
             "js",
             Size,
             "Every script the page loads, plus its inline `<script>` bodies.",
+            |c| c.js.into(),
             |c, n, t| {
                 c.js = Some(n.size(t, 0)?);
                 Ok(())
@@ -69,6 +72,7 @@ impl Section for BudgetConfig {
             "css",
             Size,
             "Every stylesheet it loads, plus its inline `<style>` bodies.",
+            |c| c.css.into(),
             |c, n, t| {
                 c.css = Some(n.size(t, 0)?);
                 Ok(())
@@ -78,6 +82,7 @@ impl Section for BudgetConfig {
             "images",
             Size,
             "Every image it references, responsive alternatives excluded.",
+            |c| c.images.into(),
             |c, n, t| {
                 c.images = Some(n.size(t, 0)?);
                 Ok(())
@@ -87,6 +92,7 @@ impl Section for BudgetConfig {
             "total",
             Size,
             "All of the above at once: the page's whole transfer weight.",
+            |c| c.total.into(),
             |c, n, t| {
                 c.total = Some(n.size(t, 0)?);
                 Ok(())

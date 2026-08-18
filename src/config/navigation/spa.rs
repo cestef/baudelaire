@@ -1,6 +1,7 @@
 //! `navigation { spa { } }`: client-side navigation over the built files.
 
 use crate::config::Named;
+use crate::config::Value;
 use crate::config::dispatch::Kind::{Choice, Text};
 use crate::config::dispatch::{Block, Section, Switch};
 use crate::config::node::NodeExt;
@@ -50,13 +51,17 @@ impl Default for SpaConfig {
 }
 
 impl Section for SpaConfig {
-    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
+    const SWITCH: Option<Switch<Self>> = Some(Switch {
+        set: |c, on| c.enabled = on,
+        on: |c| c.enabled,
+    });
 
     const RULES: Block<Self> = Block(&[
         (
             "root",
             Text,
             "The element swapped out on navigation.",
+            |c| c.root.clone().into(),
             |c, n, t| {
                 c.root = n.string(t, 0)?;
                 Ok(())
@@ -66,6 +71,7 @@ impl Section for SpaConfig {
             "prefetch",
             Choice(Prefetch::names),
             "When to fetch a page ahead of the click.",
+            |c| Value::named(c.prefetch),
             |c, n, t| {
                 c.prefetch = n.arg(t, 0)?.one::<Prefetch>(t, NodeExt::span(n))?;
                 Ok(())

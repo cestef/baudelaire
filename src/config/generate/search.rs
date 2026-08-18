@@ -1,6 +1,7 @@
 //! `generate { search { } }`: client-side search indexes.
 
 use crate::config::Named;
+use crate::config::Value;
 use crate::config::dispatch::Kind::{Choices, Flag, Number, Texts};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
@@ -96,6 +97,7 @@ impl Section for SearchConfig {
             "formats",
             Choices(SearchFormat::names),
             "Which index formats to write, one word each.",
+            |c| c.formats.iter().copied().map(Value::named).collect(),
             |c, n, t| {
                 c.formats = n.mapped::<SearchFormat>(t)?;
                 Ok(())
@@ -105,6 +107,7 @@ impl Section for SearchConfig {
             "fields",
             Choices(SearchField::names),
             "Which parts of a page go into the index, one word each.",
+            |c| c.fields.iter().copied().map(Value::named).collect(),
             |c, n, t| {
                 c.fields = n.mapped::<SearchField>(t)?;
                 Ok(())
@@ -114,6 +117,7 @@ impl Section for SearchConfig {
             "stopwords",
             Texts,
             "Words to leave out of the index, one word each.",
+            |c| c.stopwords.clone().into(),
             |c, n, t| {
                 c.stopwords = n.words(t)?;
                 Ok(())
@@ -123,6 +127,7 @@ impl Section for SearchConfig {
             "minimum",
             Number,
             "The shortest word the index keeps.",
+            |c| c.min_length.into(),
             |c, n, t| {
                 c.min_length = n.count(t, 0)?;
                 Ok(())
@@ -132,6 +137,7 @@ impl Section for SearchConfig {
             "ui",
             Flag,
             "Ship the bundled search box as well as the index.",
+            |c| c.ui.into(),
             |c, n, t| {
                 c.ui = n.boolean(t, 0)?;
                 Ok(())

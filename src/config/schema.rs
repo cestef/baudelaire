@@ -9,6 +9,7 @@
 use kdl::KdlNode;
 use miette::SourceSpan;
 
+use crate::config::Value;
 use crate::config::dispatch::Kind::{Choice, Flag};
 use crate::config::dispatch::{Attributed, Attrs, Keys};
 use crate::config::node::NodeExt;
@@ -55,6 +56,17 @@ pub struct FieldSchema {
     pub ty: FieldType,
     /// Whether the page may leave the field out.
     pub optional: bool,
+}
+
+/// Written back as the type expression a config line spells.
+impl std::fmt::Display for FieldType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::List(inner) => write!(f, "{}<{inner}>", Self::LIST),
+            Self::Dict(_) => f.write_str("dict"),
+            leaf => f.write_str(leaf.leaf_name().unwrap_or("any")),
+        }
+    }
 }
 
 /// The shape a schema field requires of a frontmatter value.
@@ -150,6 +162,16 @@ impl FieldType {
             .ok_or_else(|| TypeError::Unknown(name.to_owned()))
     }
 
+    /// The fields the dictionary this type ends in declares, however many
+    /// `list<..>` wrap it.
+    pub fn fields(&self) -> Option<&Vec<(String, FieldSchema)>> {
+        match self {
+            Self::Dict(fields) => Some(fields),
+            Self::List(inner) => inner.fields(),
+            _ => None,
+        }
+    }
+
     /// The dictionary this type ends in, if it ends in one: where the fields of
     /// a nested block attach, however many `list<..>` wrap it.
     pub fn fields_mut(&mut self) -> Option<&mut Vec<(String, FieldSchema)>> {
@@ -158,6 +180,14 @@ impl FieldType {
             Self::List(inner) => inner.fields_mut(),
             _ => None,
         }
+    }
+
+    /// The leaf name this type is spelled with, for the ones that have one.
+    fn leaf_name(&self) -> Option<&'static str> {
+        Self::leaves()
+            .into_iter()
+            .find(|(_, leaf)| leaf == self)
+            .map(|(name, _)| name)
     }
 
     /// The English a diagnostic names this type by.
@@ -308,6 +338,18 @@ impl Attributed for FieldSchema {
     /// The type, written as the leading positional.
     const LEADING: usize = 1;
 
+    /// A dictionary's own fields are written in this line's block, so they read
+    /// back as keys of it.
+    fn values(&self) -> crate::config::Value {
+        let keys = self.ty.fields().map_or_else(Vec::new, |fields| {
+            fields
+                .iter()
+                .map(|(name, field)| (name.clone(), field.values()))
+                .collect()
+        });
+        crate::config::Value::nested(self.unkeyed(), Self::ATTRS.values(self), keys)
+    }
+
     /// `item` reads the block as the fields of the dictionary the type ends in.
     const NESTS: bool = true;
 
@@ -316,6 +358,7 @@ impl Attributed for FieldSchema {
             "type",
             Choice(FieldType::names),
             "The shape the value must have, also writable as the leading positional: `title \"str\"`. A list names what it holds: `list<int>`, `list<dict>`.",
+            |c| Value::written(&c.ty),
             |c, v, t, s| {
                 c.ty = v.ty(t, s)?;
                 Ok(())
@@ -325,6 +368,7 @@ impl Attributed for FieldSchema {
             "optional",
             Flag,
             "Let the field be absent. Declaring a field otherwise requires it.",
+            |c| c.optional.into(),
             |c, v, t, s| {
                 c.optional = v.boolean(t, s)?;
                 Ok(())

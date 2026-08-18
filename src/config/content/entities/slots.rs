@@ -80,6 +80,7 @@ impl Attributed for Slots {
             "display",
             Text,
             "The field holding the name a reader sees. Defaults to `name`, then `title`, then the entity's own id.",
+            |c| c.display.clone().into(),
             |c, v, t, s| {
                 c.display = Some(v.as_str(t, s)?);
                 Ok(())
@@ -89,6 +90,7 @@ impl Attributed for Slots {
             "url",
             Text,
             "The field holding the entity's own canonical URL, off this site.",
+            |c| c.url.clone().into(),
             |c, v, t, s| {
                 c.url = Some(v.as_str(t, s)?);
                 Ok(())
@@ -98,6 +100,7 @@ impl Attributed for Slots {
             "image",
             Text,
             "The field holding a picture of it: an avatar, a logo, a cover.",
+            |c| c.image.clone().into(),
             |c, v, t, s| {
                 c.image = Some(v.as_str(t, s)?);
                 Ok(())
@@ -107,6 +110,7 @@ impl Attributed for Slots {
             "email",
             Text,
             "The field holding a contact address.",
+            |c| c.email.clone().into(),
             |c, v, t, s| {
                 c.email = Some(v.as_str(t, s)?);
                 Ok(())
@@ -116,6 +120,7 @@ impl Attributed for Slots {
             "same-as",
             Text,
             "The field holding the other URLs that are also this entity.",
+            |c| c.same_as.clone().into(),
             |c, v, t, s| {
                 c.same_as = Some(v.as_str(t, s)?);
                 Ok(())

@@ -16,12 +16,16 @@ pub struct LlmsConfig {
 }
 
 impl Section for LlmsConfig {
-    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
+    const SWITCH: Option<Switch<Self>> = Some(Switch {
+        set: |c, on| c.enabled = on,
+        on: |c| c.enabled,
+    });
 
     const RULES: Block<Self> = Block(&[(
         "summary",
         Text,
         "A one-line description of the site, put at the top of the file.",
+        |c| c.summary.clone().into(),
         |c, n, t| {
             c.summary = Some(n.string(t, 0)?);
             Ok(())

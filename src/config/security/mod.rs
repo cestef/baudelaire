@@ -26,6 +26,7 @@ impl Section for SecurityConfig {
             "sri",
             Flag,
             "Stamp `integrity` onto every emitted script and stylesheet. Needs `assets { fingerprint }`.",
+            |c| c.sri.into(),
             |c, n, t| {
                 c.sri = n.boolean(t, 0)?;
                 Ok(())
@@ -35,6 +36,7 @@ impl Section for SecurityConfig {
             "csp",
             Nested(CspConfig::rows),
             "The content security policy written into `_headers`. Its presence turns it on; `#false` turns it off again.",
+            |c| c.csp.values(),
             |c, n, t| c.csp.fill(n, t),
         ),
     ]);

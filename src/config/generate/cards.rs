@@ -53,25 +53,41 @@ impl Default for CardsConfig {
 
 /// The `cards { }` block, whose presence enables social card rendering.
 impl Section for CardsConfig {
-    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
+    const SWITCH: Option<Switch<Self>> = Some(Switch {
+        set: |c, on| c.enabled = on,
+        on: |c| c.enabled,
+    });
 
     const RULES: Block<Self> = Block(&[
         (
             "template",
             Text,
             "The typst template each card is drawn with.",
+            |c| c.template.clone().into(),
             |c, n, t| {
                 c.template = n.string(t, 0)?;
                 Ok(())
             },
         ),
-        ("width", Number, "Card width in pixels.", |c, n, t| {
-            c.width = n.arg(t, 0)?.bounded(t, NodeExt::span(n), 1, Self::MAX)?;
-            Ok(())
-        }),
-        ("height", Number, "Card height in pixels.", |c, n, t| {
-            c.height = n.arg(t, 0)?.bounded(t, NodeExt::span(n), 1, Self::MAX)?;
-            Ok(())
-        }),
+        (
+            "width",
+            Number,
+            "Card width in pixels.",
+            |c| c.width.into(),
+            |c, n, t| {
+                c.width = n.arg(t, 0)?.bounded(t, NodeExt::span(n), 1, Self::MAX)?;
+                Ok(())
+            },
+        ),
+        (
+            "height",
+            Number,
+            "Card height in pixels.",
+            |c| c.height.into(),
+            |c, n, t| {
+                c.height = n.arg(t, 0)?.bounded(t, NodeExt::span(n), 1, Self::MAX)?;
+                Ok(())
+            },
+        ),
     ]);
 }

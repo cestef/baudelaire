@@ -4,6 +4,7 @@
 use kdl::KdlNode;
 
 use crate::config::Named;
+use crate::config::Value;
 use crate::config::dispatch::Kind::Choice;
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
@@ -68,6 +69,7 @@ impl Section for SourceMapConfig {
             "scripts",
             Choice(SourceMaps::names),
             "What becomes of the source map for a bundled script.",
+            |c| Value::named(c.scripts),
             |c, n, t| {
                 c.scripts = n.arg(t, 0)?.one::<SourceMaps>(t, NodeExt::span(n))?;
                 Ok(())
@@ -77,6 +79,7 @@ impl Section for SourceMapConfig {
             "styles",
             Choice(SourceMaps::names),
             "What becomes of the source map for a processed stylesheet.",
+            |c| Value::named(c.styles),
             |c, n, t| {
                 c.styles = n.arg(t, 0)?.one::<SourceMaps>(t, NodeExt::span(n))?;
                 Ok(())

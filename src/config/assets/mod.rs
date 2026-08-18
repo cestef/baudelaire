@@ -51,18 +51,21 @@ impl Section for AssetConfig {
             "minify",
             Nested(MinifyConfig::rows),
             "What is minified. Its presence turns every kind on; `#false` turns them off again.",
+            |c| c.minify.values(),
             |c, n, t| c.minify.fill(n, t),
         ),
         (
             "targets",
             Nested(TargetConfig::rows),
             "The oldest browser versions the stylesheets must run on. Naming any compiles the CSS down to them.",
+            |c| c.targets.values(),
             |c, n, t| c.targets.fill(n, t),
         ),
         (
             "bundle",
             Flag,
             "Bundle JavaScript modules into one file per entry point.",
+            |c| c.bundle.into(),
             |c, n, t| {
                 c.bundle = n.boolean(t, 0)?;
                 Ok(())
@@ -72,6 +75,7 @@ impl Section for AssetConfig {
             "fingerprint",
             Flag,
             "Put a content hash in each asset's filename, so it can be cached forever.",
+            |c| c.fingerprint.into(),
             |c, n, t| {
                 c.fingerprint = n.boolean(t, 0)?;
                 Ok(())
@@ -81,12 +85,14 @@ impl Section for AssetConfig {
             "sourcemap",
             Nested(SourceMapConfig::rows),
             "What becomes of each kind of asset's source map. Embeds the original sources, so asking for one publishes them.",
+            |c| c.sourcemap.values(),
             |c, n, t| c.sourcemap.fill(n, t),
         ),
         (
             "tsconfig",
             Path,
             "The `tsconfig.json` TypeScript and JSX are transformed against. Unset, one is discovered per script.",
+            |c| c.tsconfig.clone().into(),
             |c, n, t| {
                 c.tsconfig = Some(n.string(t, 0)?.into());
                 Ok(())
@@ -96,12 +102,14 @@ impl Section for AssetConfig {
             "images",
             Nested(ImagesConfig::rows),
             "Image markup and build-time processing.",
+            |c| c.images.values(),
             |c, n, t| c.images.fill(n, t),
         ),
         (
             "tailwind",
             Nested(TailwindConfig::rows),
             "A utility stylesheet generated from the class names the site is written with. Its presence turns it on.",
+            |c| c.tailwind.values(),
             |c, n, t| c.tailwind.fill(n, t),
         ),
     ]);

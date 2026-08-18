@@ -1,6 +1,7 @@
 //! `html { anchors { } }`: heading ids, and the link back to them.
 
 use crate::config::Named;
+use crate::config::Value;
 use crate::config::dispatch::Kind::{Choice, Numbers, Text};
 use crate::config::dispatch::{Block, Section, Switch};
 use crate::config::node::NodeExt;
@@ -58,13 +59,17 @@ impl Default for AnchorConfig {
 }
 
 impl Section for AnchorConfig {
-    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
+    const SWITCH: Option<Switch<Self>> = Some(Switch {
+        set: |c, on| c.enabled = on,
+        on: |c| c.enabled,
+    });
 
     const RULES: Block<Self> = Block(&[
         (
             "levels",
             Numbers,
             "The heading levels that get an id, as `1` to `6`. Unset, every level does.",
+            |c| c.levels.clone().into(),
             |c, n, t| {
                 c.levels = n.bounds::<u8>(t, 1, 6)?;
                 Ok(())
@@ -74,6 +79,7 @@ impl Section for AnchorConfig {
             "link",
             Text,
             "The text of a link back to each heading, e.g. `#`. Unset or empty, no link is emitted.",
+            |c| c.link.clone().into(),
             |c, n, t| {
                 let text = n.string(t, 0)?;
                 c.link = (!text.is_empty()).then_some(text);
@@ -84,6 +90,7 @@ impl Section for AnchorConfig {
             "place",
             Choice(Place::names),
             "Which side of the heading's text that link sits on.",
+            |c| Value::named(c.place),
             |c, n, t| {
                 c.place = n.arg(t, 0)?.one::<Place>(t, NodeExt::span(n))?;
                 Ok(())

@@ -36,17 +36,27 @@ impl MinifyConfig {
 }
 
 impl Section for MinifyConfig {
-    const SWITCH: Option<Switch<Self>> = Some(|c, on| c.enabled = on);
+    const SWITCH: Option<Switch<Self>> = Some(Switch {
+        set: |c, on| c.enabled = on,
+        on: |c| c.enabled,
+    });
 
     const RULES: Block<Self> = Block(&[
-        ("css", Flag, "Minify stylesheets.", |c, n, t| {
-            c.css = Some(n.boolean(t, 0)?);
-            Ok(())
-        }),
+        (
+            "css",
+            Flag,
+            "Minify stylesheets.",
+            |c| c.css().into(),
+            |c, n, t| {
+                c.css = Some(n.boolean(t, 0)?);
+                Ok(())
+            },
+        ),
         (
             "js",
             Flag,
             "Minify JavaScript. Needs `assets { bundle }`, which is what runs it.",
+            |c| c.js().into(),
             |c, n, t| {
                 c.js = Some(n.boolean(t, 0)?);
                 Ok(())

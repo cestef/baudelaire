@@ -130,6 +130,34 @@ pub struct InlineSource {
     pub entities: Vec<Declared>,
 }
 
+impl SourcesConfig {
+    /// Every source written under `key`, which is how a row that appends to one
+    /// list reads back.
+    fn under(&self, key: &str) -> crate::config::Value {
+        self.0
+            .iter()
+            .filter(|source| source.name() == key)
+            .map(crate::config::Value::from)
+            .collect()
+    }
+}
+
+/// A source as its own line spells it: the path it names, or the ids an inline
+/// block declares.
+impl From<&SourceConfig> for crate::config::Value {
+    fn from(source: &SourceConfig) -> Self {
+        match source {
+            SourceConfig::Pages(pages) => pages.dir.clone().into(),
+            SourceConfig::Data(data) => data.path.clone().into(),
+            SourceConfig::Inline(inline) => inline
+                .entities
+                .iter()
+                .map(|entity| entity.id.clone())
+                .collect(),
+        }
+    }
+}
+
 /// The `sources { .. }` block: every key appends, so it reads top to bottom,
 /// and the block as a whole replaces whatever a base config declared.
 impl Section for SourcesConfig {
@@ -138,6 +166,7 @@ impl Section for SourcesConfig {
             "pages",
             Path,
             "A directory of profile pages: each page's frontmatter is one entity's fields.",
+            |c| c.under("pages"),
             |c, n, t| {
                 c.0.push(SourceConfig::Pages(PagesSource {
                     dir: PathBuf::from(n.string(t, 0)?),
@@ -149,6 +178,7 @@ impl Section for SourcesConfig {
             "data",
             Path,
             "A KDL roster file, written exactly as an `inline` block is.",
+            |c| c.under("data"),
             |c, n, t| {
                 c.0.push(SourceConfig::Data(DataSource {
                     path: PathBuf::from(n.string(t, 0)?),
@@ -160,6 +190,7 @@ impl Section for SourcesConfig {
             "inline",
             Tables,
             "Entities written here, one block per id, each holding its fields.",
+            |c| c.under("inline"),
             |c, n, t| {
                 c.0.push(SourceConfig::Inline(InlineSource {
                     entities: Declared::block(n, t)?,

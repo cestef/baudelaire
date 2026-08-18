@@ -29,7 +29,9 @@ pub use progress::{Progress, Step};
 const CLEAR_LINE: &str = "\r\x1b[2K";
 
 /// The width `➜` labels are padded to, sized to the longest label in use.
-const ARROW_LABEL: usize = 11;
+/// The width an arrow pads its label to, which a caller writing rows under one
+/// lines up with.
+pub const ARROW_LABEL: usize = 11;
 
 /// The column an arrow's value starts at, where a caller aligns the
 /// continuations of a multi-line value.
@@ -208,6 +210,12 @@ impl Ui {
             warnings: s.warned,
             diagnostics: s.collected.clone(),
         }
+    }
+
+    /// A line's own markup rendered for this writer, for the one place that
+    /// writes marked-up prose to the terminal rather than to a diagnostic.
+    pub fn markup<'a>(&self, source: &'a str) -> Markup<'a> {
+        Markup::new(source, self.color)
     }
 
     /// The command banner: `baudelaire v0.1.0  building my-site`.

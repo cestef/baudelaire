@@ -43,17 +43,20 @@ impl CacheControl {
 /// fills the defaults, so an untouched or disabled `CacheControl` carries no
 /// policy at all and the two states stay distinguishable.
 impl Section for CacheControl {
-    const SWITCH: Option<Switch<Self>> = Some(|c, on| {
-        c.enabled = on;
-        if !on {
-            return;
-        }
-        if c.immutable.is_empty() {
-            Self::IMMUTABLE.clone_into(&mut c.immutable);
-        }
-        if c.default.is_empty() {
-            Self::DEFAULT.clone_into(&mut c.default);
-        }
+    const SWITCH: Option<Switch<Self>> = Some(Switch {
+        set: |c, on| {
+            c.enabled = on;
+            if !on {
+                return;
+            }
+            if c.immutable.is_empty() {
+                Self::IMMUTABLE.clone_into(&mut c.immutable);
+            }
+            if c.default.is_empty() {
+                Self::DEFAULT.clone_into(&mut c.default);
+            }
+        },
+        on: |c| c.enabled,
     });
 
     const RULES: Block<Self> = Block(&[
@@ -61,6 +64,7 @@ impl Section for CacheControl {
             "immutable",
             Text,
             "The `Cache-Control` value for fingerprinted assets, which can be cached forever.",
+            |c| c.immutable.clone().into(),
             |c, n, t| {
                 c.immutable = n.string(t, 0)?;
                 Ok(())
@@ -70,6 +74,7 @@ impl Section for CacheControl {
             "default",
             Text,
             "The `Cache-Control` value for everything else.",
+            |c| c.default.clone().into(),
             |c, n, t| {
                 c.default = n.string(t, 0)?;
                 Ok(())
