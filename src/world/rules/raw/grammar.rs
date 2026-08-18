@@ -263,7 +263,9 @@ impl Grammar {
 
         Self::leaves(&LinkedNode::new(&root), None, &mut |range, tag| {
             let token = tag.map(|tag| (Token::from(tag), EcoString::from(tag.tm_scope())));
-            let opens = starts.partition_point(|&start| start <= range.start) - 1;
+            let opens = starts
+                .partition_point(|&start| start <= range.start)
+                .saturating_sub(1);
             let mut at = range.start;
             for (line, part) in (opens..).zip(split_newlines(&text[range])) {
                 if !part.is_empty() {
@@ -393,6 +395,19 @@ mod tests {
             classed(&Grammar::Sublime(Set::Builtin, "nosuchlang".into()), &["x"]),
             Vec::new()
         );
+    }
+
+    /// An empty block raw evaluates to zero lines, and the parse of `""` yields
+    /// one leaf covering nothing.
+    #[test]
+    fn an_empty_fence_yields_no_pieces() {
+        for (name, grammar) in [
+            ("markup", Grammar::Typst(Mode::Markup)),
+            ("code", Grammar::Typst(Mode::Code)),
+            ("plain", Grammar::Plain),
+        ] {
+            assert!(pieces(&grammar, &[]).is_empty(), "{name}");
+        }
     }
 
     #[test]

@@ -50,6 +50,11 @@ chores are visible in the git history and change nothing for a site.
   generated string, so a config value such as `navigation { standalone { entry
   "</script>.." } }` can no longer terminate the router island early.
 
+- **Two panics reachable from ordinary content.** An empty ```` ```typ ````
+  fence underflowed the line index of the highlighter, and an SVG attribute name
+  starting with a multi-byte character was sliced mid-codepoint by the handler
+  check. Both aborted the build with a raw Rust message instead of a diagnostic.
+
 - **A theme can no longer set `client { }`.** Its values are written verbatim
   into the bundled JavaScript, and a config string expands `${VAR}` from the
   build machine's environment, so an installed theme could publish a CI secret

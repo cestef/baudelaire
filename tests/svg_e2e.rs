@@ -211,6 +211,14 @@ fn an_embedded_raster_survives() {
     );
 }
 
+/// XML name characters go well past ASCII, and the handler-attribute test read
+/// the first two *bytes* of the name.
+#[test]
+fn a_non_ascii_attribute_name_inlines() {
+    let html = inline("nonascii-attr.svg", "");
+    assert!(html.contains(r#"<path d="M0 0h1">"#), "{html}");
+}
+
 /// A file that is not an SVG fails by name, rather than inlining as an empty
 /// `<svg>` once every foreign child is dropped.
 #[test]

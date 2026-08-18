@@ -336,7 +336,12 @@ impl<'a> Icon<'a> {
         }
         for attribute in self.node.attributes() {
             let name = attribute.name();
-            if name.len() > 2 && name[..2].eq_ignore_ascii_case("on") {
+            if name.len() > 2
+                && name
+                    .as_bytes()
+                    .get(..2)
+                    .is_some_and(|head| head.eq_ignore_ascii_case(b"on"))
+            {
                 return Err(SvgError::active(
                     self.path,
                     markup!("an `{}` handler", name),
