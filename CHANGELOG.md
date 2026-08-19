@@ -30,6 +30,13 @@ chores are visible in the git history and change nothing for a site.
 
 ### Fixed
 
+- **A numeric character reference no longer lands in the text as itself.** Text
+  extraction decoded the five named entities and read `&#x20;` or `&#8212;`
+  literally, so a search hit carried `&#x20;` as a word and a full-content feed
+  entry showed the escape rather than the character. Both forms now decode, and
+  a decoded space collapses like the space it spells; one naming no character
+  (`&#xD800;`, `&#99999999;`) still stands for itself.
+
 - **A URL that names a file can no longer be written outside `dist`.** A
   frontmatter `path`, a frontmatter `redirect`, or a config `redirect { }` key
   ending in an extension bypassed the `..` filter every other URL went through,

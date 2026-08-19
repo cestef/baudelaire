@@ -173,8 +173,14 @@ impl Text {
         out.push_str(s);
     }
 
-    /// [`Text::push_str`] for a single decoded character.
+    /// [`Text::push_str`] for a single decoded character. A whitespace one is a
+    /// word gap and not a character, so `&#x20;` collapses like the space it
+    /// spells.
     fn push_char(out: &mut String, gap: &mut bool, ch: char) {
+        if ch.is_whitespace() {
+            *gap = true;
+            return;
+        }
         if *gap && !out.is_empty() {
             out.push(' ');
         }
@@ -238,20 +244,38 @@ impl Text {
         None
     }
 
-    /// Decode one predefined entity at the start of `s` (which begins with `&`),
-    /// returning the character and the byte length consumed, or `None` for a bare
-    /// `&`. Consuming the whole entity in one step means `&amp;lt;` decodes to a
-    /// literal `&lt;`, without ordering `&amp;` last as a replace-based decoder must.
+    /// Decode one entity at the start of `s` (which begins with `&`), named or
+    /// numeric, returning the character and the byte length consumed, or `None`
+    /// for a bare `&`. Consuming the whole entity in one step means `&amp;lt;`
+    /// decodes to a literal `&lt;`, without ordering `&amp;` last as a
+    /// replace-based decoder must.
     fn entity(s: &str) -> Option<(char, usize)> {
-        if s.starts_with("&#39;") {
-            return Some(('\'', 5));
-        }
         let after = s.as_bytes().get(1..)?;
+        if after.first() == Some(&b'#') {
+            return Self::numeric(after.get(1..)?).map(|(ch, len)| (ch, len + 2));
+        }
         ENTITIES.iter().find_map(|&(ch, name)| {
             let n = name.len();
             (after.len() > n && after[..n] == *name.as_bytes() && after[n] == b';')
                 .then_some((ch, n + 2))
         })
+    }
+
+    /// Decode what follows a `&#`: decimal digits, or `x`-prefixed hex, up to
+    /// the `;`. `None` where the digits are missing, unreadable, or name no
+    /// character, which leaves the `&` to stand for itself.
+    fn numeric(digits: &[u8]) -> Option<(char, usize)> {
+        /// The longest run of digits any character needs, `1114111` or
+        /// `x10FFFF`, plus its terminator.
+        const LONGEST: usize = 8;
+        let hex = matches!(digits.first(), Some(b'x' | b'X'));
+        let body = digits.get(usize::from(hex)..)?;
+        let end = body[..body.len().min(LONGEST)]
+            .iter()
+            .position(|b| *b == b';')?;
+        let radix = if hex { 16 } else { 10 };
+        let code = u32::from_str_radix(std::str::from_utf8(&body[..end]).ok()?, radix).ok()?;
+        char::from_u32(code).map(|ch| (ch, end + 1 + usize::from(hex)))
     }
 }
 
@@ -350,6 +374,33 @@ mod tests {
     fn strips_tags_scripts_and_decodes_entities() {
         let html = "<h1>Hello</h1><script>ignore()</script><p>a &amp; b &lt;c&gt;</p>";
         assert_eq!(text(html), "Hello a & b <c>");
+    }
+
+    /// A rendered page carries numeric references wherever typst-html escapes a
+    /// character it will not write literally, so an index that read them
+    /// literally carried `&#x20;` as a word.
+    #[test]
+    fn decodes_numeric_character_references() {
+        assert_eq!(text("<p>a&#x20;b</p>"), "a b");
+        assert_eq!(text("<p>it&#39;s</p>"), "it's");
+        assert_eq!(text("<p>em&#8212;dash</p>"), "em\u{2014}dash");
+        assert_eq!(text("<p>a&#XA0;b</p>"), "a b", "a decoded space is a gap");
+        assert_eq!(text("<p>&#x26;lt;</p>"), "&lt;", "decoded once, not twice");
+    }
+
+    /// A reference naming no character stands for itself rather than being
+    /// swallowed, which is what a page writing about the syntax needs.
+    #[test]
+    fn an_unreadable_numeric_reference_is_left_alone() {
+        assert_eq!(text("<p>&#xZZ;</p>"), "&#xZZ;");
+        assert_eq!(text("<p>&#99999999;</p>"), "&#99999999;");
+        assert_eq!(
+            text("<p>&#xD800;</p>"),
+            "&#xD800;",
+            "a surrogate is no char"
+        );
+        assert_eq!(text("<p>&#;</p>"), "&#;");
+        assert_eq!(text("<p>a &# b</p>"), "a &# b");
     }
 
     #[test]
