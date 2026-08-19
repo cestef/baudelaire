@@ -15,6 +15,7 @@ mod urls;
 mod values;
 
 use crate::config::Config;
+use crate::config::dispatch::Section;
 
 pub(super) fn parse(text: &str) -> Config {
     Config::parse(text).expect("should parse")
@@ -410,4 +411,18 @@ fn a_budget_can_report_instead_of_failing() {
             .budget
             .strict
     );
+}
+
+/// `OWNED` names sections by string, and `Config::floor` refuses a theme by
+/// matching those strings against the blocks it parsed: a name that is not a
+/// row key refuses nothing, and refuses it silently.
+#[test]
+fn every_section_the_theme_sandbox_names_is_a_real_config_key() {
+    let keys: Vec<&'static str> = Config::rows().into_iter().map(|row| row.key).collect();
+    for owned in Config::OWNED {
+        assert!(
+            keys.contains(&owned),
+            "`{owned}` is in the theme sandbox but is not a top-level key: {keys:?}"
+        );
+    }
 }
