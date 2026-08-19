@@ -95,6 +95,20 @@ impl Default for CollectionConfig {
     }
 }
 
+impl PaginateConfig {
+    /// The path segment before a page number when nothing names one.
+    pub(crate) const PREFIX: &'static str = "page";
+
+    /// A written `paginate` count as a page size, shared with the taxonomy
+    /// listings, which paginate by the same rules under a different key.
+    pub(crate) fn size(n: i64, text: &str, span: miette::SourceSpan) -> Result<usize> {
+        if n < 1 {
+            return Err(ConfigError::paginate_too_small(text, n, span).into());
+        }
+        Ok(usize::try_from(n).unwrap_or(usize::MAX))
+    }
+}
+
 impl Default for PaginateConfig {
     fn default() -> Self {
         Self {
@@ -102,7 +116,7 @@ impl Default for PaginateConfig {
             size: None,
             template: None,
             mount: None,
-            prefix: "page".into(),
+            prefix: Self::PREFIX.into(),
         }
     }
 }
@@ -221,11 +235,8 @@ impl Section for PaginateConfig {
             "Pages per index page. Omitted, the index is one page.",
             |c| c.size.into(),
             |c, n, t| {
-                let n_ = n.arg(t, 0)?.integer(t, NodeExt::span(n))?;
-                if n_ < 1 {
-                    return Err(ConfigError::paginate_too_small(t, n_, NodeExt::span(n)).into());
-                }
-                c.size = Some(usize::try_from(n_).unwrap_or(usize::MAX));
+                let written = n.arg(t, 0)?.integer(t, NodeExt::span(n))?;
+                c.size = Some(Self::size(written, t, NodeExt::span(n))?);
                 Ok(())
             },
         ),

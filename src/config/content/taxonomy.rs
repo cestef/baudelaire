@@ -7,7 +7,7 @@ use crate::config::dispatch::Kind::{Choice, Flag, Number, Text};
 use crate::config::dispatch::{Attributed, Attrs};
 use crate::config::node::NodeExt;
 use crate::config::value::ValueExt;
-use crate::config::{Named, SortKey};
+use crate::config::{Named, PaginateConfig, SortKey};
 use crate::content::Credit;
 use crate::error::{ConfigError, ConfigErrorKind, Result};
 use crate::ui::markup;
@@ -53,7 +53,7 @@ impl From<String> for TaxonomyConfig {
             describe: false,
             template: None,
             paginate: None,
-            prefix: "page".into(),
+            prefix: PaginateConfig::PREFIX.into(),
             sort: SortKey::Title,
             reverse: false,
         }
@@ -168,11 +168,7 @@ impl Attributed for TaxonomyConfig {
             "Pages per term listing.",
             |c| c.paginate.into(),
             |c, v, t, s| {
-                let n = v.integer(t, s)?;
-                if n < 1 {
-                    return Err(ConfigError::paginate_too_small(t, n, s).into());
-                }
-                c.paginate = Some(usize::try_from(n).unwrap_or(usize::MAX));
+                c.paginate = Some(PaginateConfig::size(v.integer(t, s)?, t, s)?);
                 Ok(())
             },
         ),
