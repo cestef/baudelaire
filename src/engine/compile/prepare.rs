@@ -352,12 +352,12 @@ impl<'a> Prepare<'a> {
             }
         }
         let cards = &self.config.generate.cards;
-        if cfg!(feature = "cards") && cards.enabled {
+        if cards.active() {
             push(&cards.template, "`generate { cards }`".to_owned());
         }
         let config = &self.config;
         let pdf = &config.generate.pdf;
-        if cfg!(feature = "pdf") && pdf.pages.enabled {
+        if pdf.pages.active() {
             push(
                 &pdf.pages.template,
                 "`generate { pdf { pages } }`".to_owned(),
