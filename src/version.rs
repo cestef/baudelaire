@@ -137,6 +137,30 @@ mod tests {
         }
     }
 
+    /// `flavor()` calls a build `full` when every row is on, so a default
+    /// feature with no row makes a partial build report as a published one.
+    #[test]
+    fn every_default_feature_has_a_row() {
+        let manifest = toml_edit::ImDocument::parse(include_str!("../Cargo.toml"))
+            .expect("the manifest parses");
+        let defaults: Vec<&str> = manifest["features"]["default"]
+            .as_array()
+            .expect("`default` is a list")
+            .iter()
+            .map(|name| name.as_str().expect("a feature name"))
+            .collect();
+        let rows: Vec<&str> = Version::FEATURES.iter().map(|(name, _)| *name).collect();
+        for name in &defaults {
+            assert!(rows.contains(name), "`{name}` is default-on with no row");
+        }
+        for name in &rows {
+            assert!(
+                defaults.contains(name),
+                "`{name}` has a row but is not default-on"
+            );
+        }
+    }
+
     #[test]
     fn the_long_form_reports_the_build() {
         let out = Version::long();
