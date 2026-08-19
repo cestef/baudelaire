@@ -20,6 +20,8 @@ mod spa;
 mod standalone;
 #[cfg(feature = "announce")]
 mod standard;
+#[cfg(feature = "epub")]
+mod xhtml;
 mod xml;
 
 use std::collections::BTreeSet;

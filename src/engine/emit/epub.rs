@@ -294,11 +294,13 @@ impl<'a> Book<'a> {
     }
 
     /// One chapter document: the page's title, then the prose the render pass
-    /// captured for it, spliced in raw as markup this build already serialized.
+    /// captured for it, re-spelled as XHTML because a content document is
+    /// parsed as XML and typst-html leaves a void element unclosed.
     fn chapter(&self, chapter: &Chapter<'_>) -> String {
+        let body = super::xhtml::Xhtml::of(chapter.body);
         self.xhtml(chapter.title(), |xml| {
             xml.leaf("h1", chapter.title());
-            xml.raw(chapter.body);
+            xml.raw(&body);
         })
     }
 
@@ -322,5 +324,64 @@ impl<'a> Book<'a> {
             },
         );
         xml.finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::{Book, Chapter, Epub3};
+    use crate::config::Config;
+    use crate::content::{Data, Frontmatter, Page, PageId, Selection, Siblings};
+
+    /// A content document is parsed as XML, and typst-html leaves every void
+    /// element unclosed: a chapter carrying an image used to make the whole
+    /// book unreadable to a conforming reader.
+    #[test]
+    fn a_chapter_carrying_a_void_element_parses_as_xml() {
+        let config = Config::default();
+        let selection = Selection {
+            id: "guide".to_owned(),
+            lang: "en",
+            pages: Vec::new(),
+            title: "Guide".to_owned(),
+        };
+        let page = Page {
+            id: PageId::new("guide", "a"),
+            source: PathBuf::from("content/guide/a.typ"),
+            frontmatter: Frontmatter {
+                title: Some("First".to_owned()),
+                ..Frontmatter::default()
+            },
+            body: String::new(),
+            data: Data::Empty,
+            collection: "guide".into(),
+            permalink: "/guide/a/".into(),
+            output: PathBuf::new(),
+            template: None,
+            lang: "en".into(),
+            siblings: Siblings::default(),
+            translations: Vec::new(),
+        };
+        let book = Book {
+            selection: &selection,
+            config: &config,
+            chapters: Vec::new(),
+        };
+        let chapter = Chapter {
+            page: &page,
+            index: 0,
+            body: r#"<p>before<br>after<img src="/x.png" alt="a > b"></p>"#,
+        };
+        let document = book.chapter(&chapter);
+        let options = roxmltree::ParsingOptions {
+            allow_dtd: true,
+            ..roxmltree::ParsingOptions::default()
+        };
+        roxmltree::Document::parse_with_options(&document, options)
+            .unwrap_or_else(|e| panic!("{e}\n{document}"));
+        assert!(document.contains("<br />"), "{document}");
+        assert!(document.contains(Epub3::NS_XHTML), "{document}");
     }
 }

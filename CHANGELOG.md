@@ -148,6 +148,12 @@ chores are visible in the git history and change nothing for a site.
   and then overridden by the config. A name none of them knows is now an error
   at the call rather than a silently dropped setting.
 
+- **An EPUB chapter is well-formed XHTML.** Chapter bodies were spliced in as
+  typst-html serialized them, which leaves a void element unclosed, into a
+  document declared `application/xhtml+xml`: any bundle page carrying an image
+  or a line break produced a book a conforming reader refuses. Void elements are
+  now closed on the way in.
+
 - **A theme can no longer set `client { }`.** Its values are written verbatim
   into the bundled JavaScript, and a config string expands `${VAR}` from the
   build machine's environment, so an installed theme could publish a CI secret
