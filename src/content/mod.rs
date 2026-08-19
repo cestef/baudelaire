@@ -182,7 +182,8 @@ impl Claim {
         let claims = pages
             .iter()
             .flat_map(|page| Self::of(page, config))
-            .chain(Self::declared(config));
+            .chain(Self::declared(config))
+            .chain(Self::generated(config));
         for claim in claims {
             if let Some(first) = seen.insert(claim.output.clone(), claim.origin.clone()) {
                 return Err(ContentError::collision(
@@ -194,6 +195,18 @@ impl Claim {
             }
         }
         Ok(())
+    }
+
+    /// Every whole-site file a post-build processor will write, so a page
+    /// slugged `sitemap.xml` is refused rather than quietly replaced by the
+    /// sitemap that runs after it.
+    fn generated(config: &Config) -> impl Iterator<Item = Self> + '_ {
+        crate::engine::emit::Processors::claimed(config)
+            .into_iter()
+            .map(|(output, by)| Self {
+                output,
+                origin: markup!("{}", by),
+            })
     }
 
     /// Every file the config's own `redirect { }` pairs will write; a wildcard

@@ -1,5 +1,7 @@
 //! Syndication feeds: RSS 2.0, Atom 1.0, and JSON Feed 1.1 from one page set.
 
+use std::path::PathBuf;
+
 use serde::Serialize;
 use time::OffsetDateTime;
 use time::format_description::well_known::{Rfc2822, Rfc3339};
@@ -86,6 +88,38 @@ struct Shared<'a> {
 pub(super) struct Feeds;
 
 impl Processor for Feeds {
+    fn name(&self) -> &'static str {
+        "a feed"
+    }
+
+    /// The site's own feed per language, and the feed of each collection that
+    /// asks for one. A term's feed sits inside a generated term page's own
+    /// directory, and is claimed with that page.
+    fn claims(&self, config: &Config) -> Vec<PathBuf> {
+        let files: Vec<&str> = config
+            .generate
+            .feed
+            .formats
+            .iter()
+            .map(|kind| config.generate.feed.file(*kind))
+            .collect();
+        let mut scopes: Vec<String> = Vec::new();
+        for lang in config.langs() {
+            scopes.push(config.scope(lang, ""));
+            for (id, _) in &config.content.collections {
+                scopes.extend(config.channel(id, lang).map(|channel| channel.scope));
+            }
+        }
+        scopes
+            .iter()
+            .flat_map(|scope| {
+                files
+                    .iter()
+                    .map(move |file| Site::at(config, &[scope, file]))
+            })
+            .collect()
+    }
+
     fn enabled(&self, config: &Config) -> bool {
         !config.generate.feed.formats.is_empty()
     }

@@ -1,6 +1,8 @@
 //! Single-file export: the whole site as one HTML document, every page's body
 //! a route in a JSON island that the bundled router swaps in place.
 
+use std::path::PathBuf;
+
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 
@@ -20,6 +22,14 @@ use crate::render::Fragments;
 pub(super) struct Standalone;
 
 impl Processor for Standalone {
+    fn name(&self) -> &'static str {
+        "the single-file export"
+    }
+
+    fn claims(&self, config: &Config) -> Vec<PathBuf> {
+        vec![config.paths.dist.join(&config.navigation.standalone.file)]
+    }
+
     fn enabled(&self, config: &Config) -> bool {
         config.navigation.standalone.enabled
     }

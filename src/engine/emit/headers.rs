@@ -1,6 +1,8 @@
 //! `_headers`: what the host serving the built files is told about them, the
 //! `Cache-Control` policy and the `Content-Security-Policy` both.
 
+use std::path::PathBuf;
+
 use std::fmt;
 
 use super::csp::{Digests, Policy};
@@ -22,6 +24,14 @@ impl Headers {
 }
 
 impl Processor for Headers {
+    fn name(&self) -> &'static str {
+        "the headers file"
+    }
+
+    fn claims(&self, config: &Config) -> Vec<PathBuf> {
+        vec![config.paths.dist.join(Self::FILE)]
+    }
+
     /// Needs the file, and something to put in it: an empty rule file says only
     /// what the host already assumed.
     fn enabled(&self, config: &Config) -> bool {

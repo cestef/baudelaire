@@ -1,6 +1,8 @@
 //! EPUB 3 bundles: a selection of pages as one reflowable book, each chapter
 //! the prose the render pass already captured rather than a second compile.
 
+use std::path::PathBuf;
+
 use std::io::Write as _;
 
 use zip::write::SimpleFileOptions;
@@ -58,6 +60,16 @@ impl Epub3 {
 pub(super) struct Epub;
 
 impl Processor for Epub {
+    fn name(&self) -> &'static str {
+        "an EPUB bundle"
+    }
+
+    /// Nothing: a bundle's file is named for the selection it binds, which the
+    /// page set decides, so it is claimed with the pages rather than here.
+    fn claims(&self, _config: &Config) -> Vec<PathBuf> {
+        Vec::new()
+    }
+
     fn enabled(&self, config: &Config) -> bool {
         config
             .generate

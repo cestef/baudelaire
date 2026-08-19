@@ -2,6 +2,8 @@
 //! `/.well-known/site.standard.publication`, whose body is the publication's
 //! `at://` URI.
 
+use std::path::PathBuf;
+
 use super::{Emit, Processor, Site};
 use crate::announce::standard::PUBLICATION;
 use crate::atproto::AtUri;
@@ -16,6 +18,14 @@ impl WellKnown {
 }
 
 impl Processor for WellKnown {
+    fn name(&self) -> &'static str {
+        "the verification artifact"
+    }
+
+    fn claims(&self, config: &Config) -> Vec<PathBuf> {
+        vec![Site::at(config, &[Self::DIR, PUBLICATION.as_str()])]
+    }
+
     fn enabled(&self, config: &Config) -> bool {
         config.verify_did(|v| v.wellknown).is_some()
     }

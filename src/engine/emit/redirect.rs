@@ -3,6 +3,8 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+use crate::config::Config;
+
 use super::line::Lines;
 use super::xml::Xml;
 use super::{Emit, Processor, Site, WROTE, Warn};
@@ -32,6 +34,21 @@ struct Rule<'a> {
 }
 
 impl Processor for Redirects {
+    fn name(&self) -> &'static str {
+        "the redirect rules"
+    }
+
+    /// The rule file alone: a stub is written at a path a page's own
+    /// `redirect` names, and those are claimed by the page that names them.
+    fn claims(&self, config: &Config) -> Vec<PathBuf> {
+        config
+            .generate
+            .redirects
+            .then(|| config.paths.dist.join(Self::RULES))
+            .into_iter()
+            .collect()
+    }
+
     /// A rule file and a stub cannot coexist: a host serves a static file in
     /// preference to a redirect rule, so the stub would win at the old path and
     /// the rule would never fire.

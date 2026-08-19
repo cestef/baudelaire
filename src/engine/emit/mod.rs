@@ -85,7 +85,13 @@ impl Site<'_> {
     /// scope (`""` for the default language) without first deciding whether
     /// there is one.
     pub(super) fn dist(&self, segments: &[&str]) -> PathBuf {
-        let mut path = self.config.paths.dist.clone();
+        Self::at(self.config, segments)
+    }
+
+    /// The same, from the config alone, for [`Processor::claims`], which runs
+    /// before there is a site to ask.
+    pub(super) fn at(config: &Config, segments: &[&str]) -> PathBuf {
+        let mut path = config.paths.dist.clone();
         path.extend(segments.iter().copied().filter(|s| !s.is_empty()));
         path
     }
@@ -172,17 +178,30 @@ impl<T: Emit + ?Sized> Warn for T {
 
 /// One post-build pass over the site.
 pub(super) trait Processor {
+    /// How a diagnostic names this processor.
+    fn name(&self) -> &'static str;
+
     /// Whether to run, from config alone. Default: always.
     fn enabled(&self, _config: &Config) -> bool {
         true
     }
+
+    /// The whole-site files this processor writes, as the config decides them,
+    /// so a page claiming one is refused at plan time rather than silently
+    /// overwritten.
+    ///
+    /// Required rather than defaulted: a processor that returns nothing has to
+    /// say so, since forgetting is exactly the hole this closes. A destination
+    /// the page set decides (a term's feed, a bundle) is left out and covered
+    /// by the page or bundle that owns the directory it sits in.
+    fn claims(&self, config: &Config) -> Vec<PathBuf>;
 
     /// Emit output derived from the site, only when [`Processor::enabled`].
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()>;
 }
 
 /// The built-in processors, in run order.
-pub(super) struct Processors(Vec<Box<dyn Processor>>);
+pub(crate) struct Processors(Vec<Box<dyn Processor>>);
 
 impl Processors {
     /// Standalone runs last: it reads every other page's markup, not what the
@@ -207,6 +226,22 @@ impl Processors {
     }
 
     /// Run each enabled processor in order; the first error stops the build.
+    /// Every whole-site file the enabled processors will write, each with the
+    /// name of the processor that writes it.
+    pub(crate) fn claimed(config: &Config) -> Vec<(PathBuf, &'static str)> {
+        Self::builtin()
+            .0
+            .iter()
+            .filter(|processor| processor.enabled(config))
+            .flat_map(|processor| {
+                processor
+                    .claims(config)
+                    .into_iter()
+                    .map(|path| (path, processor.name()))
+            })
+            .collect()
+    }
+
     pub(super) fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
         for processor in &self.0 {
             if processor.enabled(site.config) {
@@ -327,8 +362,16 @@ mod tests {
     struct Marker(&'static str, bool);
 
     impl Processor for Marker {
+        fn name(&self) -> &'static str {
+            self.0
+        }
+
         fn enabled(&self, _config: &Config) -> bool {
             self.1
+        }
+
+        fn claims(&self, _config: &Config) -> Vec<PathBuf> {
+            Vec::new()
         }
 
         fn run(&self, _site: &Site, out: &mut dyn Emit) -> Result<()> {

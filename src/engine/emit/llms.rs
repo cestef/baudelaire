@@ -5,6 +5,8 @@
 //!
 //! [llmstxt.org]: https://llmstxt.org
 
+use std::path::PathBuf;
+
 use super::line::Lines;
 use super::{Emit, Processor, Site};
 use crate::config::{BaseUrl, Config};
@@ -16,6 +18,18 @@ use crate::error::warning::BaseUrlMissing;
 pub(super) struct Llms;
 
 impl Processor for Llms {
+    fn name(&self) -> &'static str {
+        "llms.txt"
+    }
+
+    fn claims(&self, config: &Config) -> Vec<PathBuf> {
+        config
+            .langs()
+            .iter()
+            .map(|lang| Site::at(config, &[&config.scope(lang, ""), Self::FILE]))
+            .collect()
+    }
+
     fn enabled(&self, config: &Config) -> bool {
         config.generate.llms.enabled
     }

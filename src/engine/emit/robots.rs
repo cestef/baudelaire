@@ -1,5 +1,7 @@
 //! `robots.txt` generation.
 
+use std::path::PathBuf;
+
 use super::line::Lines;
 use super::sitemap::SiteMap;
 use super::{Emit, Processor, Site};
@@ -17,6 +19,14 @@ impl Robots {
 }
 
 impl Processor for Robots {
+    fn name(&self) -> &'static str {
+        "the robots file"
+    }
+
+    fn claims(&self, config: &Config) -> Vec<PathBuf> {
+        vec![config.paths.dist.join(Self::FILE)]
+    }
+
     fn enabled(&self, config: &Config) -> bool {
         config.generate.robots.enabled
     }

@@ -2,6 +2,8 @@
 //! intercepts internal link clicks, fetches the target, and swaps one
 //! container.
 
+use std::path::PathBuf;
+
 use super::script::Script;
 use super::{Emit, Processor, Site};
 use crate::config::{Config, Named, SpaConfig};
@@ -11,6 +13,14 @@ use crate::error::Result;
 pub(super) struct Spa;
 
 impl Processor for Spa {
+    fn name(&self) -> &'static str {
+        "the SPA router"
+    }
+
+    fn claims(&self, config: &Config) -> Vec<PathBuf> {
+        vec![config.paths.dist.join(SpaConfig::FILE)]
+    }
+
     fn enabled(&self, config: &Config) -> bool {
         config.navigation.spa.enabled
     }

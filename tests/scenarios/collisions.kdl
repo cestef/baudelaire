@@ -81,3 +81,61 @@ scenario "a frontmatter redirect climbing out of dist is rejected" {
     fails { code "baudelaire::content::frontmatter_traversal" }
   }
 }
+
+// A page whose `path` names a file a processor writes used to be produced and
+// then silently replaced by that processor, which runs after the pages.
+scenario "a page claiming a generated file is rejected" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      paths {
+        content "content"
+        dist "public"
+      }
+      generate {
+        sitemap #true
+      }
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "Home",)
+      home
+      """#
+    "content/map.typ" #"""
+      #let frontmatter = (title: "Map", path: "/sitemap.xml",)
+      mine
+      """#
+  }
+  expect {
+    fails { code "baudelaire::content::collision" }
+  }
+}
+
+// ...and the same file is fine once nothing generates it.
+scenario "a page may claim a generated name the site does not generate" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      paths {
+        content "content"
+        dist "public"
+      }
+      generate {
+        sitemap #false
+      }
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "Home",)
+      home
+      """#
+    "content/map.typ" #"""
+      #let frontmatter = (title: "Map", path: "/sitemap.xml",)
+      mine
+      """#
+  }
+  expect {
+    ok
+    file "sitemap.xml" { contains "mine" }
+  }
+}

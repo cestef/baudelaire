@@ -3,6 +3,8 @@
 //!
 //! [spec]: https://www.w3.org/TR/appmanifest/
 
+use std::path::PathBuf;
+
 use serde::Serialize;
 
 use super::{Emit, Processor, Site, Warn};
@@ -17,6 +19,18 @@ use crate::render::Tail;
 pub(super) struct WebManifest;
 
 impl Processor for WebManifest {
+    fn name(&self) -> &'static str {
+        "the web manifest"
+    }
+
+    fn claims(&self, config: &Config) -> Vec<PathBuf> {
+        config
+            .langs()
+            .iter()
+            .map(|lang| Site::at(config, &[&config.scope(lang, ""), ManifestConfig::FILE]))
+            .collect()
+    }
+
     fn enabled(&self, config: &Config) -> bool {
         config.generate.manifest.enabled
     }

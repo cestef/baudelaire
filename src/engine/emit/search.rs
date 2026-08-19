@@ -6,6 +6,8 @@
 //! - [`SearchFormat::Inverted`] -> `search.inverted.json`: a prebuilt index
 //!   `{ "documents": [{ "url", "title" }], "postings": { term: [docId..] } }`.
 
+use std::path::PathBuf;
+
 use std::collections::BTreeMap;
 use std::collections::HashSet;
 
@@ -23,6 +25,25 @@ use crate::error::{Artifact, Result};
 pub(super) struct SearchIndex;
 
 impl Processor for SearchIndex {
+    fn name(&self) -> &'static str {
+        "the search index"
+    }
+
+    fn claims(&self, config: &Config) -> Vec<PathBuf> {
+        let cfg = &config.generate.search;
+        let mut out = Vec::new();
+        for lang in config.langs() {
+            let scope = config.scope(lang, "");
+            for &format in &cfg.formats {
+                out.push(Site::at(config, &[&scope, format.file()]));
+                if cfg.ui {
+                    out.push(Site::at(config, &[&scope, format.client_file()]));
+                }
+            }
+        }
+        out
+    }
+
     fn enabled(&self, config: &Config) -> bool {
         !config.generate.search.formats.is_empty()
     }

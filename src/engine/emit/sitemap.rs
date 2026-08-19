@@ -1,5 +1,7 @@
 //! `sitemap.xml` generation.
 
+use std::path::PathBuf;
+
 use super::xml::Xml;
 use super::{Emit, Processor, Site};
 use crate::config::{BaseUrl, Config};
@@ -62,6 +64,14 @@ impl SiteMap {
 }
 
 impl Processor for SiteMap {
+    fn name(&self) -> &'static str {
+        "the sitemap"
+    }
+
+    fn claims(&self, config: &Config) -> Vec<PathBuf> {
+        vec![config.paths.dist.join(Self::FILE)]
+    }
+
     fn enabled(&self, config: &Config) -> bool {
         config.generate.sitemap
     }

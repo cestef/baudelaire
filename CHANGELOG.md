@@ -148,6 +148,16 @@ chores are visible in the git history and change nothing for a site.
   and then overridden by the config. A name none of them knows is now an error
   at the call rather than a silently dropped setting.
 
+- **A page can no longer be silently replaced by a generated file.** The
+  processors run after the pages are written and skipped only what the static
+  tree owned, so a frontmatter `slug` or `path` of `sitemap.xml`, `robots.txt`,
+  `llms.txt`, `_headers`, `_redirects`, `search.json`, `manifest.webmanifest`,
+  `spa.js`, `site.html` or a feed's filename produced the page and then
+  overwrote it, with nothing said. Every whole-site file a processor writes is
+  now claimed alongside the pages, so the clash is a collision error before
+  anything is built. Turning the generator off (`generate { sitemap #false }`)
+  hands the name back to the page.
+
 - **The over-budget report is headed like every other aggregate.** It read
   `3 pages over budget` where its siblings read `found 3 broken internal
   links`; all four now share one headline, so the count and the plural are
