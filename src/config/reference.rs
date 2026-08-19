@@ -256,11 +256,7 @@ mod tests {
     #[test]
     fn a_multi_value_choice_renders_as_a_list() {
         let reference = Reference::new();
-        for path in [
-            "generate.feed.formats",
-            "generate.search.formats",
-            "generate.search.fields",
-        ] {
+        for path in ["generate.feed.formats", "generate.bundles.formats"] {
             let entry = reference
                 .entries()
                 .iter()

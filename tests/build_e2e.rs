@@ -275,7 +275,7 @@ fn build_summary_reports_assets_generated_files_and_output_dir() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\nurl \"https://x.example\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\ngenerate {\n  search { formats \"json\" }\n}\n",
+        "site \"T\"\nurl \"https://x.example\"\npaths {\n  content \"content\"\n  dist \"public\"\n  assets \"assets\"\n}\ngenerate {\n  search { }\n}\n",
     );
     site.write("assets/style.css", "body { color: red; }");
     site.write("content/a.typ", "#let frontmatter = (title: \"A\",)\nbody");

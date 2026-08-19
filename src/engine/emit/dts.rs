@@ -52,13 +52,6 @@ impl Dts {
         self
     }
 
-    /// Everything `specifier` declares, for a module serving the same thing
-    /// under another name.
-    pub(crate) fn same_as(mut self, specifier: &str) -> Self {
-        let _ = writeln!(self.body, "export * from \"{specifier}\";");
-        self
-    }
-
     /// The finished `declare module "<specifier>" { .. }` block, its body
     /// indented one level.
     pub(crate) fn module(&self, specifier: &str) -> String {

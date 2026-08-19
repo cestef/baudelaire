@@ -343,7 +343,7 @@ fn feeds_and_search_are_per_language() {
         }
         generate {
           feed { formats "atom" "json" }
-          search { formats "json"; ui #true }
+          search { ui }
         }
         "#,
     );
@@ -376,10 +376,14 @@ fn feeds_and_search_are_per_language() {
     let fr = site.output("fr/search.json");
     assert!(en.contains("Hello") && !en.contains("Bonjour"), "{en}");
     assert!(fr.contains("Bonjour") && !fr.contains("Hello"), "{fr}");
-    let client = site.output("fr/search.js");
+    let client = site.output("search.js");
     assert!(
-        client.contains("const INDEX = \"/fr/search.json\""),
-        "{client}"
+        client.contains("\"fr\": \"/fr/search.json\""),
+        "one client reaches every language: {client}"
+    );
+    assert!(
+        !site.exists("public/fr/search.js"),
+        "one client, not one per language"
     );
 }
 

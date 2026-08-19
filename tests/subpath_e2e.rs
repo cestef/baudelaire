@@ -19,7 +19,7 @@ fn subsite() -> Site {
         serve { open #false }
         generate {
           sitemap #true
-          search { formats "json"; ui #true }
+          search { ui }
         }
         "#,
     );
@@ -92,10 +92,14 @@ fn search_client_carries_the_base() {
     site.stats();
     let js = site.output("search.js");
     assert!(
-        js.contains("const BASE = \"/docs\""),
-        "no BASE in client: {js}"
+        js.contains("\"/docs/search.json\""),
+        "no prefixed index in client: {js}"
     );
     let json = site.output("search.json");
+    assert!(
+        json.contains("\"base\":\"/docs\""),
+        "index does not carry the base: {json}"
+    );
     assert!(
         json.contains("\"/posts/hello/\""),
         "index url not canonical: {json}"

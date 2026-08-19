@@ -50,14 +50,12 @@ assets {
 generate {
   sitemap #true
 
-  // Client-side search. `formats "json"` writes `/search.json`, one document
-  // per page; `ui #true` writes `/search.js` next to it, a self-mounting
-  // command palette that wires every `[data-search-open]` button and binds
-  // Ctrl+K and `/`. `templates/theme.typ` loads it and renders the button.
+  // Client-side search: `/search.json` per language, and `/search.js` beside
+  // it, a self-mounting command palette that wires every `[data-search-open]`
+  // button and binds Ctrl+K and `/`. `templates/theme.typ` loads it and renders
+  // the button.
   search {
-    formats "json"
-    fields "title" "body" "tags"
-    ui #true
+    ui
   }
 
   // `/llms.txt`: the site as one Markdown outline, for tools that read docs.

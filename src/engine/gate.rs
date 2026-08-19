@@ -2,7 +2,7 @@
 //! withholds ([`INERT`]), both read once by `Engine::new` so the whole build
 //! agrees on one answer.
 
-use crate::config::{BundleFormat, Config, SearchConfig};
+use crate::config::{BundleFormat, Config};
 use crate::error::warning::{FeatureMissing, SettingInert};
 
 /// One optional capability, the config that asks for it, and what a binary
@@ -223,22 +223,6 @@ const INERT: &[Inert] = &[
         met: |config| !config.generate.feed.formats.is_empty(),
         effect: "no feed of any kind is written",
         help: "name the formats to write (`formats \"rss\"`), or drop the `feed` that asked",
-    },
-    Inert {
-        setting: "generate { search { stopwords } }",
-        asked: |config| !config.generate.search.stopwords.is_empty(),
-        needs: "generate { search { formats \"inverted\" } }",
-        met: |config| config.generate.search.inverted(),
-        effect: "the flat `json` index carries every token",
-        help: "add `inverted` to `formats`, or drop the stopwords",
-    },
-    Inert {
-        setting: "generate { search { minimum } }",
-        asked: |config| config.generate.search.min_length != SearchConfig::default().min_length,
-        needs: "generate { search { formats \"inverted\" } }",
-        met: |config| config.generate.search.inverted(),
-        effect: "the flat `json` index carries every token",
-        help: "add `inverted` to `formats`, or drop the minimum",
     },
     Inert {
         setting: "announce { standard { verify } }",
@@ -526,16 +510,6 @@ mod tests {
                 "generate { feed { terms } }",
                 "generate { feed { formats \"rss\"; terms #true } }",
                 "generate { feed { formats \"rss\"; terms #true } }\ncontent { taxonomies { tags listing=#true } }",
-            ),
-            (
-                "generate { search { stopwords } }",
-                "generate { search { formats \"json\"; stopwords \"the\" } }",
-                "generate { search { formats \"inverted\"; stopwords \"the\" } }",
-            ),
-            (
-                "generate { search { minimum } }",
-                "generate { search { formats \"json\"; minimum 4 } }",
-                "generate { search { formats \"inverted\"; minimum 4 } }",
             ),
             (
                 "announce { standard { verify } }",

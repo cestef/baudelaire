@@ -223,9 +223,6 @@ fn the_shapes_a_key_does_take_still_parse() {
     let cfg = parse("generate {\n  feed {\n    formats \"rss\" \"atom\"\n  }\n}");
     assert_eq!(cfg.generate.feed.formats.len(), 2, "a list of names");
 
-    let cfg = parse("generate {\n  search {\n    fields \"title\" \"tags\"\n  }\n}");
-    assert_eq!(cfg.generate.search.fields.len(), 2, "a list of names");
-
     let cfg = parse("html {\n  footnotes \"article\" \"main\"\n}");
     assert_eq!(cfg.html.footnotes.targets().len(), 2, "a list of words");
 
@@ -268,14 +265,6 @@ fn the_shapes_a_key_does_take_still_parse() {
 #[test]
 fn a_bare_list_key_is_the_empty_list_where_a_list_replaces() {
     assert!(parse("serve {\n  exclude\n}").serve.exclude.is_empty());
-    assert!(
-        parse("generate {\n  search {\n    formats\n  }\n}")
-            .generate
-            .search
-            .formats
-            .is_empty(),
-        "and so turns search off"
-    );
     assert!(
         parse("assets {\n  images {\n    responsive {\n      widths\n    }\n  }\n}")
             .assets

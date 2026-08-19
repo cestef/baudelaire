@@ -1,80 +1,108 @@
-//! The generated JavaScript client: the engine a format needs, the shared
-//! tokenizer, and the palette UI, assembled into one module scope.
+//! The generated palette client: one file for the whole site, holding where
+//! each language's index is served from and what the palette defaults to.
 
 use super::super::script::Script;
-use crate::config::{Config, Permalink, SearchFormat};
+use crate::codegen::Value;
+use crate::config::{Config, Permalink, SearchConfig};
 
-/// The query tokenizer, shared by both engines and by the palette.
-pub(super) const TOKENIZE: &str = include_str!("js/tokenize.js");
+/// The query tokenizer, shared by the engine and by the palette that
+/// highlights what a query matched.
+const TOKENIZE: &str = include_str!("js/tokenize.js");
 
-/// The self-mounting command-palette UI, concatenated onto whichever engine a
-/// format needs.
+/// The engine over either index shape, defining `createSearch`.
+const ENGINE: &str = include_str!("js/engine.js");
+
+/// The self-mounting command-palette UI.
 const PALETTE: &str = include_str!("js/palette.js");
 
 /// The generated client's entry point.
 const MOUNT: &str = "mountSearch";
 
-impl SearchFormat {
-    /// The per-format engine source, defining `createSearch`.
-    fn engine(self) -> &'static str {
-        match self {
-            Self::Json => include_str!("js/engine.flat.js"),
-            Self::Inverted => include_str!("js/engine.inverted.js"),
-        }
-    }
+/// The one client every language shares, and the file names it and the indexes
+/// are written under.
+pub(crate) struct Client;
 
-    /// The standalone generated client: tokenizer, engine and palette UI, with
-    /// an auto-mount.
-    pub(super) fn client(self, base: &str, index: &str) -> String {
-        self.script(base, index).mount(MOUNT)
+impl Client {
+    pub(super) const INDEX: &'static str = "search.json";
+    pub(super) const FILE: &'static str = "search.js";
+
+    /// The standalone client, mounting itself: one `<script>` is a working
+    /// search box.
+    pub(super) fn standalone(config: &Config) -> String {
+        Self::script(config).mount(MOUNT)
     }
 
     /// The composable module source served to bundlers through the
     /// `baudelaire:search` virtual module, with no auto-mount.
     #[cfg(feature = "js")]
-    pub(crate) fn module(self, base: &str, index: &str) -> String {
-        self.script(base, index).finish()
+    pub(crate) fn module(config: &Config) -> String {
+        Self::script(config).finish()
     }
 
-    /// The sources every build of this format's client is assembled from, and
-    /// the two constants they close over: `BASE`, prepended to each hit's href,
-    /// and `INDEX`, the URL of the index this client fetches.
-    ///
-    /// The two are separate because a hit carries an already-localized
-    /// permalink, so folding the language into `BASE` would double it.
-    fn script(self, base: &str, index: &str) -> Script<'static> {
-        Script::new(&[("BASE", base), ("INDEX", index)])
-            .part(TOKENIZE)
-            .part(self.engine())
-            .part(PALETTE)
+    /// The sources the client is assembled from and the constants they close
+    /// over. Everything else a query needs travels in the index itself, so one
+    /// client serves every language.
+    fn script(config: &Config) -> Script<'static> {
+        Script::data(&[
+            ("INDEXES", Self::indexes(config)),
+            ("LANG", Value::str(&config.lang)),
+            ("OPTIONS", Self::options(&config.generate.search)),
+        ])
+        .part(TOKENIZE)
+        .part(ENGINE)
+        .part(PALETTE)
     }
 
-    /// The served URL of this format's index for `lang`, which the generated
-    /// client fetches.
-    pub(crate) fn index(self, config: &Config, lang: &str) -> String {
+    /// Where each language's index is served from, which the client picks
+    /// between by the page's own `lang`.
+    fn indexes(config: &Config) -> Value {
+        Value::dict(
+            config
+                .langs()
+                .into_iter()
+                .map(|lang| (lang.to_owned(), Value::str(Self::url(config, lang)))),
+        )
+    }
+
+    /// The served URL of `lang`'s index.
+    fn url(config: &Config, lang: &str) -> String {
         let dir = config.prefixed(&Permalink::join(&[&config.scope(lang, "")]));
-        format!("{dir}{}", self.file())
+        format!("{dir}{}", Self::INDEX)
+    }
+
+    /// The palette's configured defaults, which a `mountSearch` call overrides
+    /// key by key.
+    fn options(config: &SearchConfig) -> Value {
+        Value::dict([
+            ("hotkey", Value::str(&config.ui.hotkey)),
+            ("placeholder", Value::str(&config.ui.placeholder)),
+            (
+                "limit",
+                Value::Int(i64::try_from(config.ui.limit).unwrap_or(i64::MAX)),
+            ),
+            ("styles", Value::Bool(config.ui.styles)),
+        ])
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::super::corpus::Document;
+    use crate::engine::emit::search::tokens::Tokens;
 
     /// Every case below is one where the two tokenizers *disagreed*: a `\p{L}`
     /// client, or a strip-then-lowercase index, fails this test.
     #[test]
     fn tokens_agree_with_the_client_tokenizer() {
-        assert_eq!(Document::normalize("İstanbul"), "istanbul");
-        assert_eq!(Document::normalize("हिन्दी"), "हिनदी");
-        assert_eq!(Document::normalize("مُحَمَّد"), "مُحَمَّد");
-        assert_eq!(Document::normalize("שָׁלוֹם"), "שָׁלוֹם");
-        assert_eq!(Document::normalize("ÅNGSTRÖM"), "ångström");
-        assert_eq!(Document::normalize("ǅungla"), "ǆungla");
-        assert_eq!(Document::normalize("foo-bar!"), "foobar");
-        assert_eq!(Document::normalize("x²"), "x²");
-        assert_eq!(Document::normalize("--"), "");
+        assert_eq!(Tokens::normalize("İstanbul"), "istanbul");
+        assert_eq!(Tokens::normalize("हिन्दी"), "हिनदी");
+        assert_eq!(Tokens::normalize("مُحَمَّد"), "مُحَمَّد");
+        assert_eq!(Tokens::normalize("שָׁלוֹם"), "שָׁלוֹם");
+        assert_eq!(Tokens::normalize("ÅNGSTRÖM"), "ångström");
+        assert_eq!(Tokens::normalize("ǅungla"), "ǆungla");
+        assert_eq!(Tokens::normalize("foo-bar!"), "foobar");
+        assert_eq!(Tokens::normalize("x²"), "x²");
+        assert_eq!(Tokens::normalize("--"), "");
 
         assert!(
             TOKENIZE.contains(r"[^\p{Alphabetic}\p{N}]"),
@@ -87,7 +115,16 @@ mod tests {
         );
         assert!(
             lower < strip,
-            "the client must lowercase before stripping, as `Document::normalize` does"
+            "the client must lowercase before stripping, as `Tokens::normalize` does"
         );
+    }
+
+    #[test]
+    fn every_language_index_is_reachable_from_the_one_client() {
+        let mut config = Config::default();
+        config.languages = vec![("fr".to_owned(), crate::config::LanguageConfig::default())];
+        let script = Client::standalone(&config);
+        assert!(script.contains(r#""en": "/search.json""#), "{script}");
+        assert!(script.contains(r#""fr": "/fr/search.json""#), "{script}");
     }
 }

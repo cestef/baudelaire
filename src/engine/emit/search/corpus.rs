@@ -1,27 +1,25 @@
-//! The searchable document set: what of each page is indexed, and the flat
-//! `search.json` serialization of it.
+//! The searchable document set: what of each page the index carries, and what
+//! of it a query scores against.
 
 use rayon::prelude::*;
-use serde::Serialize;
 
 use super::Site;
-use crate::config::{SearchConfig, SearchField, SearchFormat};
+use crate::config::{SearchConfig, SearchFields};
 use crate::engine::text::{Region, Text};
-use crate::error::{Artifact, Result};
 
-/// The searchable document set, built once and shared across formats.
+/// One language's documents, in URL order.
 pub(super) struct Corpus {
     pub(super) documents: Vec<Document>,
 }
 
 impl Corpus {
-    /// Build a document per page, including only the configured fields and only
-    /// the configured region of each page, ordered by URL.
+    /// Build a document per listed page of `lang`, reading only the configured
+    /// region of each, ordered by URL.
     ///
-    /// The order is load-bearing: the inverted index keys postings by document
-    /// *position*, and `site.outputs` is ordered by which pages hit the cache.
-    pub(super) fn build(site: &Site, config: &SearchConfig, lang: &str) -> Self {
-        let has = |field| config.fields.contains(&field);
+    /// The order is load-bearing: postings key documents by *position*, and
+    /// `site.outputs` is ordered by which pages hit the cache.
+    pub(super) fn build(site: &Site, lang: &str) -> Self {
+        let config = &site.config.generate.search;
         let region = Region::from(&site.config.html.region);
         let mut documents: Vec<Document> = site
             .outputs
@@ -36,11 +34,8 @@ impl Corpus {
             })
             .map(|out| Document {
                 url: out.page.permalink.clone(),
-                title: has(SearchField::Title)
-                    .then(|| out.page.frontmatter.title.clone())
-                    .flatten()
-                    .unwrap_or_default(),
-                tags: if has(SearchField::Tags) {
+                title: out.page.frontmatter.title.clone().unwrap_or_default(),
+                tags: if config.fields.tags > 0 {
                     out.page
                         .frontmatter
                         .taxonomies
@@ -51,7 +46,7 @@ impl Corpus {
                 } else {
                     Vec::new()
                 },
-                body: if has(SearchField::Body) {
+                body: if config.carries_prose() {
                     Text::extract(out.html, region)
                 } else {
                     String::new()
@@ -65,58 +60,46 @@ impl Corpus {
     pub(super) fn len(&self) -> usize {
         self.documents.len()
     }
-
-    /// This corpus serialized in `format`'s shape, as documented at the top of
-    /// the parent module.
-    pub(super) fn json(&self, format: SearchFormat, cfg: &SearchConfig) -> Result<String> {
-        match format {
-            SearchFormat::Json => self.documents_json(),
-            SearchFormat::Inverted => self.inverted_json(&cfg.stopwords, cfg.min_length),
-        }
-    }
-
-    /// The flat document list (`search.json`).
-    fn documents_json(&self) -> Result<String> {
-        Artifact::SearchIndex.json(&self.documents)
-    }
 }
 
-/// One indexed page. Empty fields are omitted from the JSON.
-#[derive(Serialize)]
+/// One indexed page, holding its prose whole; how much of that prose ships is
+/// the index's decision.
 pub(super) struct Document {
     pub(super) url: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
     pub(super) title: String,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(super) tags: Vec<String>,
-    #[serde(skip_serializing_if = "String::is_empty")]
     pub(super) body: String,
 }
 
 impl Document {
-    /// Normalized search tokens over every indexed field: split on whitespace,
-    /// lowercased, stripped to alphanumerics, empties dropped.
-    ///
-    /// The client's `tokenize` (in `js/tokenize.js`) must normalize a query
-    /// the same way: lowercase *before* stripping, since a codepoint like `İ`
-    /// lowercases to a letter plus a combining mark that is not alphanumeric,
-    /// and match `char::is_alphanumeric` as `\p{Alphabetic}\p{N}` rather than
-    /// the narrower `\p{L}`, which drops marks the index keeps.
-    pub(super) fn tokens(&self) -> impl Iterator<Item = String> + '_ {
-        std::iter::once(self.title.as_str())
-            .chain(std::iter::once(self.body.as_str()))
-            .chain(self.tags.iter().map(String::as_str))
-            .flat_map(str::split_whitespace)
-            .map(Self::normalize)
-            .filter(|token| !token.is_empty())
+    /// Each indexed part of the page with what a match in it is worth, the
+    /// parts a site zeroed left out.
+    pub(super) fn fields<'a>(
+        &'a self,
+        weights: &'a SearchFields,
+    ) -> impl Iterator<Item = (&'a str, usize)> + 'a {
+        [
+            (self.title.as_str(), weights.title),
+            (self.body.as_str(), weights.body),
+        ]
+        .into_iter()
+        .chain(self.tags.iter().map(|tag| (tag.as_str(), weights.tags)))
+        .filter(|(text, weight)| *weight > 0 && !text.is_empty())
     }
 
-    /// One word reduced to its index key.
-    pub(super) fn normalize(word: &str) -> String {
-        word.chars()
-            .flat_map(char::to_lowercase)
-            .filter(|c| c.is_alphanumeric())
-            .collect()
+    /// The prose this document ships, which is all of it where the client does
+    /// the indexing and at most `limit` characters where it does not.
+    pub(super) fn prose(&self, config: &SearchConfig) -> Option<&str> {
+        let limit = if config.indexed_here() {
+            self.body
+                .char_indices()
+                .nth(config.snippet)
+                .map_or(self.body.len(), |(at, _)| at)
+        } else {
+            self.body.len()
+        };
+        let text = self.body[..limit].trim_end();
+        (!text.is_empty()).then_some(text)
     }
 }
 
@@ -167,11 +150,7 @@ mod tests {
                 pages: &[],
                 outputs,
             };
-            let config = SearchConfig {
-                fields: vec![SearchField::Title],
-                ..SearchConfig::default()
-            };
-            Corpus::build(&site, &config, "en")
+            Corpus::build(&site, "en")
                 .documents
                 .iter()
                 .map(|d| d.url.clone())
@@ -189,13 +168,27 @@ mod tests {
     }
 
     #[test]
-    fn documents_json_omits_empty_fields() {
-        let corpus = Corpus {
-            documents: vec![Document::fake("Title", "", &[])],
+    fn stored_prose_is_whole_where_the_client_indexes_it() {
+        let doc = Document::fake("T", "alpha beta gamma delta", &[]);
+        let clipped = SearchConfig {
+            snippet: 10,
+            ..SearchConfig::default()
         };
-        let json = corpus.documents_json().unwrap();
-        assert!(json.contains("\"title\":\"Title\""), "{json}");
-        assert!(!json.contains("body"), "empty body omitted: {json}");
-        assert!(!json.contains("tags"), "empty tags omitted: {json}");
+        assert_eq!(doc.prose(&clipped), Some("alpha beta"));
+        let whole = SearchConfig {
+            index: crate::config::SearchIndex::Documents,
+            ..clipped
+        };
+        assert_eq!(doc.prose(&whole), Some("alpha beta gamma delta"));
+    }
+
+    #[test]
+    fn a_zero_snippet_ships_no_prose() {
+        let doc = Document::fake("T", "alpha", &[]);
+        let config = SearchConfig {
+            snippet: 0,
+            ..SearchConfig::default()
+        };
+        assert_eq!(doc.prose(&config), None);
     }
 }

@@ -1,10 +1,10 @@
-// The query tokenizer, concatenated ahead of whichever engine a build emits and
-// shared with the palette that highlights what a query matched.
+// The query tokenizer, concatenated ahead of the engine and shared with the
+// palette that highlights what a query matched.
 //
-// One definition, because it has to agree with the build-time tokenizer in
-// `search.rs` that keys the inverted index: a document is findable only when a
-// query splits the way the index did, and a rule fixed in one of two copies is
-// a search that quietly stops matching.
+// One definition, because it has to agree with `Tokens::normalize` in
+// `tokens.rs`, which keys the index: a document is findable only when a query
+// splits the way the index did, and a rule fixed in one of two copies is a
+// search that quietly stops matching.
 //
 // Lowercase first, then strip: `İ`.toLowerCase() is `i` + U+0307, and the mark
 // has to be stripped after it appears, not before. And the retained set is

@@ -6,8 +6,10 @@
 //
 // `createSearch` comes from the engine this file is concatenated with and
 // `tokenize` from tokenize.js (a single module scope, so both are in scope
-// here). Exposes `mountSearch`, which the generated standalone client auto-calls
-// and which bundlers import from the `baudelaire:search` virtual module.
+// here). `OPTIONS` is the generated prelude's copy of `generate { search { ui } }`,
+// which a call to `mountSearch` overrides key by key. Exposes `mountSearch`,
+// which the generated standalone client auto-calls and which bundlers import
+// from the `baudelaire:search` virtual module.
 
 const escapeHtml = (s) =>
   s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -27,26 +29,28 @@ const highlight = (text, terms) => {
     : safe;
 };
 
-// A ~180-char window of the body around the first matched term.
-const snippetOf = (body, terms) => {
-  if (!body) return "";
+// A window of the stored prose around the first matched term, `limit`
+// characters wide.
+const snippetOf = (body, terms, limit) => {
+  if (!body || !limit) return "";
   const lower = body.toLowerCase();
   let at = -1;
   for (const t of terms) {
     const i = lower.indexOf(t);
     if (i >= 0 && (at < 0 || i < at)) at = i;
   }
-  if (at < 0) return body.slice(0, 150);
-  const [start, end] = [Math.max(0, at - 60), Math.min(body.length, at + 120)];
+  const lead = Math.round(limit / 4);
+  if (at < 0) return body.slice(0, limit);
+  const [start, end] = [Math.max(0, at - lead), Math.min(body.length, at + limit - lead)];
   return (start ? ".." : "") + body.slice(start, end) + (end < body.length ? ".." : "");
 };
 
 // One hit as a list item. Its section, title, and (when present) snippet are the
 // only structure; all appearance is left to `.bd-*` rules.
-const rowOf = (doc, i, terms) => {
-  const snippet = snippetOf(doc.body || "", terms);
+const rowOf = (doc, i, terms, { base, snippet: width }) => {
+  const snippet = snippetOf(doc.text || "", terms, width);
   return `<li class="bd-hit" role="option" id="bd-hit-${i}" aria-selected="${i === 0}">
-    <a href="${BASE}${doc.url}" tabindex="-1">
+    <a href="${base}${doc.url}" tabindex="-1">
       <span class="bd-section">${escapeHtml(sectionOf(doc.url))}</span>
       <span class="bd-title">${highlight(doc.title || doc.url, terms)}</span>
       ${snippet ? `<span class="bd-snippet">${highlight(snippet, terms)}</span>` : ""}
@@ -58,7 +62,7 @@ const MARKUP = `
 <div class="bd-panel" role="dialog" aria-modal="true" aria-label="Search">
   <input class="bd-input" type="search" role="combobox" aria-expanded="true"
     aria-controls="bd-list" aria-autocomplete="list" aria-label="Search"
-    autocomplete="off" spellcheck="false" placeholder="Search">
+    autocomplete="off" spellcheck="false">
   <ul class="bd-list" id="bd-list" role="listbox" aria-label="Search results"></ul>
   <p class="bd-empty">Start typing to search.</p>
 </div>`;
@@ -86,7 +90,8 @@ const DEFAULT_STYLES = `
 // The palette instance: owns its DOM, its lazily-loaded searcher, and the
 // interaction state. Constructed by `mountSearch`.
 class Palette {
-  constructor({ url, limit = 12, placeholder, styles = true } = {}) {
+  constructor(options = {}) {
+    const { url, limit, placeholder, styles } = { ...OPTIONS, ...options };
     this.url = url;
     this.limit = limit;
     this.searcher = null; // resolved search(query) function
@@ -111,8 +116,8 @@ class Palette {
     this.input = this.root.querySelector(".bd-input");
     this.list = this.root.querySelector(".bd-list");
     this.empty = this.root.querySelector(".bd-empty");
-    if (placeholder) this.input.placeholder = placeholder;
 
+    this.input.placeholder = placeholder;
     this.input.addEventListener("input", () => this.render());
     this.input.addEventListener("keydown", (e) => this.onKey(e));
     this.root.querySelector("[data-close]").addEventListener("click", () => this.close());
@@ -166,7 +171,7 @@ class Palette {
     }
 
     const terms = tokenize(query);
-    this.list.innerHTML = this.hits.map((doc, i) => rowOf(doc, i, terms)).join("");
+    this.list.innerHTML = this.hits.map((doc, i) => rowOf(doc, i, terms, this.searcher)).join("");
     this.select(0);
   }
 
@@ -223,8 +228,10 @@ class Palette {
 
 // Mount the palette and return its controller. Idempotent: a repeat call returns
 // the first instance, so an import and the auto-mount can coexist.
-// Options: { url, limit, placeholder, hotkey, styles }.
+// Options: { url, limit, placeholder, hotkey, styles }, each defaulting to what
+// `generate { search { ui } }` configured.
 export function mountSearch(options = {}) {
   if (typeof document === "undefined") return null;
-  return (window.__baudelaireSearch ??= new Palette(options).bind(options.hotkey || "/"));
+  const settings = { ...OPTIONS, ...options };
+  return (window.__baudelaireSearch ??= new Palette(settings).bind(settings.hotkey));
 }

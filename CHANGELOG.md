@@ -12,6 +12,22 @@ chores are visible in the git history and change nothing for a site.
 
 ## [Unreleased]
 
+### Changed
+
+- **Search is one index, one engine, one client.** `generate { search { } }` is
+  switched on by the block's presence, and `index "terms" | "documents"`
+  replaces `formats`: the two shapes now differ only in who builds the postings,
+  never in what a query finds. Both tokenize, rank and snippet identically, and
+  both match the word still being typed by prefix, so "conf" finds
+  "configuration". Ranking is the site's to set, as weights in `fields { title
+  5; tags 3; body 1 }`, where a field at `0` is left out of the index; a hit's
+  context is `snippet`, in characters. `stopwords` and `minimum` apply to both
+  shapes, so neither is inert any more. One `search.json` per language and one
+  `/search.js` for the whole site, which picks its index from the page's `<html
+  lang>` rather than being pinned to the default language. The palette's
+  `hotkey`, `placeholder`, `limit` and `styles` are config keys under `ui { }`,
+  and a `mountSearch` call overrides them one by one.
+
 ### Fixed
 
 - **A URL that names a file can no longer be written outside `dist`.** A
@@ -242,6 +258,32 @@ chores are visible in the git history and change nothing for a site.
 - A theme that sets `client { }` in its `theme.kdl` now fails to load. Move
   those values into the site's own `config.kdl`, which is where a reader can
   see them.
+
+- `generate { search { formats } }` is gone. `formats "json"` becomes `index
+  "documents"`, `formats "inverted"` becomes `index "terms"` (the default), and
+  a site that named both now picks one. Naming no format was the off switch;
+  write `search #false`, or drop the block.
+
+- `fields` is a block of weights, not a list of names: `fields "title" "tags"`
+  becomes `fields { body 0 }`. A field's weight is what a match in it is worth,
+  and `0` leaves it out of the index.
+
+- `ui #true` becomes `ui`, or `ui { hotkey "/"; placeholder "Search"; limit 12;
+  styles #true }` to configure the palette from the config rather than from a
+  `mountSearch` call.
+
+- `search.inverted.json` and `search.inverted.js` are no longer written: there
+  is one `search.json` per language and one `/search.js` at the root. A page
+  linking a per-language `/fr/search.js` links `/search.js` instead, which
+  searches French on a French page.
+
+- `baudelaire:search/json` and `baudelaire:search/inverted` no longer resolve.
+  Import `baudelaire:search`, which serves whichever shape the site emits.
+
+- `search.json` is an object, not an array of documents. A client of your own
+  reads its `documents`, and each hit's prose is `text` rather than `body`; the
+  header carries `base`, `snippet`, and for the `documents` shape the `weights`,
+  `minimum` and `stopwords` to index it by.
 
 ## [0.0.15] - 2026-08-18
 

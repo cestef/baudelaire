@@ -71,8 +71,8 @@ pub(super) const EXTRAS: &[Extra] = &[
     },
     Extra {
         name: "search",
-        fragment: "\n// Client-side search index.\ngenerate {\n  search { formats \"json\" }\n}\n",
-        present: |config| !config.generate.search.formats.is_empty(),
+        fragment: "\n// Client-side search index.\ngenerate {\n  search { ui }\n}\n",
+        present: |config| config.generate.search.enabled,
     },
     Extra {
         name: "pdf",

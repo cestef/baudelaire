@@ -59,9 +59,7 @@ generate {
   // The palette this theme's header button opens. `ui` emits a self-mounting
   // client at `/search.js`; the theme only restyles its `.bd-*` classes.
   search {
-    formats "json"
-    fields "title" "body" "tags"
-    ui #true
+    ui
   }
 
   llms { }

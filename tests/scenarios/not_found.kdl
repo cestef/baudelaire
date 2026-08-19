@@ -69,9 +69,7 @@ scenario "the not-found page stays out of the site's indexes" {
       generate {
         sitemap #true
         llms
-        search {
-            formats "json"
-          }
+        search { }
         feed {
             formats "rss"
           }

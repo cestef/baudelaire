@@ -16,9 +16,20 @@ impl<'a> Script<'a> {
     /// through the codegen escaper so a configured value carrying a quote
     /// cannot break out of its literal.
     pub(super) fn new(consts: &[(&str, &str)]) -> Self {
+        Self::data(
+            &consts
+                .iter()
+                .map(|(name, value)| (*name, Value::str(value)))
+                .collect::<Vec<_>>(),
+        )
+    }
+
+    /// The same, for constants holding a structured value: a map of index URLs,
+    /// a block of configured defaults.
+    pub(super) fn data(consts: &[(&str, Value)]) -> Self {
         let mut prelude = String::new();
         for (name, value) in consts {
-            let _ = writeln!(prelude, "const {name} = {};", Js(&Value::str(value)));
+            let _ = writeln!(prelude, "const {name} = {};", Js(value));
         }
         Self {
             prelude,

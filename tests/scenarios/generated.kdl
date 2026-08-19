@@ -175,7 +175,7 @@ scenario "a page declines the files a build generates about it" {
       }
       generate {
         sitemap #true
-        search { formats "json" }
+        search { }
         cards { }
         feed { formats "atom"; terms #true }
       }

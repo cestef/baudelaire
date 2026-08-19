@@ -104,12 +104,12 @@ generate {
     }
   }
 
-  // Client-side search: a flat document index. The palette UI is the generated
+  // Client-side search: prebuilt postings, so the browser looks a term up
+  // rather than reading every page's prose. The palette UI is the generated
   // client, imported into assets/main.ts as the `baudelaire:search` virtual
-  // module and bundled by rolldown. The `body` field powers result snippets.
+  // module and bundled by rolldown.
   search {
-    formats "json"
-    fields "title" "body" "tags"
+    index "terms"
   }
 
   robots {

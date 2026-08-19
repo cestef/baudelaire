@@ -94,8 +94,9 @@ links {
 generate {
   sitemap #true
   search {
-          formats "json"
-          fields "title" "body"
+          fields {
+              tags 0
+          }
       }
   llms {
           summary "A test site."

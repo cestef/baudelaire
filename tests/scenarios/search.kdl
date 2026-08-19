@@ -1,6 +1,6 @@
-// The search indexes and the client that mounts over them.
+// The search index, its two shapes, and the client that mounts over them.
 
-scenario "one index per configured search format, plus a self-mounting client" {
+scenario "a prebuilt index scores every term and ships one client" {
   files {
     "config.kdl" #"""
       site "T"
@@ -15,9 +15,9 @@ scenario "one index per configured search format, plus a self-mounting client" {
       }
       generate {
         search {
-            formats "json" "inverted"
+            index "terms"
             stopwords "the"
-            ui #true
+            ui
           }
       }
       """#
@@ -31,24 +31,57 @@ scenario "one index per configured search format, plus a self-mounting client" {
     file "search.json" {
       contains #""url":"/posts/a/""#
       contains #""title":"Alpha""#
+      // Its prose ships as the hit's context, and its terms as postings.
       contains "quick brown fox"
       contains #""intro""#
-    }
-    file "search.inverted.json" {
-      contains #""postings""#
+      contains #""terms""#
       contains #""quick""#
-      // The stopword is excluded from the inverted index.
+      // The stopword is indexed nowhere.
       missing #""the""#
     }
-    // `client #true` emits a self-mounting command palette per format: the
-    // engine, the palette UI, and an auto-mount, so one `<script>` is a working
-    // search box.
+    // `ui` emits one self-mounting palette for the whole site: the engine, the
+    // palette UI and an auto-mount, so one `<script>` is a working search box.
     file "search.js" {
       contains "export async function createSearch"
       contains "export function mountSearch"
       contains "mountSearch();"
+      // The palette's defaults are the configured ones, not JavaScript's.
+      contains #""hotkey""#
     }
-    file "search.inverted.js"
+  }
+}
+
+scenario "the documents shape ships the prose and the rules to index it by" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      generate {
+        search {
+            index "documents"
+            minimum 3
+          }
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "Alpha", slug: "a",)
+      The quick brown fox
+      """#
+  }
+  expect {
+    ok
+    file "search.json" {
+      contains #""index":"documents""#
+      // What the build would have applied, for the client to apply instead.
+      contains #""weights""#
+      contains #""minimum":3"#
+      contains "quick brown fox"
+      // Nothing is prebuilt in this shape.
+      missing #""postings""#
+    }
   }
 }
 
@@ -66,7 +99,7 @@ scenario "the search client bundles into a user entry through its virtual module
         bundle #true
       }
       generate {
-        search { formats "json" }
+        search { }
       }
       """#
     "assets/main.js" #"""
@@ -90,7 +123,7 @@ scenario "the search client bundles into a user entry through its virtual module
   }
 }
 
-scenario "no search index without configured formats" {
+scenario "no search index without the block that asks for one" {
   files {
     "config.kdl" #"""
       site "T"
@@ -107,7 +140,7 @@ scenario "no search index without configured formats" {
   expect {
     ok
     absent "search.json"
-    absent "search-index.json"
+    absent "search.js"
   }
 }
 
@@ -132,7 +165,7 @@ scenario "the prose region and the elements dropped from it are the site's to na
       }
       generate {
         search {
-          formats "json"
+          index "documents"
         }
       }
       """#

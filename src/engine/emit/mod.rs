@@ -14,7 +14,7 @@ mod manifest;
 mod redirect;
 mod robots;
 mod script;
-mod search;
+pub(crate) mod search;
 mod sitemap;
 mod spa;
 mod standalone;
@@ -217,7 +217,7 @@ impl Processors {
             Box::new(feed::Feeds),
             #[cfg(feature = "epub")]
             Box::new(epub::Epub),
-            Box::new(search::SearchIndex),
+            Box::new(search::Search),
             #[cfg(feature = "announce")]
             Box::new(standard::WellKnown),
             Box::new(spa::Spa),

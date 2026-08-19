@@ -86,7 +86,7 @@ pub use generate::llms::LlmsConfig;
 pub use generate::manifest::{DisplayMode, IconConfig, IconPurpose, ManifestConfig};
 pub use generate::pdf::{PdfConfig, PdfPages};
 pub use generate::robots::RobotsConfig;
-pub use generate::search::{SearchConfig, SearchField, SearchFormat};
+pub use generate::search::{SearchConfig, SearchFields, SearchIndex, SearchUi};
 pub use hooks::HooksConfig;
 pub use html::anchors::{AnchorConfig, Place};
 pub use html::highlight::{HighlightConfig, Token};

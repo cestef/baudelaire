@@ -98,7 +98,7 @@ scenario "json addresses a generated document by pointer" {
       site "T"
       url "https://example.com"
       paths { content "content"; dist "public" }
-      generate { search { formats "json"; fields "title" } }
+      generate { search { fields { body 0; tags 0 } } }
       """#
     "content/posts/a.typ" #"""
       #let frontmatter = (title: "Alpha",)
@@ -108,10 +108,10 @@ scenario "json addresses a generated document by pointer" {
   expect {
     ok
     file "search.json" {
-      json "/0/title" equals="Home"
-      json "/1/title" equals="Alpha"
-      json "" count=2
-      json "/0/url" equals="/"
+      json "/documents/0/title" equals="Home"
+      json "/documents/1/title" equals="Alpha"
+      json "/documents" count=2
+      json "/documents/0/url" equals="/"
     }
   }
 }
