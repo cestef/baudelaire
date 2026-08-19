@@ -20,7 +20,7 @@ mod sourcemap;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use crate::config::Config;
+use crate::config::{Config, Slashed};
 #[cfg(feature = "js")]
 use crate::content::Page;
 use crate::error::Result;
@@ -256,7 +256,7 @@ impl<'a> Assets<'a> {
         };
         let ctx = self.ctx();
         for asset in deferred {
-            if wanted.contains(&asset.rel.to_string_lossy().replace('\\', "/")) {
+            if wanted.contains(&Slashed(&asset.rel).to_string()) {
                 self.write(&ctx, &asset.rel, &asset.dst, &asset.bytes, &mut out)?;
             }
         }

@@ -1,13 +1,15 @@
 //! An S3-compatible deploy backend on `ureq` + [SigV4](super::sigv4),
 //! reconciling a bucket with the built `dist` against the ETag S3 reports.
 
+use std::path::Path;
+
 use md5::{Digest as _, Md5};
 use time::OffsetDateTime;
 
 use super::digest::Digest;
 use super::sigv4::{DATE_HEADER, Request, Signer};
 use super::{Backend, Digests, Dist, Inventory, Listed, Store};
-use crate::config::{CacheControl, S3Config};
+use crate::config::{CacheControl, S3Config, Slashed};
 use crate::error::deploy::{Method, Required};
 use crate::error::warning::PlaintextEndpoint;
 use crate::error::{DeployError, Result};
@@ -422,7 +424,7 @@ struct Listing {
 impl Bucket {
     /// Forward-slashed, no leading slash, prefix folded in.
     fn object_key(prefix: &str, path: &str) -> String {
-        let path = path.replace('\\', "/");
+        let path = Slashed(Path::new(path)).to_string();
         let path = path.trim_start_matches('/');
         if prefix.is_empty() {
             path.to_owned()

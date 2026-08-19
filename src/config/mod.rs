@@ -118,7 +118,7 @@ pub use security::csp::CspConfig;
 pub use serve::ServeConfig;
 pub use typst::TypstConfig;
 pub use typst::fonts::FontConfig;
-pub use url::{BaseUrl, Basename, Percent, UrlStyle};
+pub use url::{BaseUrl, Basename, Percent, Slashed, UrlStyle};
 pub use values::Value;
 
 #[derive(Debug, Clone)]
@@ -622,14 +622,9 @@ impl Config {
     }
 
     /// The URL a processed asset is served at, given its path relative to the
-    /// asset root. Separators become `/` whatever the host filesystem writes,
-    /// since this is a URL and not a path.
+    /// asset root.
     pub fn asset_url(&self, rel: &Path) -> String {
-        format!(
-            "{}/{}",
-            self.asset_prefix(),
-            rel.to_string_lossy().replace('\\', "/")
-        )
+        format!("{}/{}", self.asset_prefix(), Slashed(rel))
     }
 
     /// The digest that names a published file by its content, or `None` when

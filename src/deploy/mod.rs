@@ -10,7 +10,7 @@ mod ssh;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use crate::config::Config;
+use crate::config::{Config, Slashed};
 use crate::engine::gate::Gate;
 use crate::error::deploy::Phase;
 use crate::error::warning::RemotePathsRefused;
@@ -116,7 +116,7 @@ impl Dist {
             .files()?
             .iter()
             .filter_map(|path| path.strip_prefix(root).ok())
-            .map(|rel| rel.to_string_lossy().replace('\\', "/"))
+            .map(|rel| Slashed(rel).to_string())
             .collect();
         files.sort();
         Ok(Self {

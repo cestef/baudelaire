@@ -2,6 +2,7 @@
 //! root-relative path becomes absolute, and how either is percent-encoded.
 
 use std::fmt::Write as _;
+use std::path::Path;
 
 use super::Named;
 
@@ -110,6 +111,27 @@ impl std::fmt::Display for Basename<'_> {
         let stem = self.0.trim_matches('/');
         let stem = stem.strip_suffix(".html").unwrap_or(stem);
         f.write_str(if stem.is_empty() { "index" } else { stem })
+    }
+}
+
+/// A relative path spelled as the URL it is served at: separators become `/`
+/// whatever the host filesystem writes.
+///
+/// The one rule, shared by everything that turns a file's place in a tree into
+/// a name a request can carry. The producer at
+/// [`Config::asset_url`](super::Config::asset_url) and the consumer matching
+/// against it have to agree, so neither spells it itself.
+pub struct Slashed<'a>(pub &'a Path);
+
+impl std::fmt::Display for Slashed<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (index, component) in self.0.to_string_lossy().split('\\').enumerate() {
+            if index > 0 {
+                f.write_char('/')?;
+            }
+            f.write_str(component)?;
+        }
+        Ok(())
     }
 }
 
