@@ -148,6 +148,13 @@ chores are visible in the git history and change nothing for a site.
   and then overridden by the config. A name none of them knows is now an error
   at the call rather than a silently dropped setting.
 
+- **`config set` writes the value as KDL, not as Rust.** The line it saved was
+  spelled with Rust's `Debug`, which is a different escape vocabulary: a value
+  carrying a control character was written in a form KDL then refused, and the
+  save failed on a config the command had built itself. It now goes through the
+  same adapter a diagnostic quoting a value uses, which escapes every codepoint
+  KDL will not read literally.
+
 - **An EPUB is served as an EPUB.** `.epub` had no row in the media-type table,
   so a generated book was served and uploaded as `application/octet-stream`
   where the book's own manifest declares `application/epub+zip`. The four feed

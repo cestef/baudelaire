@@ -9,6 +9,7 @@ use kdl::{KdlDocument, KdlEntry, KdlEntryFormat, KdlNode, KdlValue};
 use super::Config;
 use super::dispatch::Kind;
 use super::key::Key;
+use super::value::Kdl;
 use crate::error::cli::UnknownKey;
 use crate::error::{ConfigError, Result};
 
@@ -88,9 +89,9 @@ impl Value {
             _ => KdlValue::String(raw.to_owned()),
         };
         let mut entry = KdlEntry::new(value.clone());
-        if let KdlValue::String(written) = &value {
+        if value.is_string() {
             entry.set_format(KdlEntryFormat {
-                value_repr: format!("{written:?}"),
+                value_repr: Kdl(&value).to_string(),
                 leading: " ".to_owned(),
                 ..KdlEntryFormat::default()
             });
@@ -123,6 +124,17 @@ mod tests {
             .expect("valid");
         assert!(out.contains("generate"), "{out}");
         assert!(out.contains("width 800"), "a number, not a string: {out}");
+    }
+
+    /// The written line has to parse as KDL, which the value goes back through
+    /// before anything is saved: a raw control character is one KDL refuses.
+    #[test]
+    fn a_string_is_written_as_the_kdl_that_parses_back_to_it() {
+        let out = Edit::new("paths.dist", "a\u{7}b\"c\\d\te")
+            .expect("a key")
+            .applied(BASE)
+            .expect("valid");
+        assert!(out.contains(r#"dist "a\u{7}b\"c\\d\te""#), "{out}");
     }
 
     #[test]

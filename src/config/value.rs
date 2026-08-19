@@ -17,12 +17,30 @@ use crate::error::{ConfigError, Result};
 struct MissingVar(String);
 
 /// A [`KdlValue`] written back as the KDL source that parses to it, for a
-/// diagnostic echoing an author's own value.
+/// diagnostic echoing an author's own value and for the line `config set`
+/// writes.
 ///
 /// `KdlValue`'s own `Display` writes a string bare wherever KDL's grammar would
 /// take it as an identifier, so a help offering a line to write hands back one
 /// whose value has a different shape, or that does not parse at all.
 pub(super) struct Kdl<'a>(pub(super) &'a KdlValue);
+
+impl Kdl<'_> {
+    /// Whether KDL refuses to read this character literally inside a string,
+    /// which is every control and direction-control codepoint the grammar names
+    /// but the three whitespace ones written as their own escape.
+    fn disallowed(c: char) -> bool {
+        matches!(c,
+            '\u{0}'..='\u{8}'
+            | '\u{b}'..='\u{c}'
+            | '\u{e}'..='\u{1f}'
+            | '\u{7f}'
+            | '\u{200e}'..='\u{200f}'
+            | '\u{202a}'..='\u{202e}'
+            | '\u{2066}'..='\u{2069}'
+            | '\u{feff}')
+    }
+}
 
 impl Display for Kdl<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -36,6 +54,7 @@ impl Display for Kdl<'_> {
                 '\n' => f.write_str("\\n")?,
                 '\r' => f.write_str("\\r")?,
                 '\t' => f.write_str("\\t")?,
+                _ if Self::disallowed(c) => write!(f, "\\u{{{:x}}}", c as u32)?,
                 _ => f.write_char(c)?,
             }
         }
@@ -288,6 +307,11 @@ mod tests {
         assert_eq!(written(string("say \"hi\"")), r#""say \"hi\"""#, "a quote");
         assert_eq!(written(string("c:\\x")), r#""c:\\x""#, "a backslash");
         assert_eq!(written(string("one\ntwo")), r#""one\ntwo""#, "a newline");
+        assert_eq!(
+            written(string("a\u{7}b\u{feff}")),
+            r#""a\u{7}b\u{feff}""#,
+            "a character KDL refuses to read literally"
+        );
         assert_eq!(written(KdlValue::Bool(true)), "#true");
         assert_eq!(written(KdlValue::Integer(3)), "3");
         assert_eq!(written(KdlValue::Null), "#null");
