@@ -18,7 +18,7 @@ scenario "a term resolving against a registry builds" {
           }
         }
         taxonomies {
-          authors entities="people" listing=#true
+          authors { entities "people"; listing }
         }
       }
       """#
@@ -49,7 +49,7 @@ scenario "a term nothing in the registry answers to fails the build" {
           }
         }
         taxonomies {
-          authors entities="people"
+          authors { entities "people" }
         }
       }
       """#
@@ -80,7 +80,7 @@ scenario "a registry that asks to be warned reports the term and builds" {
           }
         }
         taxonomies {
-          authors entities="people"
+          authors { entities "people" }
         }
       }
       """#
@@ -105,7 +105,7 @@ scenario "a registry with no source at all takes every term as written" {
           people { shape "person" }
         }
         taxonomies {
-          authors entities="people"
+          authors { entities "people" }
         }
       }
       """#
@@ -136,7 +136,7 @@ scenario "an alias is a second name for the same entity" {
           }
         }
         taxonomies {
-          authors entities="people"
+          authors { entities "people" }
         }
       }
       """#
@@ -246,7 +246,7 @@ scenario "a taxonomy naming a registry nobody declared fails the build" {
       paths { content "content"; dist "public" }
       content {
         taxonomies {
-          authors entities="people"
+          authors { entities "people" }
         }
       }
       """#
@@ -297,7 +297,7 @@ scenario "profile pages are a registry's entities" {
           }
         }
         taxonomies {
-          authors entities="people"
+          authors { entities "people" }
         }
       }
       """#
@@ -329,7 +329,7 @@ scenario "a page crediting somebody no profile page declares fails the build" {
           }
         }
         taxonomies {
-          authors entities="people"
+          authors { entities "people" }
         }
       }
       """#
@@ -360,7 +360,7 @@ scenario "a roster file declares entities the way the config block does" {
           }
         }
         taxonomies {
-          authors entities="people"
+          authors { entities "people" }
         }
       }
       """#
@@ -402,7 +402,7 @@ scenario "a later source fills what an earlier one left out" {
           }
         }
         taxonomies {
-          authors entities="people"
+          authors { entities "people" }
         }
       }
       """#
@@ -450,8 +450,8 @@ scenario "the head names every credited author, and links the one with a page" {
           }
         }
         taxonomies {
-          authors entities="people" credit="author"
-          translators entities="people" credit="translator"
+          authors { entities "people"; credit "author" }
+          translators { entities "people"; credit "translator" }
         }
       }
       """#
@@ -503,7 +503,7 @@ scenario "a feed entry names the people its page credits" {
           }
         }
         taxonomies {
-          authors entities="people" credit="author"
+          authors { entities "people"; credit "author" }
         }
       }
       """#
@@ -543,7 +543,7 @@ scenario "a template reads the byline off the page" {
           }
         }
         taxonomies {
-          authors entities="people" credit="author"
+          authors { entities "people"; credit "author" }
         }
       }
       """#
@@ -612,7 +612,7 @@ scenario "a described term is the profile page, which lists what credits it" {
           }
         }
         taxonomies {
-          authors entities="people" credit="author" listing=#true describe=#true
+          authors { entities "people"; credit "author"; describe #true; listing }
         }
       }
       """#
@@ -666,7 +666,7 @@ scenario "an undescribed term still gets its generated listing" {
           }
         }
         taxonomies {
-          authors entities="people" credit="author" listing=#true describe=#true
+          authors { entities "people"; credit "author"; describe #true; listing }
         }
       }
       """#
@@ -704,7 +704,7 @@ scenario "an alias groups onto the entity it names, not beside it" {
           }
         }
         taxonomies {
-          authors entities="people" credit="author" listing=#true
+          authors { entities "people"; credit "author"; listing }
         }
       }
       """#
@@ -745,7 +745,7 @@ scenario "a profile has an edition per language, and each describes its own" {
           }
         }
         taxonomies {
-          authors entities="people" credit="author" listing=#true describe=#true
+          authors { entities "people"; credit "author"; describe #true; listing }
         }
       }
       """#
@@ -797,7 +797,7 @@ scenario "a taxonomy key that only means something beside another is refused" {
       paths { content "content"; dist "public" }
       content {
         taxonomies {
-          authors credit="author"
+          authors { credit "author" }
         }
       }
       """#
@@ -825,7 +825,7 @@ scenario "a described profile lists its members in the taxonomy's own order" {
           }
         }
         taxonomies {
-          authors entities="people" credit="author" listing=#true describe=#true sort="date" reverse=#true
+          authors { entities "people"; credit "author"; describe #true; sort "date"; reverse #true; listing }
         }
       }
       """#
@@ -866,7 +866,7 @@ scenario "editing the roster rebuilds the pages that credit whoever changed" {
           }
         }
         taxonomies {
-          authors entities="people" credit="author"
+          authors { entities "people"; credit "author" }
         }
       }
       """#
@@ -915,7 +915,7 @@ scenario "a page with no template still rebuilds when its byline changes" {
           }
         }
         taxonomies {
-          authors entities="people" credit="author"
+          authors { entities "people"; credit "author" }
         }
       }
       """#

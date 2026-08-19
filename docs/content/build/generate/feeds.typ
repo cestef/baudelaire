@@ -211,7 +211,7 @@ Adds `/tags/rust/rss.xml` next to `/tags/rust/`, carrying only that term's dated
 pages under the same `limit`. Each identifies itself by its own URL, so an
 aggregator never merges it with another.
 
-Term feeds sit beside term listings, so the taxonomy needs `listing=#true`. The
+Term feeds sit beside term listings, so the taxonomy needs a `listing { }` block. The
 build warns if it doesn't have it. They're off by default: one more file per
 term per format multiplies the output of a heavily tagged site.
 

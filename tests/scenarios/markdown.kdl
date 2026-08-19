@@ -146,7 +146,7 @@ scenario "kdl frontmatter drives the built-in fields" {
       }
       content {
         taxonomies {
-          tags listing=#true
+          tags { listing }
         }
       }
       """#
@@ -261,7 +261,7 @@ scenario "yaml pasted from another generator is just a page" {
         templates "templates"
       }
       content {
-        taxonomies { tags listing=#true }
+        taxonomies { tags { listing } }
       }
       """#
     "templates/page.typ" #"""
@@ -309,7 +309,7 @@ scenario "a toml block is read behind its own fence" {
         templates "templates"
       }
       content {
-        taxonomies { tags listing=#true }
+        taxonomies { tags { listing } }
       }
       """#
     "templates/page.typ" #"""

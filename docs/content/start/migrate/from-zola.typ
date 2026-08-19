@@ -57,7 +57,7 @@ the shortcodes, the internal links and the config; the templates are a rewrite.
   [`[languages.fr]`], [`languages { fr { .. } }`],
   [`theme`], [`theme`],
   [`output_dir`], [`paths { dist }`],
-  [`taxonomies = [{ name = "tags" }]`], [`content { taxonomies { tags listing=#true } }`],
+  [`taxonomies = [{ name = "tags" }]`], [`content { taxonomies { tags { listing } } }`],
   [`generate_feeds`, `feed_filenames`], [`generate { feed { formats "atom" } }`],
   [`build_search_index`], [`generate { search { } }`],
   [`compile_sass`], [always on: a `.scss` under `paths { assets }` is compiled],

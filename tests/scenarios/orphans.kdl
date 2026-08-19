@@ -83,7 +83,7 @@ scenario "generated listings are nobody's forgotten page" {
       }
       content {
         taxonomies {
-          tags listing=#true
+          tags { listing }
         }
       }
       check {

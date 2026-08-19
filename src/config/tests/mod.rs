@@ -85,7 +85,6 @@ fn err_a_block_on_an_attribute_scope_is_refused() {
             "assets { images { optimize { jpeg { quality 70 } } } }",
             "jpeg",
         ),
-        ("content { taxonomies { tags { listing #true } } }", "tags"),
         (
             r#"generate { manifest { icons { "/i.png" { size 512 } } } }"#,
             "/i.png",

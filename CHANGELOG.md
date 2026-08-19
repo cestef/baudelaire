@@ -14,6 +14,13 @@ chores are visible in the git history and change nothing for a site.
 
 ### Changed
 
+- **A taxonomy is a block, and its listings are a block inside it.** One concept
+  had two spellings: a collection's generated index was `paginate { size;
+  template; prefix }`, a taxonomy's was `listing=#true template=.. paginate=20`
+  on one line. A taxonomy is now `tags { .. }`, and what it generates is
+  `listing { template; size; prefix }`, turned on by the block's presence like
+  every other generated thing.
+
 - **One block holds every check the build runs.** Verification was split
   between `lint { }` (markup rules, size budgets) and `links { }` (broken
   internal links, the orphan report, the outbound probe), with a `strict` in
@@ -271,6 +278,29 @@ chores are visible in the git history and change nothing for a site.
   as static content. `client` joins the nine blocks a site owns outright.
 
 ### Upgrading
+
+- Every taxonomy attribute becomes a key in a block of its own, and `template`,
+  `paginate` and `prefix` move inside `listing { }`, with `paginate` spelled
+  `size` as a collection's index spells it:
+
+  ```kdl
+  content {
+    taxonomies {
+      tags {
+        sort "date"
+        reverse #true
+        listing {
+          template "list.typ"
+          size 20
+        }
+      }
+      authors { entities "people"; credit "author"; describe #true; listing }
+    }
+  }
+  ```
+
+  `listing=#false` becomes `listing #false`, and a taxonomy that generates
+  nothing keeps its bare spelling: `taxonomies { tags }`.
 
 - `lint { }` becomes `check { }`, unchanged inside. From `links { }`, three keys
   move in: `strict` becomes `links` and takes a severity rather than a flag,
@@ -533,6 +563,7 @@ chores are visible in the git history and change nothing for a site.
   against one:
 
   ```kdl
+  //! @ignore
   content {
     entities {
       people {
@@ -581,6 +612,7 @@ chores are visible in the git history and change nothing for a site.
   says what a page claims about the entities it names:
 
   ```kdl
+  //! @ignore
   //! content {
   taxonomies {
     authors     entities="people" credit="author"
@@ -632,6 +664,7 @@ chores are visible in the git history and change nothing for a site.
   same row shape every listing carries.
 
   ```kdl
+  //! @ignore
   content {
     entities {
       people { shape "person"; sources { pages "content/people" } }
@@ -1376,6 +1409,7 @@ chores are visible in the git history and change nothing for a site.
   has:
 
   ```kdl
+  //! @ignore
   content {
     taxonomies {
       tags listing=#true sort="date" reverse=#true

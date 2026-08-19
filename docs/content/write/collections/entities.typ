@@ -22,7 +22,7 @@ content {
     }
   }
   taxonomies {
-    authors entities="people" credit="author"
+    authors { entities "people"; credit "author" }
   }
 }
 ```
@@ -158,8 +158,8 @@ word for it.
 ```kdl
 //! content {
 taxonomies {
-  authors     entities="people" credit="author"
-  translators entities="people" credit="translator"
+  authors { entities "people"; credit "author" }
+  translators { entities "people"; credit "translator" }
 }
 //! }
 ```
@@ -197,7 +197,7 @@ content {
     people { shape "person"; sources { pages "content/people" } }
   }
   taxonomies {
-    authors entities="people" credit="author" listing=#true describe=#true
+    authors { entities "people"; credit "author"; describe #true; listing }
   }
 }
 ```

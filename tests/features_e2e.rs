@@ -19,7 +19,7 @@ content {
       blog { sort "date"; reverse #true; paginate { size 2 } }
   }
   taxonomies {
-      tags listing=#true
+      tags { listing }
   }
 }
 generate {

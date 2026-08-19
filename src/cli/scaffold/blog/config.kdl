@@ -40,7 +40,11 @@ content {
   // pages under it). Both are ordinary templated pages, so the same list.typ
   // that renders the post index renders these.
   taxonomies {
-    tags listing=#true template="list.typ"
+    tags {
+      listing {
+        template "list.typ"
+      }
+    }
   }
 }
 

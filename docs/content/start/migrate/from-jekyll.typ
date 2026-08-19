@@ -77,7 +77,7 @@ Most of what a Jekyll site installs is already here:
   [`jekyll-seo-tag`], [`html { meta }` and `html { jsonld }`],
   [`jekyll-paginate`], [`paginate { size }`],
   [`jekyll-redirect-from`], [the `redirect` frontmatter key],
-  [`jekyll-archives`], [`content { taxonomies { } }` with `listing=#true`],
+  [`jekyll-archives`], [`content { taxonomies { } }` with a `listing { }` block],
 )
 
 == Jekyll: frontmatter

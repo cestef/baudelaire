@@ -74,8 +74,8 @@ fn taxonomies() {
         r#"
         content {
           taxonomies {
-            tags   listing=#true
-            series key="series" listing=#false
+            tags   { listing }
+            series { key "series"; listing #false }
           }
         }
     "#,
@@ -86,7 +86,7 @@ fn taxonomies() {
         .iter()
         .find(|(n, _)| n == "tags")
         .unwrap();
-    assert!(tags.1.listing);
+    assert!(tags.1.listing.enabled);
     let series = cfg
         .content
         .taxonomies
@@ -94,7 +94,7 @@ fn taxonomies() {
         .find(|(n, _)| n == "series")
         .unwrap();
     assert_eq!(series.1.key, "series");
-    assert!(!series.1.listing);
+    assert!(!series.1.listing.enabled);
 }
 
 #[test]
@@ -137,9 +137,8 @@ fn err_duplicate_collection() {
 
 #[test]
 fn err_duplicate_taxonomy() {
-    let err =
-        Config::parse("content {\n  taxonomies {\n    tags\n    tags listing=#true\n  }\n}\n")
-            .unwrap_err();
+    let err = Config::parse("content {\n  taxonomies {\n    tags\n    tags { listing }\n  }\n}\n")
+        .unwrap_err();
     assert!(
         err.to_string().contains("duplicate taxonomy `tags`"),
         "{err}"
@@ -245,12 +244,12 @@ fn the_old_draft_spelling_is_refused_with_a_suggestion() {
     assert!(rendered.contains("did you mean `drafts`?"), "{rendered}");
 }
 
-/// A key that is part of a URL is held to the permalink rule whichever way it
-/// is written, a taxonomy's attribute as much as `paginate`'s node.
+/// A key that is part of a URL is held to the permalink rule wherever it is
+/// written, a taxonomy's listing as much as a collection's index.
 #[test]
 fn a_taxonomy_prefix_is_a_permalink_piece_like_its_sibling() {
     for kdl in [
-        "content {\n  taxonomies {\n    tags prefix=\"..\"\n  }\n}",
+        "content {\n  taxonomies {\n    tags { listing { prefix \"..\" } }\n  }\n}",
         "content {\n  collections {\n    posts {\n      paginate {\n        prefix \"..\"\n      }\n    }\n  }\n}",
     ] {
         let err = Config::parse(kdl)
@@ -258,7 +257,9 @@ fn a_taxonomy_prefix_is_a_permalink_piece_like_its_sibling() {
             .to_string();
         assert!(err.contains(".."), "{kdl}: {err}");
     }
-    let config = Config::parse("content {\n  taxonomies {\n    tags prefix=\"seite\"\n  }\n}")
-        .expect("an ordinary prefix");
-    assert_eq!(config.content.taxonomies[0].1.prefix, "seite");
+    let config = Config::parse(
+        "content {\n  taxonomies {\n    tags { listing { prefix \"seite\" } }\n  }\n}",
+    )
+    .expect("an ordinary prefix");
+    assert_eq!(config.content.taxonomies[0].1.listing.prefix, "seite");
 }

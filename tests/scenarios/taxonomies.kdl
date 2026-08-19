@@ -10,7 +10,7 @@ scenario "a taxonomy index lists its terms and each term lists its pages" {
       }
       content {
         taxonomies {
-          tags listing=#true
+          tags { listing }
         }
       }
       """#
@@ -49,7 +49,7 @@ scenario "a taxonomy template renders the listing from its structured data" {
       }
       content {
         taxonomies {
-          tags listing=#true template="tag.typ"
+          tags { listing { template "tag.typ" } }
         }
       }
       """#
@@ -85,7 +85,7 @@ scenario "two terms that slug alike are rejected" {
       }
       content {
         taxonomies {
-          tags listing=#true
+          tags { listing }
         }
       }
       """#
@@ -112,7 +112,7 @@ scenario "a taxonomy term paginates when it asks to" {
       }
       content {
         taxonomies {
-          tags listing=#true paginate=2
+          tags { listing { size 2 } }
         }
       }
       """#
@@ -158,7 +158,7 @@ scenario "a taxonomy term without paginate stays one page" {
       }
       content {
         taxonomies {
-          tags listing=#true
+          tags { listing }
         }
       }
       """#
@@ -194,7 +194,7 @@ scenario "a taxonomy orders its term listings by date, newest first" {
       }
       content {
         taxonomies {
-          tags listing=#true sort="date" reverse=#true template="tag.typ"
+          tags { sort "date"; reverse #true; listing { template "tag.typ" } }
         }
       }
       """#
@@ -233,7 +233,7 @@ scenario "a taxonomy orders its term listings by title unless told otherwise" {
       }
       content {
         taxonomies {
-          tags listing=#true template="tag.typ"
+          tags { listing { template "tag.typ" } }
         }
       }
       """#

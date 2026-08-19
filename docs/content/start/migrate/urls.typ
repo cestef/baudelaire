@@ -77,7 +77,7 @@ included.
   table.header([URL], [Comes from]),
   [`/blog/`], [`paginate { }` on the `blog` collection.],
   [`/blog/page/2/`], [`paginate { size 5 }`. `prefix` renames `page`, `mount` moves page 1.],
-  [`/tags/`, `/tags/rust/`], [`taxonomies { tags listing=#true }`.],
+  [`/tags/`, `/tags/rust/`], [`taxonomies { tags { listing } }`.],
 )
 
 A taxonomy publishes under its own id, so the id is the URL segment. To serve
@@ -87,7 +87,7 @@ old frontmatter key:
 ```kdl
 content {
   taxonomies {
-    topics key="categories" listing=#true template="list.typ"
+    topics { key "categories"; listing { template "list.typ" } }
   }
 }
 ```

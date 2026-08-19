@@ -113,7 +113,7 @@ fn generated_listings_get_no_pdf() {
     let site = site(r#"pdf { pages { template "print.typ" } }"#);
     site.write("config.kdl", &{
         let mut config = site.read("config.kdl");
-        config.push_str("content {\n  taxonomies {\n    tags listing=#true\n  }\n}\n");
+        config.push_str("content {\n  taxonomies {\n    tags { listing }\n  }\n}\n");
         config
     });
     site.write(

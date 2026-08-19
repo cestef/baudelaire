@@ -499,7 +499,7 @@ pub(super) trait Attributed: Sized + 'static {
 }
 
 /// An attribute-keyed scope (a node's `key=value` entries), e.g. a single
-/// `content { taxonomies { tags listing=.. } }` line. Same contract as
+/// `content { taxonomies { tags { .. } } }` block. Same contract as
 /// [`Block`], but handlers receive the attribute value.
 pub(super) struct Attrs<T: 'static>(pub(super) &'static [Attr<T>]);
 

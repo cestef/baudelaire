@@ -234,7 +234,7 @@ scenario "a listing that carries no backlinks settles like every other page" {
           posts { template "post.typ" }
         }
         taxonomies {
-          tags listing=#true
+          tags { listing }
         }
       }
       links {

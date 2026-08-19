@@ -188,11 +188,6 @@ pub(super) trait ValueExt {
     /// Read a string value as a schema field's type expression (`list<dict>`),
     /// which is a shape rather than one of a finite set of names.
     fn ty(&self, text: &str, span: SourceSpan) -> Result<FieldType>;
-    /// A permalink template, or a piece of one, checked by `Permalink::parse`:
-    /// the attribute-value counterpart of
-    /// [`NodeExt::template`](super::node::NodeExt::template), so the same
-    /// mistake is refused whichever way the key is written.
-    fn template(&self, text: &str, span: SourceSpan) -> Result<String>;
     /// Any KDL scalar as a [`codegen::Value`], for build-time constants passed
     /// straight through to client JS (`baudelaire:config`). Strings expand
     /// `${VAR}` like every other config string; a non-finite float is an error.
@@ -210,14 +205,6 @@ impl ValueExt for KdlValue {
                     .map_err(|MissingVar(name)| ConfigError::env(text, &name, span).into())
             },
         )
-    }
-
-    fn template(&self, text: &str, span: SourceSpan) -> Result<String> {
-        let raw = self.as_str(text, span)?;
-        match crate::config::permalink::Permalink::parse(&raw) {
-            Err(why) => Err(ConfigError::at(text, why.into(), span).into()),
-            Ok(_) => Ok(raw),
-        }
     }
 
     fn integer(&self, text: &str, span: SourceSpan) -> Result<i64> {

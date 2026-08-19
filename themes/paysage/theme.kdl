@@ -29,7 +29,7 @@ content {
   taxonomies {
     // What a project was built with, indexed: `/stack/rust/` lists every
     // project that names it. A portfolio's tags are its tools.
-    stack listing=#true template="list.typ"
+    stack { listing { template "list.typ" } }
   }
 }
 

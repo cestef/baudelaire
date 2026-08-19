@@ -10,14 +10,14 @@ series. Declare one and the build generates the index pages for it.
 ```kdl
 content {
   taxonomies {
-    tags listing=#true template="list.typ"
+    tags { listing { template "list.typ" } }
   }
 }
 ```
 
 Any page with `tags: ("rust", "cli")` in its
 #link("../frontmatter.typ")[frontmatter] is now grouped automatically, and
-`listing=#true` writes:
+A `listing { }` block writes:
 
 #table(
   columns: 2,
@@ -33,19 +33,28 @@ they inherit the site layout. They receive the same
 
 == Keys
 
-A taxonomy is one `key=value` line, not a block.
+A taxonomy is a block named by its id, and what it *generates* is the
+`listing { }` block inside it, spelled the way a collection's `paginate { }` is.
 
 #table(
   columns: 4,
   align: (left, left, left, left),
   table.header([Key], [Type], [Default], [Does]),
   [`key`], [str], [the taxonomy's id], [The frontmatter field its terms are read from.],
-  [`listing`], [bool], [`#false`], [Generate a page per term, and an index of the terms.],
-  [`template`], [str], [--], [The layout those listings render through.],
-  [`paginate`], [int], [--], [Members per term page. Without it, every member sits on one.],
-  [`prefix`], [str], [`page`], [The path segment before a term page's number.],
+  [`listing`], [block], [absent], [Generate a page per term, and an index of the terms. Its presence turns them on.],
   [`sort`], [`order` | `date` | `title`], [`title`], [What a term's members are ordered by.],
   [`reverse`], [bool], [`#false`], [Reverse that order.],
+)
+
+Inside `listing { }`:
+
+#table(
+  columns: 4,
+  align: (left, left, left, left),
+  table.header([Key], [Type], [Default], [Does]),
+  [`template`], [str], [none], [The layout those listings render through.],
+  [`size`], [int], [none], [Members per term page. Without it, every member sits on one.],
+  [`prefix`], [str], [`page`], [The path segment before a term page's number.],
 )
 
 `sort` and `reverse` are the collection keys, read by the same comparator, so a
@@ -58,7 +67,7 @@ A dated blog usually wants newest first:
 ```kdl
 content {
   taxonomies {
-    tags listing=#true sort="date" reverse=#true
+    tags { sort "date"; reverse #true; listing }
   }
 }
 ```
@@ -66,14 +75,14 @@ content {
 == Reading a different key
 
 A taxonomy reads the frontmatter key that matches its own name. Point it
-elsewhere with `key=` to group the same content more than one way, or to name
+elsewhere with `key` to group the same content more than one way, or to name
 the taxonomy independently of the field:
 
 ```kdl
 content {
   taxonomies {
-    tags   listing=#true template="list.typ"
-    topics key="categories" listing=#true template="list.typ"
+    tags { listing { template "list.typ" } }
+    topics { key "categories"; listing { template "list.typ" } }
   }
 }
 ```
@@ -81,19 +90,19 @@ content {
 == Paginating a term
 
 A term listing holds every page under it, which on a blog with three years of
-Rust posts is one page listing four hundred. `paginate=` chunks it by the same
-rule a collection index is chunked by, so page 2 is named the same way in both:
+Rust posts is one page listing four hundred. `size` chunks it by the same rule a
+collection index is chunked by, so page 2 is named the same way in both:
 
 ```kdl
 content {
   taxonomies {
-    tags listing=#true paginate=20
+    tags { listing { size 20 } }
   }
 }
 ```
 
 `/tags/rust/` keeps the first twenty, `/tags/rust/page/2/` takes the next, and
-each carries `page.frontmatter.nav` like any other paginated listing. `prefix=`
+each carries `page.frontmatter.nav` like any other paginated listing. `prefix`
 renames the `page` segment, or empties it for `/tags/rust/2/`.
 
 == Terms and slugs

@@ -196,7 +196,13 @@ const INERT: &[Inert] = &[
         setting: "generate { feed { terms } }",
         asked: |config| config.generate.feed.terms,
         needs: "a taxonomy with `listing`",
-        met: |config| config.content.taxonomies.iter().any(|(_, t)| t.listing),
+        met: |config| {
+            config
+                .content
+                .taxonomies
+                .iter()
+                .any(|(_, t)| t.listing.enabled)
+        },
         effect: "no per-term feed is written",
         help: "set `listing` on the taxonomy whose terms should carry a feed",
     },
@@ -516,7 +522,7 @@ mod tests {
             (
                 "generate { feed { terms } }",
                 "generate { feed { formats \"rss\"; terms #true } }",
-                "generate { feed { formats \"rss\"; terms #true } }\ncontent { taxonomies { tags listing=#true } }",
+                "generate { feed { formats \"rss\"; terms #true } }\ncontent { taxonomies { tags { listing } } }",
             ),
             (
                 "announce { standard { verify } }",

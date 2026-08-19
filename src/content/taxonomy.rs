@@ -41,7 +41,7 @@ impl Taxonomy {
             .content
             .taxonomies
             .iter()
-            .filter(|(_, cfg)| cfg.listing)
+            .filter(|(_, cfg)| cfg.listing.enabled)
             .flat_map(|(name, cfg)| {
                 config
                     .langs()
@@ -105,9 +105,9 @@ impl<'a> Group<'a> {
             name,
             registry,
             describe: cfg.describe,
-            template: cfg.template.clone(),
-            paginate: cfg.paginate,
-            prefix: cfg.prefix.clone(),
+            template: cfg.listing.template.clone(),
+            paginate: cfg.listing.size,
+            prefix: cfg.listing.prefix.clone(),
             terms,
             pages,
             lang,

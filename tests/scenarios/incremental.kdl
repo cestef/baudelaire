@@ -234,7 +234,7 @@ scenario "generated listings are cached like any other page" {
     "config.kdl" #"""
       site "T"
       paths { content "content"; dist "public" }
-      content { taxonomies { tags listing=#true } }
+      content { taxonomies { tags { listing } } }
       """#
     "content/posts/a.typ" #"""
       #let frontmatter = (title: "A", tags: ("x",),)

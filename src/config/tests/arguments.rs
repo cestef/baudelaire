@@ -240,8 +240,8 @@ fn the_shapes_a_key_does_take_still_parse() {
         "an attribute line"
     );
 
-    let cfg = parse("content {\n  taxonomies {\n    tags listing=#true\n  }\n}");
-    assert_eq!(cfg.content.taxonomies.len(), 1, "attribute lines, named");
+    let cfg = parse("content {\n  taxonomies {\n    tags { listing }\n  }\n}");
+    assert_eq!(cfg.content.taxonomies.len(), 1, "blocks, named");
 
     let cfg = parse("content {\n  drafts #true {\n    suffix \".wip\"\n  }\n}");
     assert!(

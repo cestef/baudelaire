@@ -170,7 +170,7 @@ scenario "a page declines the files a build generates about it" {
           posts { paginate { size 10 }; feed #true }
         }
         taxonomies {
-          tags listing=#true
+          tags { listing }
         }
       }
       generate {

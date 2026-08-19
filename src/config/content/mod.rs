@@ -7,8 +7,8 @@ pub mod markdown;
 pub mod reading;
 pub mod taxonomy;
 
-use crate::config::dispatch::Kind::{Block as Nested, Flag, Items, Lines, Text};
-use crate::config::dispatch::{Attributed, Block, Section};
+use crate::config::dispatch::Kind::{Block as Nested, Flag, Items, Text};
+use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
 use crate::config::{
     CollectionConfig, DraftConfig, MarkdownConfig, ReadingConfig, RegistryConfig, TaxonomyConfig,
@@ -107,9 +107,9 @@ impl Section for ContentConfig {
         ),
         (
             "taxonomies",
-            Lines(TaxonomyConfig::rows),
-            "One line per taxonomy, each named by its id.",
-            |c| Value::each(&c.taxonomies, Attributed::values),
+            Items(TaxonomyConfig::rows),
+            "One block per taxonomy, each named by its id.",
+            |c| Value::each(&c.taxonomies, Section::values),
             |c, n, t| {
                 c.taxonomies = n.unique(t, "taxonomy", TaxonomyConfig::item)?;
                 Ok(())

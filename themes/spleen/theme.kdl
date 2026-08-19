@@ -25,7 +25,7 @@ content {
   }
 
   taxonomies {
-    tags listing=#true template="list.typ"
+    tags { listing { template "list.typ" } }
   }
 }
 

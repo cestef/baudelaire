@@ -261,7 +261,7 @@ scenario "a dated page carries the article vocabulary" {
       author "Ada"
       content {
         taxonomies {
-          tags listing=#true
+          tags { listing }
         }
       }
       """#
