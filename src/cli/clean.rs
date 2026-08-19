@@ -26,6 +26,7 @@ pub struct CleanArgs {
     #[arg(long, help_heading = group::TARGETS)]
     pub cache: bool,
     /// Remove local announce state.
+    #[cfg(feature = "announce")]
     #[arg(long, help_heading = group::TARGETS)]
     pub announce: bool,
 
@@ -53,6 +54,7 @@ const CLEAN_TARGETS: &[CleanTarget] = &[
         selected: |a| a.cache,
         dirs: |c| vec![c.cache.dir.clone()],
     },
+    #[cfg(feature = "announce")]
     CleanTarget {
         selected: |a| a.announce,
         dirs: |_| vec![Config::scratch(crate::config::Scratch::Announce)],

@@ -669,9 +669,11 @@ mod tests {
     use super::*;
 
     fn args(output: bool, cache: bool, announce: bool) -> CleanArgs {
+        let _ = announce;
         CleanArgs {
             output,
             cache,
+            #[cfg(feature = "announce")]
             announce,
             ..CleanArgs::default()
         }
@@ -870,6 +872,7 @@ mod tests {
             args(false, true, false).targets(&config),
             vec![config.cache.dir.clone()]
         );
+        #[cfg(feature = "announce")]
         assert_eq!(
             args(false, false, true).targets(&config),
             vec![Config::scratch(crate::config::Scratch::Announce)]

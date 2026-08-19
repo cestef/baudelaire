@@ -148,6 +148,11 @@ chores are visible in the git history and change nothing for a site.
   and then overridden by the config. A name none of them knows is now an error
   at the call rather than a silently dropped setting.
 
+- **A slim build no longer advertises `clean --announce`.** The flag was
+  ungated where the rest of `announce` is gated as whole modules, so a binary
+  with no announce support listed a target in `--help` for state it can never
+  write.
+
 - **`config set` writes the value as KDL, not as Rust.** The line it saved was
   spelled with Rust's `Debug`, which is a different escape vocabulary: a value
   carrying a control character was written in a form KDL then refused, and the
