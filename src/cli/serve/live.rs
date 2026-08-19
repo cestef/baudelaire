@@ -68,6 +68,12 @@ impl Live {
         self.push(&Signal::Reload);
     }
 
+    /// Tell every open tab to fetch its stylesheets again, leaving the page as
+    /// the reader left it: their scroll, their open menu, their focus.
+    pub(super) fn restyle(&self) {
+        self.push(&Signal::Styles);
+    }
+
     /// Put a failed rebuild's diagnostic on screen in every open tab; `text` is
     /// carried as a JSON string so it survives SSE's line framing.
     pub(super) fn failed(&self, text: &str) {
@@ -113,6 +119,8 @@ impl Live {
 pub(super) enum Signal {
     /// The rebuild succeeded: reload the page.
     Reload,
+    /// It changed stylesheets and nothing else: swap them in place.
+    Styles,
     /// It did not, carrying the rendered diagnostic as a JSON string.
     Failed(String),
 }
@@ -122,6 +130,7 @@ impl Signal {
     fn frame(&self) -> String {
         match self {
             Self::Reload => "data: reload\n\n".to_owned(),
+            Self::Styles => "data: styles\n\n".to_owned(),
             Self::Failed(json) => format!("event: failed\ndata: {json}\n\n"),
         }
     }
@@ -146,6 +155,24 @@ mod tests {
         assert!(streams.contains_key(&0), "live stream kept");
         assert!(!streams.contains_key(&1), "disconnected stream reaped");
         assert!(matches!(live_rx.try_recv(), Ok(Signal::Reload)));
+    }
+
+    /// The two success signals are one event with two payloads, since the
+    /// client tells them apart by what it reads rather than by what it listens
+    /// for.
+    #[test]
+    fn a_restyle_is_the_default_event_carrying_styles() {
+        let live = Live::default();
+        let (tx, rx) = flume::unbounded();
+        live.streams.lock().insert(0, tx);
+
+        live.restyle();
+
+        let Ok(signal) = rx.try_recv() else {
+            panic!("the open stream should have been signalled");
+        };
+        assert_eq!(signal.frame(), "data: styles\n\n");
+        assert!(matches!(signal, Signal::Styles));
     }
 
     #[test]

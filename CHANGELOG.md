@@ -12,6 +12,16 @@ chores are visible in the git history and change nothing for a site.
 
 ## [Unreleased]
 
+### Added
+
+- **A stylesheet edit swaps the sheet instead of reloading the page.** The dev
+  server's only signal was "reload", so a colour tweak threw away the scroll
+  position, the open menu and anything typed into a field. A rebuild that
+  changed stylesheets and recompiled no page now pushes a restyle: the open
+  tabs fetch each `<link rel="stylesheet">` again and swap it in once it has
+  arrived. Anything else still reloads, and a sheet that fails to arrive falls
+  back to one.
+
 ### Performance
 
 - **A dev-server rebuild keeps the world it built last time.** Every rebuild

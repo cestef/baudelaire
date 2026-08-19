@@ -268,7 +268,11 @@ impl<'a> Dev<'a> {
             Ok(stats) => {
                 self.ui
                     .event(label, stats.pages - stats.cached, timer.elapsed());
-                live.bump();
+                if Self::restyles(&changed, &stats) {
+                    live.restyle();
+                } else {
+                    live.bump();
+                }
                 if stats.read != self.tracked {
                     self.tracked = stats.read;
                     self.rewatch = true;
@@ -281,6 +285,19 @@ impl<'a> Dev<'a> {
             }
         }
         config_changed
+    }
+
+    /// Whether the open tabs can swap their stylesheets instead of reloading:
+    /// every file the rebuild answered to was a stylesheet, and it recompiled
+    /// no page.
+    ///
+    /// The second half is what makes the first safe. A stylesheet reaches the
+    /// markup by more than one route (a fingerprinted name, an inlined sheet,
+    /// a policy hash), and every one of them invalidates the pages that carry
+    /// it, so a build that recompiled nothing is a build whose markup nobody
+    /// needs to fetch again.
+    fn restyles(changed: &[&PathBuf], stats: &crate::engine::Stats) -> bool {
+        stats.pages == stats.cached && changed.iter().all(|path| Config::stylesheet(path))
     }
 
     /// A concise label for a rebuild's trigger: the first changed file (relative
@@ -308,5 +325,59 @@ impl<'a> Dev<'a> {
                 | EventKind::Remove(_)
                 | EventKind::Modify(ModifyKind::Data(_) | ModifyKind::Name(_) | ModifyKind::Any)
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::Dev;
+    use crate::engine::Stats;
+
+    fn stats(pages: usize, cached: usize) -> Stats {
+        Stats {
+            pages,
+            cached,
+            read: Vec::new(),
+        }
+    }
+
+    fn paths(files: &[&str]) -> Vec<PathBuf> {
+        files.iter().map(PathBuf::from).collect()
+    }
+
+    #[test]
+    fn a_stylesheet_edit_that_recompiled_nothing_is_swapped_in_place() {
+        let changed = paths(&["assets/main.css", "assets/print.scss"]);
+        let changed: Vec<&PathBuf> = changed.iter().collect();
+
+        assert!(Dev::restyles(&changed, &stats(12, 12)));
+    }
+
+    /// A stylesheet reaches the markup by more than one route, and every one of
+    /// them recompiles the pages that carry it. A rebuild that recompiled a
+    /// page produced markup the tab has not got.
+    #[test]
+    fn a_stylesheet_edit_that_recompiled_a_page_reloads() {
+        let changed = paths(&["assets/main.css"]);
+        let changed: Vec<&PathBuf> = changed.iter().collect();
+
+        assert!(!Dev::restyles(&changed, &stats(12, 11)));
+    }
+
+    #[test]
+    fn anything_that_is_not_a_stylesheet_reloads() {
+        for file in [
+            "content/a.typ",
+            "templates/page.typ",
+            "assets/main.ts",
+            "config.kdl",
+        ] {
+            let changed = paths(&[file, "assets/main.css"]);
+            let changed: Vec<&PathBuf> = changed.iter().collect();
+
+            assert!(!Dev::restyles(&changed, &stats(12, 12)), "{file}");
+        }
     }
 }

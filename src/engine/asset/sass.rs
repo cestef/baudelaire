@@ -25,7 +25,7 @@ impl Sass {
     /// The path a compiled source is served from: the same name, as CSS, which
     /// is the MIME type a `<link rel=stylesheet>` needs.
     pub(super) fn served(rel: &Path) -> PathBuf {
-        rel.with_extension("css")
+        rel.with_extension(Config::CSS)
     }
 
     /// Compile `file` to CSS, always expanded: minification is lightningcss's,

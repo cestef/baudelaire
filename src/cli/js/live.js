@@ -1,11 +1,14 @@
 // The live-reload client: one event stream, and a dot in the corner saying
 // whether it is still there.
 //
-// Two events arrive on the stream. The default one means the rebuild succeeded
-// and the page should reload; `failed` carries a rendered diagnostic. The
-// second exists because a failed rebuild used to be invisible here: the browser
-// kept showing the last good page, and nothing said whether the rebuild was
-// slow, missed, or broken. You had to go back to the terminal to find out.
+// Two events arrive on the stream. The default one carries what the rebuild
+// changed: `reload` for anything that touched the markup, `styles` when only
+// the stylesheets moved, which is swapped in place so the page keeps the
+// reader's scroll, their open menu and their focus. `failed` carries a
+// rendered diagnostic; it exists because a failed rebuild used to be invisible
+// here: the browser kept showing the last good page, and nothing said whether
+// the rebuild was slow, missed, or broken. You had to go back to the terminal
+// to find out.
 //
 // Named `failed` rather than `error`, because `EventSource` dispatches its own
 // transport errors to `error` listeners and the two would be indistinguishable.
@@ -58,9 +61,32 @@
       note: "reconnecting",
       text: "The dev server stopped answering. This page may be out of date; it reloads by itself once the server is back.",
     });
+  // A stylesheet is re-fetched under a query nothing else uses, so the browser
+  // asks for it again rather than answering from its own cache. The new link
+  // goes in *before* the old one leaves: dropping it first would leave the page
+  // unstyled for as long as the request takes.
+  //
+  // A sheet that fails to arrive falls back to a reload, since a page missing
+  // the stylesheet it just asked for is worse than a flash.
+  const restyle = () => {
+    const stamp = Date.now();
+    for (const link of document.querySelectorAll('link[rel~="stylesheet"][href]')) {
+      const url = new URL(link.href, location.href);
+      url.searchParams.set("__baudelaire", stamp);
+      const fresh = link.cloneNode(false);
+      fresh.href = url.href;
+      fresh.addEventListener("load", () => link.remove(), { once: true });
+      fresh.addEventListener("error", () => location.reload(), { once: true });
+      link.after(fresh);
+    }
+  };
+
   // The reload replaces the whole document, dot and overlay included, so there
   // is nothing to clear first.
-  stream.onmessage = () => location.reload();
+  stream.onmessage = (event) => {
+    if (event.data === "styles") restyle();
+    else location.reload();
+  };
   stream.addEventListener("failed", (event) => {
     const text = JSON.parse(event.data);
     set({

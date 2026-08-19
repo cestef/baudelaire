@@ -116,6 +116,18 @@ Serving HTML injects a small script that opens a server-sent-event stream on
 the error. Nothing is injected into a `--no-watch` session, and nothing is ever
 injected into a `build`.
 
+A rebuild that only moved stylesheets pushes a *restyle* instead: each
+`<link rel="stylesheet">` is fetched again and swapped once the new sheet is
+in, so the page keeps its scroll, its open menus and whatever you had typed
+into a field. It is the narrow case on purpose. Every changed file has to be a
+stylesheet and the rebuild has to have recompiled no page, since a stylesheet
+reaches the markup by more than one route: a
+#link("assets.typ")[fingerprinted name], a sheet inlined by `html { embed }`, a
+hash in the #link("../ship/security.typ")[content security policy]. Each of
+those recompiles the pages carrying it, and those pages need fetching. A
+#link("../configure/profiles.typ")[profile] that turns `fingerprint` off is the
+one that swaps most often.
+
 == Alt-click to source
 
 ```sh

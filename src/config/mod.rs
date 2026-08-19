@@ -351,6 +351,17 @@ impl Config {
     /// publish.
     pub const SASS: &'static [&'static str] = &["scss", "sass"];
 
+    /// The extension a browser reads as a stylesheet, which a [`SASS`] source
+    /// is compiled into.
+    ///
+    /// [`SASS`]: Config::SASS
+    pub const CSS: &'static str = "css";
+
+    /// Whether `path` is a stylesheet, or the source of one.
+    pub fn stylesheet(path: &Path) -> bool {
+        Self::has_ext(path, Self::CSS) || Self::SASS.iter().any(|ext| Self::has_ext(path, ext))
+    }
+
     /// The not-found page's output file: flat at the dist root, the name static
     /// hosts serve for unmatched URLs and what the dev server falls back to.
     pub const NOT_FOUND: &'static str = "404.html";

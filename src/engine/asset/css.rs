@@ -81,7 +81,7 @@ impl Stylesheet {
         if Sass::claims(path) {
             return true;
         }
-        path.ext().eq_ignore_ascii_case("css")
+        path.ext().eq_ignore_ascii_case(Config::CSS)
     }
 
     /// The path a claimed file is served from; only a compiled source moves,
