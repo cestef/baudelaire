@@ -22,7 +22,10 @@ type Rendered = (Vec<u8>, Vec<(u32, Vec<u8>)>);
 /// A copy run of externalized images into the asset directory, deduped by served
 /// name. The first source to claim a name wins; a later source with different
 /// bytes is a collision and warns rather than overwriting.
-pub(in crate::engine) struct Images {
+pub(in crate::engine) struct Images<'a> {
+    /// The site, so a written file is weighed under exactly the URL
+    /// [`Config::asset_url`] gives the page that shows it.
+    config: &'a Config,
     dir: PathBuf,
     /// The optimizer each file goes through and the responsive widths cut
     /// beside it. Carried in both flavors so the copy path has one shape.
@@ -32,9 +35,6 @@ pub(in crate::engine) struct Images {
     /// unchanged picture is not re-optimized on every build.
     #[cfg_attr(not(feature = "images"), allow(dead_code))]
     memo: crate::engine::asset::memo::Memo,
-    /// The URL prefix copies are served under, so a copied image is weighed by
-    /// the same name the page that shows it references.
-    prefix: String,
     /// The project root, so a diagnostic names `content/a/photo.png` rather
     /// than the absolute source an [`ImageRef`] carries.
     root: PathBuf,
@@ -46,13 +46,13 @@ pub(in crate::engine) struct Images {
     bytes: u64,
 }
 
-impl Images {
-    pub fn new(config: &Config, root: &Path) -> Self {
+impl<'a> Images<'a> {
+    pub fn new(config: &'a Config, root: &Path) -> Self {
         Self {
+            config,
             dir: config.asset_staging(),
             settings: config.assets.images.clone(),
             memo: crate::engine::asset::memo::Memo::new(config),
-            prefix: config.asset_prefix(),
             root: crate::fs::canonical(root),
             seen: HashMap::new(),
             emitted: Emitted::new(config.base_path().to_owned()),
@@ -64,9 +64,9 @@ impl Images {
     /// Copy every image in `refs`, skipping duplicates and warning on
     /// collisions. `refs` is sorted first, since "the first source wins" is
     /// only a rule once the order no longer depends on which pages were cached.
-    pub fn copy<'a>(
+    pub fn copy<'r>(
         mut self,
-        refs: impl IntoIterator<Item = &'a ImageRef>,
+        refs: impl IntoIterator<Item = &'r ImageRef>,
         ui: &Ui,
     ) -> Result<Self> {
         let mut refs: Vec<&ImageRef> = refs.into_iter().collect();
@@ -126,7 +126,7 @@ impl Images {
     /// `integrity`.
     fn wrote(&mut self, name: &str, bytes: &[u8]) {
         self.emitted
-            .insert(format!("{}/{}", self.prefix, name), bytes, false);
+            .insert(self.config.asset_url(Path::new(name)), bytes, false);
         self.count += 1;
         self.bytes += bytes.len() as u64;
     }
@@ -197,5 +197,34 @@ impl Images {
     /// the asset pipeline emitted.
     pub fn emitted(&self) -> &Emitted {
         &self.emitted
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::Images;
+    use crate::config::Config;
+
+    /// The weight ledger is keyed by URL, and the page asks for the URL
+    /// `Config::asset_url` gives it. A copied image's served name is built from
+    /// a path, so on a host whose separator is not `/` the two spellings used
+    /// to differ and every externalized image weighed nothing.
+    #[test]
+    fn a_nested_image_is_weighed_under_the_url_the_page_asks_for() {
+        let config = Config::default();
+        let name = Path::new("sub")
+            .join("photo.png")
+            .to_string_lossy()
+            .into_owned();
+        let mut images = Images::new(&config, Path::new("."));
+        images.wrote(&name, b"xy");
+        let asked = config.asset_url(Path::new(&name));
+        assert_eq!(
+            images.emitted().at(&asked).map(|e| e.bytes),
+            Some(2),
+            "weighed under a name the page never asks for: {asked}"
+        );
     }
 }

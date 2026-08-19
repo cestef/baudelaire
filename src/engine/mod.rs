@@ -431,7 +431,7 @@ impl Engine {
 
     /// Copy every page's externalized images into the (freshly regenerated)
     /// asset directory, for fresh and cache-served pages alike.
-    fn images(&self, rendered: &[Rendered], cached: &[Reused], ui: &Ui) -> Result<Images> {
+    fn images(&self, rendered: &[Rendered], cached: &[Reused], ui: &Ui) -> Result<Images<'_>> {
         Images::new(&self.config, self.project.root()).copy(
             rendered
                 .iter()

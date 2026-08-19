@@ -148,6 +148,13 @@ chores are visible in the git history and change nothing for a site.
   and then overridden by the config. A name none of them knows is now an error
   at the call rather than a silently dropped setting.
 
+- **On Windows, an externalized image weighs what it weighs.** The copy pass
+  keyed its weight ledger by a served name spelled with the host's own
+  separator, while the page asked for the same file under a `/`-spelled URL, so
+  every externalized image counted as zero against `lint { budget { images } }`
+  and a budget that failed on Linux passed on Windows. Both sides now build the
+  URL through the one function that spells it.
+
 - **A page can no longer be silently replaced by a generated file.** The
   processors run after the pages are written and skipped only what the static
   tree owned, so a frontmatter `slug` or `path` of `sitemap.xml`, `robots.txt`,
