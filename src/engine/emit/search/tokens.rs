@@ -4,6 +4,15 @@
 pub(super) struct Tokens;
 
 impl Tokens {
+    /// The characters an index key keeps, as the body of a JavaScript character
+    /// class, which the generated tokenizer builds its regex from so the two
+    /// cannot drift apart.
+    ///
+    /// It spells the set [`char::is_alphanumeric`] accepts, which is wider than
+    /// `\p{L}`: that alone drops the Indic, Arabic and Hebrew marks the index
+    /// keeps.
+    pub(super) const KEPT: &'static str = r"\p{Alphabetic}\p{N}";
+
     /// Every index key in `text`: split on whitespace, lowercased, stripped to
     /// alphanumerics, empties dropped.
     pub(super) fn of(text: &str) -> impl Iterator<Item = String> + '_ {
@@ -14,11 +23,10 @@ impl Tokens {
 
     /// One word reduced to its index key.
     ///
-    /// The client's `tokenize` must derive the same key: lowercase *before*
-    /// stripping, since a codepoint like `İ` lowercases to a letter plus a
-    /// combining mark that is not alphanumeric, and match `char::is_alphanumeric`
-    /// as `\p{Alphabetic}\p{N}` rather than the narrower `\p{L}`, which drops
-    /// marks the index keeps.
+    /// The client's `tokenize` must derive the same key, and strips by
+    /// [`KEPT`](Self::KEPT) to do it. What it cannot take from here is the
+    /// order: lowercase *before* stripping, since a codepoint like `İ`
+    /// lowercases to a letter plus a combining mark that is not alphanumeric.
     pub(super) fn normalize(word: &str) -> String {
         word.chars()
             .flat_map(char::to_lowercase)

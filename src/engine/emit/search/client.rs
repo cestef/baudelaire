@@ -2,6 +2,7 @@
 //! each language's index is served from and what the palette defaults to.
 
 use super::super::script::Script;
+use super::tokens::Tokens;
 use crate::codegen::Value;
 use crate::config::{Config, Permalink, SearchConfig};
 
@@ -44,6 +45,7 @@ impl Client {
     /// client serves every language.
     fn script(config: &Config) -> Script<'static> {
         Script::data(&[
+            ("KEPT", Value::str(Tokens::KEPT)),
             ("INDEXES", Self::indexes(config)),
             ("LANG", Value::str(&config.lang)),
             ("OPTIONS", Self::options(&config.generate.search)),
@@ -104,10 +106,10 @@ mod tests {
         assert_eq!(Tokens::normalize("x²"), "x²");
         assert_eq!(Tokens::normalize("--"), "");
 
+        let client = Client::standalone(&Config::default());
         assert!(
-            TOKENIZE.contains(r"[^\p{Alphabetic}\p{N}]"),
-            "the client must retain exactly `char::is_alphanumeric`; `\\p{{L}}` \
-             drops the combining marks the index keeps"
+            client.contains(r#"const KEPT = "\\p{Alphabetic}\\p{N}";"#),
+            "the client strips by the class `Tokens::KEPT` states: {client}"
         );
         let (lower, strip) = (
             TOKENIZE.find("toLowerCase").expect("client lowercases"),
