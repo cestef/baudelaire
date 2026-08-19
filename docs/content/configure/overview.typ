@@ -235,8 +235,8 @@ generate {
   sitemap #true
 
   /-search {
-    formats "json"
-    fields "title" "body" "tags"
+    index "terms"
+    snippet 240
   }
 }
 ```

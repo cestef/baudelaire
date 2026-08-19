@@ -187,9 +187,8 @@ mountSearch({ placeholder: "Search the docs" });
 ```
 
 `createSearch(url)` is the lower-level half: it fetches an index and resolves to
-a `search(query, { limit })` function. The bare specifier follows the emitted
-index; pin a shape with
-`baudelaire:search/json` or `baudelaire:search/inverted`. See
+a `search(query, { limit })` function. One specifier serves either index shape
+and every language, picking the index by the page's own `<html lang>`. See
 #link("../build/generate/search.typ")[search].
 
 == spa

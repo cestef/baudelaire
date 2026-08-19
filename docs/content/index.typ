@@ -105,9 +105,9 @@ Hugo, Zola, Eleventy and Astro, is on #link("start/compare.typ")[compared].
   (
     id: "search",
     label: "Search index",
-    note: "A flat index, and a command palette to read it.",
-    kdl: "search { formats \"json\" }",
-    files: ("search.json",),
+    note: "A prebuilt index, and a command palette to read it.",
+    kdl: "search { ui }",
+    files: ("search.json", "search.js"),
   ),
   (
     id: "cards",

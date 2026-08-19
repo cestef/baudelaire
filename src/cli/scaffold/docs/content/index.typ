@@ -39,4 +39,4 @@ from `content/` itself. Add a file, and it appears. Nothing to register.
 Press `/` or `Ctrl-K`. The index is `/search.json`, written at
 build time from the rendered text of every page, and the palette that searches
 it is `/search.js`, also generated. Both are switched on by the
-`generate { search { .. } }` block in `config.kdl`.
+`generate { search { ui } }` block in `config.kdl`.

@@ -352,7 +352,7 @@ The four starter shapes:
   [`spa`], [`navigation { spa { } }`, #link("../ship/navigating.typ")[client-side navigation].],
   [`standalone`], [`navigation { standalone { } }`, a single-file export.],
   [`speculation`], [`navigation { speculation { } }`, browser prefetch hints.],
-  [`search`], [`generate { search { formats "json" } }`, a #link("../build/generate/search.typ")[client-side index].],
+  [`search`], [`generate { search { ui } }`, a #link("../build/generate/search.typ")[client-side index] and its palette.],
   [`pdf`], [`generate { pdf { pages { .. } } }`, a #link("../build/generate/pdf.typ")[PDF per page] from `print.typ`.],
 )
 

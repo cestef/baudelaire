@@ -44,9 +44,7 @@ Anything the build emits beside the pages is opt-in, and lives under `generate`:
 generate {
   sitemap #true
   search {
-    formats "json"
-    fields "title" "body" "tags"
-    ui #true
+    ui
   }
   llms {
     summary "Documentation for this project."
@@ -54,8 +52,8 @@ generate {
 }
 ```
 
-`search` writes `/search.json`, one document per page, from the rendered text.
-`ui #true` also writes `/search.js`: a small self-mounting command palette
+`search` writes `/search.json`, one index per language, from the rendered text.
+The `ui` block also writes `/search.js`: a small self-mounting command palette
 that fetches the index, binds `Ctrl-K` and `/`, and opens on any element with a
 `data-search-open` attribute. `templates/theme.typ` loads the script and renders
 that button; neither needs a line of your own JavaScript.
