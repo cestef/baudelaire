@@ -380,7 +380,16 @@ impl Ui {
 
     /// Collect an informational note, rendered with the warnings but never
     /// counted against the build.
+    ///
+    /// The count is off the diagnostic's own severity ([`Note::is_warning`]),
+    /// so one passed here that does not declare `severity(advice)` is counted
+    /// like any warning.
     pub fn advice(&self, advice: impl Diagnostic + Send + Sync + 'static) {
+        debug_assert_eq!(
+            advice.severity(),
+            Some(Severity::Advice),
+            "an advice that declares no severity of its own is counted against the build"
+        );
         self.warn(advice);
     }
 
