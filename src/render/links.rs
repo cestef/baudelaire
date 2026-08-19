@@ -469,7 +469,7 @@ impl LinkMap {
 #[cfg(test)]
 mod tests {
     use super::{Backlinks, LinkMap, Outbound, Source, Target, UrlDeps};
-    use crate::content::{Data, Frontmatter, Page, PageId, Siblings};
+    use crate::content::{Data, Frontmatter, Page, PageId};
     use std::path::PathBuf;
 
     #[test]
@@ -562,8 +562,6 @@ mod tests {
             output: PathBuf::new(),
             template: None,
             lang: "en".into(),
-            siblings: Siblings::default(),
-            translations: Vec::new(),
         }
     }
 

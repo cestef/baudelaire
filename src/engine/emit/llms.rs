@@ -117,7 +117,7 @@ impl Llms {
 mod tests {
     use super::Llms;
     use crate::config::Config;
-    use crate::content::{Data, Frontmatter, Page, PageId, Siblings};
+    use crate::content::{Data, Frontmatter, Page, PageId};
     use crate::engine::emit::{Processor, Recorder, Site};
     use std::path::PathBuf;
 
@@ -136,8 +136,6 @@ mod tests {
             output: PathBuf::new(),
             template: None,
             lang: "en".into(),
-            siblings: Siblings::default(),
-            translations: Vec::new(),
         }
     }
 
@@ -147,6 +145,7 @@ mod tests {
         config.generate.llms.enabled = true;
         let site = Site {
             entities: crate::content::Registries::none(),
+            relations: crate::content::Relations::none(),
             config: &config,
             pages,
             outputs: &[],

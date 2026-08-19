@@ -13,6 +13,7 @@ pub mod listing;
 pub mod markdown;
 pub mod page;
 pub mod pagination;
+pub mod relate;
 pub mod section;
 pub mod selection;
 pub mod slug;
@@ -28,6 +29,7 @@ pub use entities::{Attribution, Byline, Credit, Entity, Registries, Registry, Re
 pub use frontmatter::{Frontmatter, Generated, Origin};
 pub use page::{Data, Page, PageId, Sibling, Siblings, Withheld};
 pub use pagination::Pagination;
+pub use relate::{Related, Relations};
 pub use section::Section;
 pub use selection::Selection;
 pub use slug::Slug;
@@ -101,6 +103,9 @@ impl std::fmt::Display for Held {
 /// entity registries every one of them resolves references against.
 pub struct Plan {
     pub pages: Vec<Page>,
+    /// Where each page sits among the others: its siblings, its editions in
+    /// other languages.
+    pub relations: Relations,
     pub held: Held,
     pub entities: Registries,
 }
@@ -119,6 +124,7 @@ impl Plan {
             );
         }
         let mut pages: Vec<Page> = Vec::new();
+        let mut relations = Relations::default();
         for collection in &collections {
             let eligible: Vec<&Page> = collection
                 .pages
@@ -129,12 +135,14 @@ impl Plan {
                 let (linked, rest): (Vec<&Page>, Vec<&Page>) =
                     group.into_iter().partition(|p| p.listed(config));
                 for (i, page) in linked.iter().enumerate() {
-                    let mut page = (*page).clone();
-                    page.siblings = page::Siblings {
-                        prev: i.checked_sub(1).map(|j| linked[j].sibling()),
-                        next: linked.get(i + 1).map(|n| n.sibling()),
-                    };
-                    pages.push(page);
+                    relations.between(
+                        &page.output,
+                        page::Siblings {
+                            prev: i.checked_sub(1).map(|j| linked[j].sibling()),
+                            next: linked.get(i + 1).map(|n| n.sibling()),
+                        },
+                    );
+                    pages.push((*page).clone());
                 }
                 pages.extend(rest.into_iter().cloned());
             }
@@ -153,10 +161,11 @@ impl Plan {
             "planned"
         );
         pages.extend(generated);
-        Page::relate(&mut pages, config);
         Claim::unique(&pages, config)?;
+        relations.translate(&pages, config);
         Ok(Self {
             pages,
+            relations,
             held,
             entities,
         })

@@ -5,7 +5,8 @@ use std::path::PathBuf;
 use super::xml::Xml;
 use super::{Emit, Processor, Site};
 use crate::config::{BaseUrl, Config};
-use crate::content::{Generated, Page};
+use crate::content::page::Translation;
+use crate::content::{Generated, Page, Relations};
 use crate::error::Result;
 
 /// Emits a [sitemaps.org] `sitemap.xml` listing every built page as an absolute
@@ -19,7 +20,7 @@ impl SiteMap {
     const XMLNS: &'static str = "http://www.sitemaps.org/schemas/sitemap/0.9";
     const XHTML: &'static str = "http://www.w3.org/1999/xhtml";
 
-    fn render(base: &BaseUrl, pages: &[Page], config: &Config) -> String {
+    fn render(base: &BaseUrl, pages: &[Page], relations: &Relations, config: &Config) -> String {
         let mut xml = Xml::document();
         let ns: &[(&str, &str)] = &[("xmlns", Self::XMLNS), ("xmlns:xhtml", Self::XHTML)];
         xml.nest("urlset", ns, |xml| {
@@ -32,7 +33,7 @@ impl SiteMap {
                     if let Some(date) = page.frontmatter.modified() {
                         xml.leaf("lastmod", &date.to_string());
                     }
-                    Self::alternates(xml, base, page, config);
+                    Self::alternates(xml, base, &relations.of(page).translations, config);
                 });
             }
         });
@@ -42,7 +43,7 @@ impl SiteMap {
     /// The `hreflang` alternates for a translated page: one per edition plus an
     /// `x-default` pointing at the default language's. A single-language page
     /// has no translations and emits none.
-    fn alternates(xml: &mut Xml, base: &BaseUrl, page: &Page, config: &Config) {
+    fn alternates(xml: &mut Xml, base: &BaseUrl, translations: &[Translation], config: &Config) {
         let link = |xml: &mut Xml, hreflang: &str, url: &str| {
             let href = base.join(url);
             xml.empty(
@@ -54,10 +55,10 @@ impl SiteMap {
                 ],
             );
         };
-        for t in &page.translations {
+        for t in translations {
             link(xml, &t.lang, &t.url);
         }
-        if let Some(default) = page.translations.iter().find(|t| t.lang == config.lang) {
+        if let Some(default) = translations.iter().find(|t| t.lang == config.lang) {
             link(xml, "x-default", &default.url);
         }
     }
@@ -79,7 +80,10 @@ impl Processor for SiteMap {
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
         let base = site.base("sitemap")?;
         let path = site.dist(&[Self::FILE]);
-        out.file(&path, &Self::render(&base, site.pages, site.config))?;
+        out.file(
+            &path,
+            &Self::render(&base, site.pages, site.relations, site.config),
+        )?;
         out.wrote(&path);
         Ok(())
     }

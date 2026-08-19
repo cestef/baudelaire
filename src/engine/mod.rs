@@ -286,6 +286,7 @@ impl Engine {
             .check(&self.config, &self.project, &planned.pages, ui)?;
         Ok(Planned {
             pages: planned.pages,
+            relations: planned.relations,
             entities: planned.entities,
             tracked: self.project.tracked(),
         })
@@ -302,6 +303,7 @@ impl Engine {
             self.theme.as_ref(),
             &planned.pages,
             &planned.entities,
+            &planned.relations,
         );
         let root = self.project.root();
         for table in prepare.generated() {
@@ -552,6 +554,7 @@ impl Engine {
             config: &self.config,
             pages: &planned.pages,
             entities: &planned.entities,
+            relations: &planned.relations,
             outputs,
         };
         let mut emitter = Emitter::new(ui, statics.paths.iter().cloned());
@@ -738,9 +741,13 @@ impl Engine {
         let mut doc = compiled.output.map_err(|errs| {
             BaudelaireErrorKind::TypstCompile(Self::diagnostics(errs, page, &source, world.inner()))
         })?;
-        let mut rewrite = pass
-            .renderer
-            .rewrite(&mut doc, page, &self.config, world.inner());
+        let mut rewrite = pass.renderer.rewrite(
+            &mut doc,
+            page,
+            pass.relations.of(page),
+            &self.config,
+            world.inner(),
+        );
         if let Some(invalid) = std::mem::take(&mut rewrite.invalid).into_iter().next() {
             return Err(invalid);
         }
@@ -907,6 +914,9 @@ impl Engine {
 /// borrows of both, and no struct can borrow from itself.
 struct Planned {
     pages: Vec<Page>,
+    /// Where each page sits among the others: the siblings it is compiled
+    /// between, the editions of it the sitemap names.
+    relations: crate::content::Relations,
     /// The entity registries every page's references resolve against, built
     /// once per plan and borrowed by the renderer and the emitters.
     entities: crate::content::Registries,

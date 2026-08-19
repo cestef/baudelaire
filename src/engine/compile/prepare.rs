@@ -9,7 +9,7 @@ use typst::syntax::{FileId, RootedPath};
 use crate::codegen::Value;
 use crate::config::Config;
 use crate::content::{
-    Byline, Data, Iso, Localized, Page, Registries, Section, Sibling, Siblings, Strings,
+    Byline, Data, Iso, Localized, Page, Registries, Relations, Section, Sibling, Siblings, Strings,
 };
 use crate::error::{Result, TemplateMissing};
 use crate::graph::Hash;
@@ -39,6 +39,9 @@ pub(in crate::engine) struct Prepare<'a> {
     project: &'a Project,
     theme: Option<&'a Theme>,
     pages: &'a [Page],
+    /// Where each page sits among the others, which the plan worked out once
+    /// the whole page set was known.
+    relations: &'a Relations,
     /// One section tree per built language, kept out of the wrapper text: it
     /// names every page, so it would tie every page's fingerprint to every
     /// other page's title and URL.
@@ -58,6 +61,7 @@ impl<'a> Prepare<'a> {
         theme: Option<&'a Theme>,
         pages: &'a [Page],
         entities: &'a Registries,
+        relations: &'a Relations,
     ) -> Self {
         let base = Self {
             config,
@@ -66,6 +70,7 @@ impl<'a> Prepare<'a> {
             project,
             theme,
             pages,
+            relations,
             trees: BTreeMap::new(),
             templates: config.paths.under(project.root()).templates,
             backlinks: Backlinks::Off,
@@ -247,9 +252,9 @@ impl<'a> Prepare<'a> {
                     .cloned()
                     .unwrap_or_default(),
             ),
-            nav: Self::nav(&page.siblings),
+            nav: Self::nav(&self.relations.of(page).siblings),
             lang: Value::str(&page.lang),
-            translations: Self::translations(page),
+            translations: self.translations(page),
             strings: self.strings(&page.lang),
             reading: self.reading(page),
             backlinks: backlinks.value(page),
@@ -459,8 +464,8 @@ impl<'a> Prepare<'a> {
 
     /// A page's translations as an array value:
     /// `((lang: .., url: .., title: ..), ..)`. Empty on a single-language site.
-    fn translations(page: &Page) -> Value {
-        Value::array(page.translations.iter().map(|t| {
+    fn translations(&self, page: &Page) -> Value {
+        Value::array(self.relations.of(page).translations.iter().map(|t| {
             Value::dict([
                 ("lang", Value::str(&t.lang)),
                 ("url", Value::str(&t.url)),

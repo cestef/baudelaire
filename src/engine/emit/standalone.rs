@@ -249,7 +249,7 @@ const ADAPTER: &str = include_str!("js/standalone.js");
 mod tests {
     use super::*;
     use crate::config::Router;
-    use crate::content::{Data, Frontmatter, PageId, Siblings};
+    use crate::content::{Data, Frontmatter, PageId};
     use crate::engine::emit::{Output, Recorder};
     use std::path::PathBuf;
 
@@ -272,8 +272,6 @@ mod tests {
             output: PathBuf::new(),
             template: None,
             lang: "en".into(),
-            siblings: Siblings::default(),
-            translations: Vec::new(),
         }
     }
 
@@ -337,6 +335,7 @@ mod tests {
         let outputs = built.outputs();
         let site = Site {
             entities: crate::content::Registries::none(),
+            relations: crate::content::Relations::none(),
             config,
             pages: &[],
             outputs: &outputs,

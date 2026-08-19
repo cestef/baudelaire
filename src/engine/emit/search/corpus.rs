@@ -124,7 +124,7 @@ mod tests {
     #[test]
     fn corpus_is_ordered_by_url_not_by_cache_split() {
         use crate::config::Config;
-        use crate::content::{Data, Frontmatter, Page, PageId, Siblings};
+        use crate::content::{Data, Frontmatter, Page, PageId};
         use std::path::PathBuf;
 
         let page = |slug: &str| Page {
@@ -138,14 +138,13 @@ mod tests {
             output: PathBuf::new(),
             template: None,
             lang: "en".into(),
-            siblings: Siblings::default(),
-            translations: Vec::new(),
         };
         let (a, b) = (page("a"), page("b"));
         let config = Config::default();
         let corpus = |outputs: &[Output]| {
             let site = Site {
                 entities: crate::content::Registries::none(),
+                relations: crate::content::Relations::none(),
                 config: &config,
                 pages: &[],
                 outputs,

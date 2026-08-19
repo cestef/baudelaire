@@ -69,6 +69,7 @@ mod tests {
     fn body(config: &Config) -> String {
         let site = Site {
             entities: crate::content::Registries::none(),
+            relations: crate::content::Relations::none(),
             config,
             pages: &[],
             outputs: &[],

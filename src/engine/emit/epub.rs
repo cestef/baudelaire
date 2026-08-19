@@ -342,7 +342,7 @@ mod tests {
 
     use super::{Book, Chapter, Epub3};
     use crate::config::Config;
-    use crate::content::{Data, Frontmatter, Page, PageId, Selection, Siblings};
+    use crate::content::{Data, Frontmatter, Page, PageId, Selection};
 
     /// A content document is parsed as XML, and typst-html leaves every void
     /// element unclosed: a chapter carrying an image used to make the whole
@@ -370,8 +370,6 @@ mod tests {
             output: PathBuf::new(),
             template: None,
             lang: "en".into(),
-            siblings: Siblings::default(),
-            translations: Vec::new(),
         };
         let book = Book {
             selection: &selection,

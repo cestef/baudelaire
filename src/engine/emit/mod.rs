@@ -74,6 +74,9 @@ pub(super) struct Site<'a> {
     /// The entity registries, so a feed entry names the people the page
     /// credits rather than the site's one `author`.
     pub entities: &'a crate::content::Registries,
+    /// Where each page sits among the others, for the surfaces that name a
+    /// page's editions in other languages.
+    pub relations: &'a crate::content::Relations,
     /// Every built page, cached and freshly compiled alike.
     pub outputs: &'a [Output<'a>],
 }
@@ -385,6 +388,7 @@ mod tests {
         let config = Config::default();
         let site = Site {
             entities: crate::content::Registries::none(),
+            relations: crate::content::Relations::none(),
             config: &config,
             pages: &[],
             outputs: &[],

@@ -123,11 +123,6 @@ pub struct Page {
     pub template: Option<String>,
     /// This page's language code (default `lang` on a single-language site).
     pub lang: String,
-    /// Assigned by [`crate::content::plan`], empty until then and for generated
-    /// listings.
-    pub siblings: Siblings,
-    /// Assigned by [`crate::content::plan`], empty on a single-language site.
-    pub translations: Vec<Translation>,
 }
 
 impl Page {
@@ -229,8 +224,6 @@ impl Page {
             permalink,
             template,
             lang,
-            siblings: Siblings::default(),
-            translations: Vec::new(),
         }
     }
 
@@ -382,38 +375,10 @@ impl Page {
         groups.into_iter().map(|(_, group)| group).collect()
     }
 
-    /// Fill each page's `translations` with the editions of the same logical
-    /// page in other languages, ordered by the site's language order. Only sets
-    /// spanning more than one language are recorded.
-    pub(super) fn relate(pages: &mut [Self], config: &Config) {
-        use std::collections::BTreeMap;
-        let mut editions: BTreeMap<String, Vec<Translation>> = BTreeMap::new();
-        for page in pages.iter() {
-            editions
-                .entry(page.identity())
-                .or_default()
-                .push(Translation {
-                    lang: page.lang.clone(),
-                    url: page.permalink.clone(),
-                    title: page.title().to_owned(),
-                });
-        }
-        let order = config.langs();
-        editions.retain(|_, set| set.len() > 1);
-        for set in editions.values_mut() {
-            set.sort_by_key(|t| order.iter().position(|l| *l == t.lang));
-        }
-        for page in pages.iter_mut() {
-            if let Some(set) = editions.get(&page.identity()) {
-                page.translations.clone_from(set);
-            }
-        }
-    }
-
     /// The key pairing this page with its editions in other languages: a
     /// frontmatter `translation` outright, else its [`PageId`] with the
     /// language scope stripped off.
-    fn identity(&self) -> String {
+    pub(super) fn identity(&self) -> String {
         if let Some(key) = &self.frontmatter.translation {
             return key.clone();
         }

@@ -258,7 +258,7 @@ impl Editor {
 mod order_tests {
     use super::Draft;
     use crate::config::CollectionConfig;
-    use crate::content::{Collection, Data, Frontmatter, Page, PageId, Siblings};
+    use crate::content::{Collection, Data, Frontmatter, Page, PageId};
     use std::path::PathBuf;
 
     fn collection(orders: &[i64]) -> Collection {
@@ -281,8 +281,6 @@ mod order_tests {
                     output: PathBuf::new(),
                     template: None,
                     lang: "en".into(),
-                    siblings: Siblings::default(),
-                    translations: Vec::new(),
                 })
                 .collect(),
         }

@@ -68,6 +68,9 @@ use svg::Svg;
 pub(super) struct Cx<'a> {
     pub config: &'a Config,
     pub page: &'a Page,
+    /// What the page set makes of this page: the pages it sits between, its
+    /// editions in other languages.
+    pub related: &'a crate::content::Related,
     pub entities: &'a crate::content::Registries,
     pub links: &'a LinkMap,
     pub assets: &'a AssetMap,

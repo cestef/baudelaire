@@ -26,6 +26,9 @@ pub(super) type Reused<'a> = (&'a Page, String, Outputs);
 pub(super) struct Pass<'a> {
     pub(super) config: &'a Config,
     pub(super) pages: &'a [Page],
+    /// Where each page sits among the others, for the render pass, which names
+    /// a page's editions in other languages.
+    pub(super) relations: &'a crate::content::Relations,
     pub(super) prepare: Prepare<'a>,
     pub(super) renderer: Renderer,
     pub(super) analyzer: Analyzer<'a>,
@@ -49,6 +52,7 @@ impl<'a> Pass<'a> {
         Self {
             config: &engine.config,
             pages: &planned.pages,
+            relations: &planned.relations,
             prepare,
             renderer: Renderer::new(crate::render::Inputs {
                 pages: &planned.pages,

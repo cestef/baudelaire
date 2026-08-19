@@ -180,12 +180,14 @@ impl Renderer {
         &self,
         doc: &mut HtmlDocument,
         page: &Page,
+        related: &crate::content::Related,
         config: &Config,
         world: &crate::world::PageWorld,
     ) -> Rewrite {
         let mut cx = Cx {
             config,
             page,
+            related,
             entities: &self.entities,
             links: &self.links,
             assets: &self.assets,

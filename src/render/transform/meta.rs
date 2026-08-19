@@ -24,6 +24,7 @@ impl Transform for Meta {
         let mut card = Card {
             config: cx.config,
             page: cx.page,
+            related: cx.related,
             assets: cx.assets,
             probed: AssetDeps::new(),
         };
@@ -44,6 +45,9 @@ impl Transform for Meta {
 struct Card<'a> {
     config: &'a Config,
     page: &'a Page,
+    /// The page's editions in other languages, which the `hreflang` alternates
+    /// name.
+    related: &'a crate::content::Related,
     /// Processed-asset URL map, consulted here because the fingerprint
     /// transform runs later and cannot resolve an absolute `content` value.
     assets: &'a AssetMap,
@@ -364,11 +368,11 @@ impl Card<'_> {
         let Some(base) = self.config.base() else {
             return;
         };
-        for t in &self.page.translations {
+        for t in &self.related.translations {
             tags.push(Self::alternate(&t.lang, &base.join(&t.url)));
         }
         if let Some(default) = self
-            .page
+            .related
             .translations
             .iter()
             .find(|t| t.lang == self.config.lang)

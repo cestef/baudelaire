@@ -89,6 +89,7 @@ mod tests {
         let config = config();
         let site = Site {
             entities: crate::content::Registries::none(),
+            relations: crate::content::Relations::none(),
             config: &config,
             pages: &[],
             outputs: &[],

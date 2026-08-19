@@ -565,7 +565,7 @@ impl Cache {
 mod tests {
     use super::{Cache, GENERATED, SiteInputs};
     use crate::config::Config;
-    use crate::content::{Data, Frontmatter, Page, PageId, Siblings};
+    use crate::content::{Data, Frontmatter, Page, PageId};
     use crate::graph::Hash;
     use crate::render::RenderMaps;
     use crate::render::{AssetMap, LinkMap, SrcSets};
@@ -584,8 +584,6 @@ mod tests {
             output: PathBuf::new(),
             template: None,
             lang: "en".into(),
-            siblings: Siblings::default(),
-            translations: Vec::new(),
         }
     }
 
