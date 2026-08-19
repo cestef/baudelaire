@@ -52,7 +52,7 @@ impl Emitted {
     /// What this build wrote at the URL a page's reference names, or `None`
     /// when it wrote nothing there.
     pub fn at(&self, url: &str) -> Option<&Emission> {
-        let path = url.split(['?', '#']).next().unwrap_or(url);
+        let path = super::Tail::of(url).path;
         let path = if self.base.is_empty() {
             path
         } else {
