@@ -20,6 +20,46 @@ use super::image::Raster;
 #[cfg(feature = "js")]
 use super::js::{Js, Script};
 
+/// The ECMAScript-family extensions this build knows.
+pub(super) struct Scripts;
+
+impl Scripts {
+    /// Every extension the bundler reads as a script, paired with whether a
+    /// browser runs the file as written. Rolldown's own module-type table: an
+    /// extension left out falls through to the verbatim copy, and one wrongly
+    /// marked runnable publishes a source file the browser rejects.
+    const TABLE: &'static [(&'static str, bool)] = &[
+        ("js", true),
+        ("mjs", true),
+        ("cjs", true),
+        ("jsx", false),
+        ("ts", false),
+        ("mts", false),
+        ("cts", false),
+        ("tsx", false),
+    ];
+
+    /// Whether the bundler reads this extension as a script. `ext` is compared
+    /// as written, so callers lowercase first.
+    #[cfg(feature = "js")]
+    pub(super) fn known(ext: &str) -> bool {
+        Self::runs(ext).is_some()
+    }
+
+    /// Whether this extension needs a build step to run at all, so publishing
+    /// it unbundled serves a file the browser rejects.
+    pub(super) fn unbundled(ext: &str) -> bool {
+        Self::runs(ext) == Some(false)
+    }
+
+    fn runs(ext: &str) -> Option<bool> {
+        Self::TABLE
+            .iter()
+            .find(|(name, _)| *name == ext)
+            .map(|(_, runs)| *runs)
+    }
+}
+
 /// What the pipeline reads but never publishes: the sources a build step
 /// consumes, and the files a convention marks import-only. Only what this build
 /// itself knows is listed; a file some other toolchain reads is copied like any
@@ -27,17 +67,13 @@ use super::js::{Js, Script};
 pub(super) struct Private;
 
 impl Private {
-    /// Script sources that need a build step to run at all, so publishing one
-    /// serves a file the browser rejects.
-    const UNBUNDLED: &'static [&'static str] = &["ts", "mts", "cts", "tsx", "jsx"];
-
     /// Whether `rel` is an input rather than an artifact.
     pub(super) fn covers(rel: &Path, config: &Config) -> bool {
         let ext = rel.ext().to_ascii_lowercase();
         Self::partial(rel)
             || Self::declaration(rel)
             || Self::uncompiled(&ext)
-            || (!config.assets.bundling() && Self::UNBUNDLED.contains(&ext.as_str()))
+            || (!config.assets.bundling() && Scripts::unbundled(&ext))
     }
 
     /// A Sass source in a binary with no Sass compiler: the one input this

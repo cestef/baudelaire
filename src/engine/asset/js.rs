@@ -18,13 +18,9 @@ use crate::error::{AssetError, Result};
 use crate::fs;
 use crate::render::AssetMap;
 
+use super::handler::Scripts;
 use super::module::{ModuleCx, Virtual};
 use super::{Ctx, Handler, PathExt, Phase, Produced};
-
-/// Every extension the bundler reads as a script, which is rolldown's own
-/// module-type table for the ECMAScript family; one left out falls through to
-/// the verbatim copy.
-const SCRIPTS: &[&str] = &["js", "mjs", "cjs", "jsx", "ts", "mts", "cts", "tsx"];
 
 /// JavaScript entries: bundled when `bundle` is on, left to the verbatim copy
 /// otherwise. Runs in [`Phase::Bundle`], the last phase, so a bundle importing
@@ -37,7 +33,7 @@ impl Handler for Script {
     }
 
     fn claims(&self, file: &Path, config: &Config) -> bool {
-        config.assets.bundling() && SCRIPTS.contains(&file.ext().to_ascii_lowercase().as_str())
+        config.assets.bundling() && Scripts::known(&file.ext().to_ascii_lowercase())
     }
 
     fn phase(&self) -> Phase {
