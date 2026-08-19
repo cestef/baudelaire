@@ -55,9 +55,9 @@ Ten blocks are the site's alone, and `theme.kdl` is refused outright for naming 
 
 Two of them run commands through the system shell: `hooks` around the build, and `lint { snippets { run } }` over every code fence. A theme that could set either would run code on every build of every site that adopted it, and for a package theme that code need not appear in the project at all.
 
-Two keys inside blocks a theme *is* allowed are refused for the same reason: a `generate { headers { } }` rule, and a `redirect` whose old path carries a `*`. Both let a fetched theme speak to a browser in the site's name. A header rule sends any header on any path, and `Refresh` alone forwards every page somewhere else; a wildcard redirect claims no output file, so the check that stops a theme's redirect burying a real page has nothing to compare it against.
+Two keys inside blocks a theme *is* allowed are refused for the same reason: a `headers { rules { } }` rule, and a `redirect` whose old path carries a `*`. Both let a fetched theme speak to a browser in the site's name. A header rule sends any header on any path, and `Refresh` alone forwards every page somewhere else; a wildcard redirect claims no output file, so the check that stops a theme's redirect burying a real page has nothing to compare it against.
 
-Turning the two rule files on stays yours: what goes in `_headers` is then computed from the site's own `caching` and `csp` blocks, and a literal `redirect` is still held to the collision check every redirect is.
+Turning the two rule files on stays yours: what goes in `_headers` is then computed from the site's own `headers { cache }` and `csp` blocks, and a literal `redirect` is still held to the collision check every redirect is.
 
 If your theme needs a build step, say so in the README and give the block to copy. A theme is a floor for how a site *looks*, not for what its machine does.
 

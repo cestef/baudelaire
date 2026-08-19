@@ -95,15 +95,6 @@ generate {
   sitemap #true
   redirects #true
 
-  // The pinned copies under `/vX.Y.Z/` duplicate the root's pages word for
-  // word, so they stay out of search and each page has one result. One rule
-  // rather than one per release: the pattern matches the family.
-  headers {
-    "/v*" {
-      X-Robots-Tag "noindex"
-    }
-  }
-
   // Client-side search: prebuilt postings, so the browser looks a term up
   // rather than reading every page's prose. The palette UI is the generated
   // client, imported into assets/main.ts as the `baudelaire:search` virtual
@@ -126,11 +117,21 @@ generate {
   }
 }
 
-// What the host serves the built files with. Assets are fingerprinted above, so
-// their names change with their content and they can be cached forever; a bare
-// block is already that policy. Written into the same `_headers` as the rules
-// above.
-caching { }
+// What the host is told about the built files, written to `_headers`. Assets
+// are fingerprinted above, so their names change with their content and they
+// can be cached forever; a bare `cache { }` is already that policy.
+//
+// The pinned copies under `/vX.Y.Z/` duplicate the root's pages word for word,
+// so they stay out of search and each page has one result. One rule rather than
+// one per release: the pattern matches the family.
+headers {
+  cache { }
+  rules {
+    "/v*" {
+      X-Robots-Tag "noindex"
+    }
+  }
+}
 
 // Sweep orphaned outputs (a deleted page, a renamed permalink, a dropped
 // taxonomy term) out of the output directory on every build.

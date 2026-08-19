@@ -14,6 +14,13 @@ chores are visible in the git history and change nothing for a site.
 
 ### Changed
 
+- **One block owns what a host is told about the built files.** `caching { }`
+  and `generate { headers }` were one policy stated in two places, one of them a
+  letter away from the unrelated build cache. Both are now `headers { }`: the
+  `Cache-Control` under `cache { }`, the site's own rules under `rules { }`, and
+  the block's own presence writing `_headers`. A destination that needs the
+  policy without the file writes `headers #false { cache { } }`.
+
 - **Search is one index, one engine, one client.** `generate { search { } }` is
   switched on by the block's presence, and `index "terms" | "documents"`
   replaces `formats`: the two shapes now differ only in who builds the postings,
@@ -246,6 +253,25 @@ chores are visible in the git history and change nothing for a site.
   as static content. `client` joins the nine blocks a site owns outright.
 
 ### Upgrading
+
+- `caching { }` is gone, and so is `generate { headers }`. A `caching { }` block
+  becomes `headers { cache { } }`, keeping `immutable` and `default` as they
+  were; `generate { headers #true }` becomes a bare `headers { }`, and the rules
+  it carried move one level in, under `rules { }`:
+
+  ```kdl
+  headers {
+    cache { }
+    rules {
+      "/private/*" {
+        X-Robots-Tag "noindex"
+      }
+    }
+  }
+  ```
+
+  A bucket upload that wants the policy and no rule file writes `headers #false
+  { cache { } }`.
 
 - The build cache's schema changed, so the first build after upgrading is a cold
   one. Nothing to do.
@@ -1441,6 +1467,7 @@ chores are visible in the git history and change nothing for a site.
   `Cache-Control` and CSP it already derived:
 
   ```kdl
+  //! @ignore
   generate {
     headers {
       "/private/*" {

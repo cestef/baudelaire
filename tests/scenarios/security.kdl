@@ -103,7 +103,7 @@ scenario "the policy names every inline script the build produced" {
         content "content"
         dist "public"
       }
-      generate { headers #true }
+      headers { }
       security {
         csp {
           img "'self' data:"
@@ -137,7 +137,7 @@ scenario "hashing an inline script serves it exactly as it was hashed" {
         dist "public"
       }
       html { pretty #true }
-      generate { headers #true }
+      headers { }
       security { csp { } }
       """#
     "content/a.typ" #"""
@@ -168,7 +168,7 @@ scenario "the style attributes the build emits are named by the policy" {
         content "content"
         dist "public"
       }
-      generate { headers #true }
+      headers { }
       security { csp { } }
       """#
     "content/a.typ" #"""
@@ -224,8 +224,7 @@ scenario "a policy can be rolled out without blocking anything" {
         content "content"
         dist "public"
       }
-      generate { headers #true }
-      caching { }
+      headers { cache { } }
       security {
         csp { enforce #false }
       }
@@ -252,8 +251,7 @@ scenario "no policy and no integrity without asking" {
         content "content"
         dist "public"
       }
-      generate { headers #true }
-      caching { }
+      headers { cache { } }
       """#
     "content/a.typ" #"""
       #let frontmatter = (title: "A",)

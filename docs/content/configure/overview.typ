@@ -121,9 +121,9 @@ page that answers it in full is on the right.
   [Where incremental build state lives.],
   [#link("../build/incremental.typ")[incremental builds]],
 
-  [`caching`],
-  [The `Cache-Control` uploaded files are given.],
-  [#link("../ship/hosts/s3.typ")[S3 storage]],
+  [`headers`],
+  [What a host is told about the built files, `Cache-Control` included.],
+  [#link("../ship/hosts/static-hosts.typ")[static hosts]],
 
   [`typst`],
   [Compiler features, `sys.inputs`, fonts, package registry.],

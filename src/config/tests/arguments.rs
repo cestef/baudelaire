@@ -61,7 +61,7 @@ fn err_an_attribute_inside_a_free_table_is_refused() {
     for config in [
         "client {\n  env \"prod\" extra=\"dropped\"\n}",
         "typst {\n  inputs {\n    key \"v\" also=\"dropped\"\n  }\n}",
-        "generate {\n  headers {\n    \"/v*/*\" {\n      X-Robots-Tag \"noindex\" mode=\"dropped\"\n    }\n  }\n}",
+        "headers {\n  rules {\n    \"/v*/*\" {\n      X-Robots-Tag \"noindex\" mode=\"dropped\"\n    }\n  }\n}",
     ] {
         let rendered = err(config);
         assert!(

@@ -12,7 +12,8 @@ type Reads = fn(&Config) -> bool;
 /// on.
 const SWITCHES: &[(&str, Reads)] = &[
     ("lint @", |c| c.lint.enabled),
-    ("caching @", |c| c.caching.enabled),
+    ("headers @", |c| c.headers.file),
+    ("headers {\n  cache @\n}", |c| c.headers.cache.enabled),
     ("security {\n  csp @\n}", |c| c.security.csp.enabled),
     ("generate {\n  robots @\n}", |c| c.generate.robots.enabled),
     ("generate {\n  llms @\n}", |c| c.generate.llms.enabled),
@@ -104,19 +105,28 @@ fn a_profile_takes_back_what_the_base_turned_on() {
     assert_eq!(dev.generate.cards.width, 800);
 }
 
-/// `caching` is the one switch that fills a policy in when it is thrown, so it
-/// is also the one that must fill nothing when it is not.
+/// `headers { cache }` is the one switch that fills a policy in when it is
+/// thrown, so it is also the one that must fill nothing when it is not.
 #[test]
-fn caching_off_states_no_policy() {
-    let cfg = parse("caching");
-    assert!(cfg.caching.enabled);
-    assert!(cfg.caching.immutable.contains("immutable"));
+fn the_cache_policy_off_states_nothing() {
+    let cfg = parse("headers {\n  cache\n}");
+    assert!(cfg.headers.cache.enabled);
+    assert!(cfg.headers.cache.immutable.contains("immutable"));
 
-    let cfg = parse("caching #false");
-    assert!(!cfg.caching.enabled);
-    assert!(cfg.caching.immutable.is_empty(), "no policy invented");
-    assert!(cfg.caching.default.is_empty());
-    assert_eq!(cfg.caching.header("/a.css", "assets", true), None);
+    let cfg = parse("headers {\n  cache #false\n}");
+    assert!(!cfg.headers.cache.enabled);
+    assert!(cfg.headers.cache.immutable.is_empty(), "no policy invented");
+    assert!(cfg.headers.cache.default.is_empty());
+    assert_eq!(cfg.headers.cache.header("/a.css", "assets", true), None);
+}
+
+/// The file and the policy are separate switches, so a site that uploads
+/// straight to a store can state one without writing the other.
+#[test]
+fn the_policy_outlives_the_file_it_is_usually_written_to() {
+    let cfg = parse("headers #false {\n  cache\n}");
+    assert!(!cfg.headers.file);
+    assert!(cfg.headers.cache.enabled);
 }
 
 #[test]

@@ -268,10 +268,10 @@ const INERT: &[Inert] = &[
     Inert {
         setting: "security { csp }",
         asked: |config| config.security.csp.enabled,
-        needs: "generate { headers }",
-        met: |config| config.generate.headers.enabled,
+        needs: "headers { }",
+        met: |config| config.headers.file,
         effect: "no policy is written, since `_headers` is the file it goes in",
-        help: "turn on `generate { headers }`, or drop the `csp { }` block",
+        help: "add a `headers { }` block, or drop the `csp { }` block",
     },
     Inert {
         setting: "security { sri }",

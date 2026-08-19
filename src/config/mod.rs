@@ -9,13 +9,13 @@
 pub mod announce;
 pub mod assets;
 pub mod cache;
-pub mod caching;
 pub mod content;
 pub mod deploy;
 pub(crate) mod dispatch;
 pub mod edit;
 pub mod explain;
 pub mod generate;
+pub mod headers;
 pub mod hooks;
 pub mod html;
 pub mod key;
@@ -63,7 +63,6 @@ pub use assets::sourcemap::{SourceMapConfig, SourceMaps};
 pub use assets::tailwind::TailwindConfig;
 pub use assets::targets::{TargetConfig, Version};
 pub use cache::CacheConfig;
-pub use caching::CacheControl;
 pub use content::ContentConfig;
 pub use content::collection::{CollectionConfig, PaginateConfig, SortKey};
 pub use content::drafts::DraftConfig;
@@ -81,12 +80,13 @@ pub use generate::GenerateConfig;
 pub use generate::bundle::{BundleConfig, BundleFormat};
 pub use generate::cards::CardsConfig;
 pub use generate::feed::{Content, FeedConfig, FeedKind, FeedNames};
-pub use generate::headers::HeadersConfig;
 pub use generate::llms::LlmsConfig;
 pub use generate::manifest::{DisplayMode, IconConfig, IconPurpose, ManifestConfig};
 pub use generate::pdf::{PdfConfig, PdfPages};
 pub use generate::robots::RobotsConfig;
 pub use generate::search::{SearchConfig, SearchFields, SearchIndex, SearchUi};
+pub use headers::HeadersConfig;
+pub use headers::cache::CacheControl;
 pub use hooks::HooksConfig;
 pub use html::anchors::{AnchorConfig, Place};
 pub use html::highlight::{HighlightConfig, Token};
@@ -163,6 +163,10 @@ pub struct Config {
     /// Integrity attributes and the content security policy, both derived from
     /// what the pages actually load and inline.
     pub security: SecurityConfig,
+    /// What a host is told about the built files: the `Cache-Control` policy
+    /// and the rules of the site's own, written to `_headers` and applied by
+    /// every destination that can state them.
+    pub headers: HeadersConfig,
     /// Files the build generates beside the pages: sitemap, robots, llms,
     /// feeds, search indexes, social cards.
     pub generate: GenerateConfig,
@@ -179,11 +183,9 @@ pub struct Config {
     /// virtual module: arbitrary scalars keyed by name.
     pub client: Vec<(String, crate::codegen::Value)>,
     /// Build cache options: where the incremental manifest lives, and whether
-    /// it is consulted. Not `caching`, which is what a *browser* is told.
+    /// it is consulted. Not `headers { cache }`, which is what a *browser* is
+    /// told.
     pub cache: CacheConfig,
-    /// The `Cache-Control` the built files are served with, applied by every
-    /// destination that can say so.
-    pub caching: CacheControl,
     pub hooks: HooksConfig,
     pub announce: AnnounceConfig,
     pub deploy: DeployConfig,
@@ -283,12 +285,12 @@ impl Config {
     /// rather than whole sections ([`OWNED`](Config::OWNED) refuses those).
     ///
     /// Both let a fetched theme speak to the browser in the site's name: a
-    /// `generate { headers { } }` rule is an arbitrary response header on an
+    /// `headers { rules { } }` rule is an arbitrary response header on an
     /// arbitrary path, and a *wildcard* `redirect` claims no output file, so
     /// nothing can catch it burying a real page.
     fn usurped(&self) -> Option<&'static str> {
-        if !self.generate.headers.rules.is_empty() {
-            return Some("generate { headers { .. } }");
+        if !self.headers.rules.is_empty() {
+            return Some("headers { rules { .. } }");
         }
         self.redirect
             .iter()
@@ -514,7 +516,7 @@ impl Config {
     /// Conditional on the policy having somewhere to go: the `_headers` writer
     /// is the only reader of those digests.
     pub fn hashes(&self) -> bool {
-        self.generate.headers.enabled && self.security.csp.enabled && self.security.csp.hashes
+        self.headers.file && self.security.csp.enabled && self.security.csp.hashes
     }
 
     /// Whether the HTML is pretty-printed: `html { pretty }`, unless this build
@@ -806,10 +808,9 @@ impl Config {
 /// invalidates the build cache. Destructuring means a newly added field fails to
 /// compile until it is accounted for here.
 ///
-/// Five fields are deliberately left out, and each has to be: `root`, because
+/// Four fields are deliberately left out, and each has to be: `root`, because
 /// hashing where the project sits would undo the portable manifest keys
-/// (`mv site site2` must still hit); `caching`, whose one file is written by a
-/// processor that runs whatever the cache says; `serve`, so a dev server on a
+/// (`mv site site2` must still hit); `serve`, so a dev server on a
 /// custom port does not invalidate a `build`; `profiles`, since applying a
 /// profile mutates the fields above and those already carry the change; and
 /// `source`, kept only for error spans, so a comment-only edit is not a
@@ -834,13 +835,13 @@ impl std::hash::Hash for Config {
             redirect,
             lint,
             security,
+            headers,
             generate,
             navigation,
             prune,
             typst,
             client,
             cache,
-            caching: _,
             hooks,
             announce,
             deploy,
@@ -862,7 +863,7 @@ impl std::hash::Hash for Config {
         )
             .hash(state);
         (
-            assets, html, links, redirect, lint, security, generate, navigation, prune,
+            assets, html, links, redirect, lint, security, headers, generate, navigation, prune,
         )
             .hash(state);
         (typst, client, cache, hooks, announce, deploy, profile).hash(state);
@@ -900,13 +901,13 @@ impl Default for Config {
             redirect: Vec::default(),
             lint: LintConfig::default(),
             security: SecurityConfig::default(),
+            headers: HeadersConfig::default(),
             generate: GenerateConfig::default(),
             navigation: NavigationConfig::default(),
             prune: PruneConfig::default(),
             typst: TypstConfig::default(),
             client: Vec::default(),
             cache: CacheConfig::default(),
-            caching: CacheControl::default(),
             hooks: HooksConfig::default(),
             announce: AnnounceConfig::default(),
             deploy: DeployConfig::default(),
@@ -1100,6 +1101,13 @@ impl Section for Config {
             |c, n, t| c.security.fill(n, t),
         ),
         (
+            "headers",
+            Nested(HeadersConfig::rows),
+            "What a host is told about the built files. Its presence writes `_headers`; `#false` keeps the policy and drops the file.",
+            |c| c.headers.values(),
+            |c, n, t| c.headers.fill(n, t),
+        ),
+        (
             "generate",
             Nested(GenerateConfig::rows),
             "The files a build emits beside the pages.",
@@ -1126,13 +1134,6 @@ impl Section for Config {
             "Where incremental build state lives, and whether to use it.",
             |c| c.cache.values(),
             |c, n, t| c.cache.fill(n, t),
-        ),
-        (
-            "caching",
-            Nested(CacheControl::rows),
-            "The `Cache-Control` policy uploaded files are given. Its presence turns it on; `#false` turns it off again.",
-            |c| c.caching.values(),
-            |c, n, t| c.caching.fill(n, t),
         ),
         (
             Self::TYPST_SECTION,

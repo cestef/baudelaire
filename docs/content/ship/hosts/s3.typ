@@ -126,16 +126,20 @@ A bucket serves whatever `Cache-Control` you put on an object, and by default
 that is nothing at all. Declare a policy and every upload gets one:
 
 ```kdl
-caching { }
+headers {
+  cache { }
+}
 ```
 
 Fingerprinted assets are sent as `public, max-age=31536000, immutable`, and
 everything else as `public, max-age=0, must-revalidate`. Override either:
 
 ```kdl
-caching {
-  immutable "public, max-age=604800, immutable"
-  default   "public, max-age=300"
+headers {
+  cache {
+    immutable "public, max-age=604800, immutable"
+    default   "public, max-age=300"
+  }
 }
 ```
 
@@ -150,11 +154,13 @@ caching {
   [`default`], [str], [The value for everything else.],
 )
 
-The block sits at the top level, not under `deploy`, because it describes the
+The block sits under `headers`, not under `deploy`, because it describes the
 built site rather than one destination. The same policy drives the
 #link("static-hosts.typ")[`_headers` file], so a site that does both cannot
-state two different answers to one question. It is not `cache { }`, which
-configures the #link("../../build/incremental.typ")[build cache].
+state two different answers to one question. A bucket needs no such file:
+`headers #false { cache { } }` states the policy and writes nothing. It is not
+the top-level `cache { }`, which configures the
+#link("../../build/incremental.typ")[build cache].
 
 The split is what #link("../../build/assets.typ")[`assets { fingerprint }`] is for.
 Hashing a filename after its content means a changed file has a different name,

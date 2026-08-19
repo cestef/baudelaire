@@ -65,10 +65,11 @@ Netlify and Cloudflare Pages both read two files from the publish directory, and
 baudelaire writes either on request:
 
 ```kdl
-caching { }
+headers {
+  cache { }
+}
 
 generate {
-  headers #true
   redirects #true
 }
 ```
@@ -78,28 +79,30 @@ generate {
   align: (left, left, left),
   table.header([Key], [Type], [Does]),
   [`headers`],
-  [flag or block],
-  [Write `_headers` from the caching and CSP policies, plus any rule the block adds.],
+  [block],
+  [Write `_headers` from the cache and CSP policies, plus any rule under `rules`.],
 
-  [`redirects`],
+  [`generate { redirects }`],
   [flag],
   [Write `_redirects` from each page's declared aliases.],
 )
 
 === `_headers`
 
-The file states the `caching` policy once, so a site that also uploads to a
+The file states the `cache` policy once, so a site that also uploads to a
 #link("s3.typ")[bucket] cannot end up with two different answers. Fingerprinted
 assets get the immutable value, everything else the revalidating one:
 
 ```kdl
-caching {
-  immutable "public, max-age=604800, immutable"
-  default   "public, max-age=300"
+headers {
+  cache {
+    immutable "public, max-age=604800, immutable"
+    default   "public, max-age=300"
+  }
 }
 ```
 
-Both keys default to a sensible policy, so a bare `caching { }` is a complete
+Both keys default to a sensible policy, so a bare `cache { }` is a complete
 declaration. The asset rule is only written when
 #link("../../build/assets.typ")[`assets { fingerprint }`] is on: without it an
 asset keeps its authored name across builds and is exactly as mutable as a page.
@@ -111,8 +114,8 @@ Anything else the site wants to send is a rule of its own: a path pattern, and
 the headers it adds.
 
 ```kdl
-generate {
-  headers {
+headers {
+  rules {
     "/private/*" {
       X-Robots-Tag "noindex"
     }
@@ -126,13 +129,15 @@ generate {
 These come first in the file, before the two derived rules, which end in a
 catch-all. Patterns are written relative to the site, so a site under a
 #link("../../configure/overview.typ")[base path] gets that path prefixed for it.
-A block replaces the whole list, like every other list in the config, and the
-flag still stands in front of it: `headers #false { .. }` writes nothing.
+A `rules` block replaces the whole list, like every other list in the config,
+and the flag on the block's own line still stands in front of the file:
+`headers #false { cache { } }` states the policy for a bucket upload and writes
+no file at all.
 
 #callout(kind: "warn")[
-  `generate { headers }` on its own writes nothing. It needs a `caching { }`
-  block, a CSP, or a rule of its own to have something to say, and an empty rule
-  file means what the host already assumed.
+  `headers { }` on its own writes nothing. It needs a `cache { }` block, a CSP,
+  or a rule of its own to have something to say, and an empty rule file means
+  what the host already assumed.
 ]
 
 === `_redirects`

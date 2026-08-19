@@ -3,7 +3,6 @@
 pub mod bundle;
 pub mod cards;
 pub mod feed;
-pub mod headers;
 pub mod llms;
 pub mod manifest;
 pub mod pdf;
@@ -11,12 +10,12 @@ pub mod robots;
 pub mod search;
 
 use crate::config::dispatch::Kind::Block as Nested;
-use crate::config::dispatch::Kind::{Flag, Items, Tables};
+use crate::config::dispatch::Kind::{Flag, Items};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
 use crate::config::{
-    BundleConfig, CardsConfig, FeedConfig, HeadersConfig, LlmsConfig, ManifestConfig, PdfConfig,
-    RobotsConfig, SearchConfig, Value,
+    BundleConfig, CardsConfig, FeedConfig, LlmsConfig, ManifestConfig, PdfConfig, RobotsConfig,
+    SearchConfig, Value,
 };
 
 /// Each field is opt-in: either a flag or a block whose presence turns it on.
@@ -24,7 +23,6 @@ use crate::config::{
 pub struct GenerateConfig {
     /// Emit `sitemap.xml`, which needs `url` set.
     pub sitemap: bool,
-    pub headers: HeadersConfig,
     /// Emit a `_redirects` file in place of the per-path HTML stubs; both
     /// Netlify and Cloudflare Pages serve a static file over a redirect rule,
     /// so a stub would shadow the rule if the two coexisted.
@@ -62,13 +60,6 @@ impl Section for GenerateConfig {
                 c.redirects = n.boolean(t, 0)?;
                 Ok(())
             },
-        ),
-        (
-            "headers",
-            Tables,
-            "Write a `_headers` file from the caching policy. A block adds rules of the site's own: a path pattern, and the headers it sends.",
-            |c| c.headers.written(),
-            |c, n, t| c.headers.fill(n, t),
         ),
         (
             "robots",

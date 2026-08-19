@@ -11,12 +11,12 @@ use super::{Emit, Processor, Site};
 use crate::config::Config;
 use crate::error::Result;
 
-/// Emits a `_headers` rule file from the site's `caching` and `security`
+/// Emits a `_headers` rule file from the site's `headers` and `security`
 /// policies.
 ///
-/// The caching half is written from `caching { }`, the same policy the S3
-/// uploader sets per object, so a site that does both cannot state two answers
-/// to one question.
+/// The caching half is written from `headers { cache { } }`, the same policy
+/// the S3 uploader sets per object, so a site that does both cannot state two
+/// answers to one question.
 pub(super) struct Headers;
 
 impl Headers {
@@ -35,9 +35,9 @@ impl Processor for Headers {
     /// Needs the file, and something to put in it: an empty rule file says only
     /// what the host already assumed.
     fn enabled(&self, config: &Config) -> bool {
-        let headers = &config.generate.headers;
-        headers.enabled
-            && (config.caching.enabled || config.security.csp.enabled || !headers.rules.is_empty())
+        let headers = &config.headers;
+        headers.file
+            && (headers.cache.enabled || config.security.csp.enabled || !headers.rules.is_empty())
     }
 
     /// Rules are written most specific first, since a host matches them in
@@ -45,12 +45,12 @@ impl Processor for Headers {
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
         let config = site.config;
         let mut body = Lines::default();
-        for (pattern, headers) in &config.generate.headers.rules {
+        for (pattern, headers) in &config.headers.rules {
             Self::rule(&mut body, &config.prefixed(pattern), headers);
         }
-        if config.caching.enabled && config.assets.fingerprint {
+        if config.headers.cache.enabled && config.assets.fingerprint {
             let prefix = config.prefixed(&format!("{}/*", config.asset_prefix()));
-            let immutable = [("Cache-Control", &config.caching.immutable)];
+            let immutable = [("Cache-Control", &config.headers.cache.immutable)];
             Self::rule(&mut body, &prefix, &immutable);
         }
         Self::rule(&mut body, &config.prefixed("/*"), &Self::catchall(site));
@@ -67,8 +67,8 @@ impl Headers {
     fn catchall(site: &Site) -> Vec<(&'static str, String)> {
         let config = site.config;
         let mut headers = Vec::new();
-        if config.caching.enabled {
-            headers.push(("Cache-Control", config.caching.default.clone()));
+        if config.headers.cache.enabled {
+            headers.push(("Cache-Control", config.headers.cache.default.clone()));
         }
         if config.security.csp.enabled {
             let digests: Digests = site.outputs.iter().map(|out| out.inline).collect();
@@ -124,15 +124,15 @@ mod tests {
 
     #[test]
     fn needs_a_policy_as_well_as_the_file() {
-        assert!(!Headers.enabled(&config("generate { headers #true }")));
-        assert!(!Headers.enabled(&config("caching { }")));
-        assert!(Headers.enabled(&config("generate { headers #true }\ncaching { }")));
+        assert!(!Headers.enabled(&config("headers { }")));
+        assert!(!Headers.enabled(&config("headers #false { cache { } }")));
+        assert!(Headers.enabled(&config("headers { cache { } }")));
     }
 
     #[test]
     fn a_policy_alone_earns_the_file() {
-        assert!(Headers.enabled(&config("generate { headers #true }\nsecurity { csp { } }")));
-        let body = body(&config("generate { headers #true }\nsecurity { csp { } }"));
+        assert!(Headers.enabled(&config("headers { }\nsecurity { csp { } }")));
+        let body = body(&config("headers { }\nsecurity { csp { } }"));
         assert!(
             body.contains("Content-Security-Policy: default-src 'self'"),
             "{body}"
@@ -142,7 +142,8 @@ mod tests {
 
     #[test]
     fn a_rule_of_the_sites_own_earns_the_file() {
-        let text = "generate {\n  headers {\n    \"/v*/*\" {\n      X-Robots-Tag \"noindex\"\n    }\n  }\n}";
+        let text =
+            "headers {\n  rules {\n    \"/v*/*\" {\n      X-Robots-Tag \"noindex\"\n    }\n  }\n}";
         assert!(Headers.enabled(&config(text)));
 
         let body = body(&config(text));
@@ -153,7 +154,7 @@ mod tests {
     #[test]
     fn the_sites_own_rules_precede_the_derived_ones() {
         let body = body(&config(
-            "caching { }\ngenerate {\n  headers {\n    \"/private/*\" {\n      X-Robots-Tag \"noindex\"\n    }\n  }\n}",
+            "headers {\n  cache { }\n  rules {\n    \"/private/*\" {\n      X-Robots-Tag \"noindex\"\n    }\n  }\n}",
         ));
         let own = body.find("/private/*").expect("no rule of its own");
         let catchall = body.rfind("/*\n").expect("no catch-all");
@@ -163,15 +164,15 @@ mod tests {
     #[test]
     fn a_rule_is_written_under_the_base_path() {
         let body = body(&config(
-            "url \"https://e.xyz/docs/\"\ngenerate {\n  headers {\n    \"/private/*\" {\n      X-Robots-Tag \"noindex\"\n    }\n  }\n}",
+            "url \"https://e.xyz/docs/\"\nheaders {\n  rules {\n    \"/private/*\" {\n      X-Robots-Tag \"noindex\"\n    }\n  }\n}",
         ));
         assert!(body.contains("/docs/private/*"), "{body}");
     }
 
     #[test]
     fn a_header_name_cannot_open_a_line_of_its_own() {
-        let mut config = config("generate {\n  headers #true\n}");
-        config.generate.headers.rules = vec![(
+        let mut config = config("headers { }");
+        config.headers.rules = vec![(
             "/*".to_owned(),
             vec![("X-A\nX-B".to_owned(), "v".to_owned())],
         )];
@@ -182,7 +183,7 @@ mod tests {
     #[test]
     fn only_a_fingerprinted_build_declares_its_assets_immutable() {
         let hashed = body(&config(
-            "generate { headers #true }\ncaching { }\nassets { fingerprint #true }",
+            "headers { cache { } }\nassets { fingerprint #true }",
         ));
         let assets = hashed.find("/assets/*").expect("no asset rule");
         let catchall = hashed.rfind("/*\n").expect("no catch-all");
@@ -192,7 +193,7 @@ mod tests {
         );
         assert!(hashed.contains("immutable"), "{hashed}");
 
-        let plain = body(&config("generate { headers #true }\ncaching { }"));
+        let plain = body(&config("headers { cache { } }"));
         assert!(!plain.contains("/assets/*"), "{plain}");
         assert!(plain.contains("must-revalidate"), "{plain}");
     }

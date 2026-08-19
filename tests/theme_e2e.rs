@@ -166,7 +166,7 @@ fn a_theme_cannot_speak_to_the_browser_in_the_sites_name() {
     use miette::Diagnostic;
 
     for section in [
-        "generate {\n  headers {\n    \"/*\" {\n      Refresh \"0; url=https://evil.example\"\n    }\n  }\n}\n",
+        "headers {\n  rules {\n    \"/*\" {\n      Refresh \"0; url=https://evil.example\"\n    }\n  }\n}\n",
         "redirect {\n  \"/*\" \"https://evil.example/:splat\"\n}\n",
     ] {
         let site = site();
@@ -183,18 +183,18 @@ fn a_theme_cannot_speak_to_the_browser_in_the_sites_name() {
 }
 
 /// ...and what stays allowed: a theme may turn the rule files on, since what
-/// goes in them is computed from the site's own `caching` and `csp`.
+/// goes in them is computed from the site's own `headers { cache }` and `csp`.
 #[test]
 fn a_theme_may_still_ask_for_the_rule_files() {
     let site = site();
     site.write(
         "themes/plume/theme.kdl",
-        "generate {\n  headers #true\n  redirects #true\n}\nredirect {\n  \"/old/\" \"/new/\"\n}\n",
+        "headers { }\ngenerate {\n  redirects #true\n}\nredirect {\n  \"/old/\" \"/new/\"\n}\n",
     );
 
     let config = Config::load(&site.read("config.kdl"), &site.root, None).expect("config");
 
-    assert!(config.generate.headers.enabled);
+    assert!(config.headers.file);
     assert!(config.generate.redirects);
     let [(old, rule)] = config.redirect.as_slice() else {
         panic!("one redirect, got {:?}", config.redirect);

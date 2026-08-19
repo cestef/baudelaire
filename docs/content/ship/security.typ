@@ -12,9 +12,7 @@ the pages this build just produced.
 assets {
   fingerprint #true
 }
-generate {
-  headers #true
-}
+headers { }
 
 security {
   sri #true
@@ -58,9 +56,7 @@ instead of protecting it), and an `integrity` you wrote yourself.
 == Content security policy
 
 ```kdl
-generate {
-  headers #true
-}
+headers { }
 
 security {
   csp { }
@@ -78,7 +74,7 @@ policy:
   Content-Security-Policy: default-src 'self'; script-src 'self' 'sha256-Cihokc...'
 ```
 
-Without `generate { headers }` the block writes nothing and the build says so.
+Without a `headers { }` block the policy writes nothing and the build says so.
 
 === Writing the directives
 

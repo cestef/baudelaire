@@ -296,7 +296,7 @@ can't corrupt markup. Stylesheets get the same treatment inside: `url()` and
 is fingerprinted before the sheet that imports it.
 
 Serve fingerprinted files with a far-future `Cache-Control`. The
-#link("../ship/deploy.typ")[deploy] step reads `caching { immutable }` for
+#link("../ship/deploy.typ")[deploy] step reads `headers { cache { immutable } }` for
 exactly those files.
 
 #callout(kind: "tip")[

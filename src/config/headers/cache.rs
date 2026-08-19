@@ -1,11 +1,12 @@
-//! `caching { }`: the `Cache-Control` the built files are served with.
+//! `headers { cache { } }`: the `Cache-Control` the built files are served
+//! with.
 
 use crate::config::dispatch::Kind::Text;
 use crate::config::dispatch::{Block, Section, Switch};
 use crate::config::node::NodeExt;
 
 /// The `Cache-Control` an uploaded object is served with, enabled by the
-/// presence of a `caching { }` block.
+/// presence of a `cache { }` block.
 #[derive(Debug, Clone, Hash, Default)]
 pub struct CacheControl {
     pub enabled: bool,
@@ -33,13 +34,13 @@ impl CacheControl {
 }
 
 /// The conventional cache policy, filled in by [`Section::SWITCH`] when the
-/// `caching { }` block is present and the author named neither value.
+/// `cache { }` block is present and the author named neither value.
 impl CacheControl {
     pub(super) const IMMUTABLE: &'static str = "public, max-age=31536000, immutable";
     pub(super) const DEFAULT: &'static str = "public, max-age=0, must-revalidate";
 }
 
-/// The top-level `caching { .. }` block: presence turns `Cache-Control` on and
+/// The `cache { .. }` block: presence turns `Cache-Control` on and
 /// fills the defaults, so an untouched or disabled `CacheControl` carries no
 /// policy at all and the two states stay distinguishable.
 impl Section for CacheControl {

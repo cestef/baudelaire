@@ -59,7 +59,7 @@ fn s3_config(site: &Site, port: u16) -> Config {
         prefix: String::new(),
         delete: true,
     });
-    config.caching = CacheControl {
+    config.headers.cache = CacheControl {
         enabled: true,
         immutable: "public, max-age=31536000, immutable".into(),
         default: "public, max-age=0, must-revalidate".into(),

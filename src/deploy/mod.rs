@@ -253,7 +253,7 @@ impl Deploy {
             S3::check(s3)?;
             out.push(Box::new(S3::new(
                 s3.clone(),
-                config.caching.clone(),
+                config.headers.cache.clone(),
                 Fingerprinted {
                     prefix: config.asset_name().to_owned(),
                     hashed: config.assets.fingerprint,

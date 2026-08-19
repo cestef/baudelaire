@@ -125,7 +125,7 @@ pub enum Kind {
     Lines(Rows),
     /// A block of repeated child nodes, each named by the author and each
     /// holding a free [`Table`](Kind::Table) of its own: both levels are the
-    /// author's, `generate { headers { "/v*/*" { X-Robots-Tag "noindex" } } }`.
+    /// author's, `headers { rules { "/v*/*" { X-Robots-Tag "noindex" } } }`.
     ///
     /// Unlike [`Items`](Kind::Items), neither level is a name this crate knows,
     /// so there are no rows for the reference to walk into.
@@ -154,10 +154,11 @@ impl Kind {
             | Self::Asset
             | Self::Url
             | Self::Template
-            | Self::Choice(_)
-            | Self::Tables => Arity::Args(1),
+            | Self::Choice(_) => Arity::Args(1),
             Self::Choices(_) | Self::Texts | Self::Numbers | Self::Toggles => Arity::Every,
-            Self::Items(_) | Self::Lines(_) | Self::Overlay | Self::Table => Arity::Args(0),
+            Self::Items(_) | Self::Lines(_) | Self::Overlay | Self::Table | Self::Tables => {
+                Arity::Args(0)
+            }
             Self::Block(_) | Self::Line(_) | Self::Toggled(..) => Arity::Elsewhere,
         }
     }
