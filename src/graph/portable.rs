@@ -40,7 +40,9 @@ impl Portable<'_> {
     }
 }
 
-#[cfg(test)]
+/// Unix-only whole: its one test keys across a symlink, and on Windows the
+/// module's imports would be an unused-import error rather than a skipped test.
+#[cfg(all(test, unix))]
 mod tests {
     use std::path::Path;
 
@@ -49,7 +51,6 @@ mod tests {
     /// The key spelling is a contract: root-relative under the root, absolute
     /// outside it, and the same before and after a file appears there.
     #[test]
-    #[cfg(unix)]
     fn keys_do_not_depend_on_whether_the_file_exists() {
         let tmp = tempfile::tempdir().unwrap();
         let outside = tempfile::tempdir().unwrap();
