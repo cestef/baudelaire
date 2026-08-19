@@ -25,7 +25,7 @@ impl Transform for Links {
         let (config, page, links) = (cx.config, cx.page, cx.links);
         let origins = Origins::new(cx.world);
         let lang = config.multilingual().then_some(page.lang.as_str());
-        let content = (page.authored() && config.links.graph()).then_some(cx.content);
+        let content = (page.authored() && config.graph()).then_some(cx.content);
         let found = &mut cx.found;
         doc.walk(|element| {
             let span = element.span;

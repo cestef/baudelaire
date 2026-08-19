@@ -140,9 +140,9 @@ fn a_permalink_change_rebuilds_only_the_pages_that_link_to_it() {
 #[test]
 fn a_link_to_a_page_that_does_not_exist_yet_resolves_when_it_appears() {
     // The negative dependency: `a` records "nothing sits at b.typ". A dangling
-    // link is an error under the default `links { strict }`, hence the opt-out.
+    // link is an error under the default `check { links }`, hence the opt-out.
     let site = Site::with(
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nlinks {\n  strict #false\n}\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\ncheck {\n  links \"warn\"\n}\n",
     );
     site.write(
         "content/posts/a.typ",
@@ -175,7 +175,7 @@ fn a_link_resolves_when_its_target_appears_under_a_symlinked_content_dir() {
     // that exists canonicalizes to its real location, while a probe at one that
     // does not keeps the path as walked, so both have to key the same way.
     let site = Site::with(
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nlinks {\n  strict #false\n}\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\ncheck {\n  links \"warn\"\n}\n",
     );
     fs::create_dir_all(site.path("vault/posts")).unwrap();
     fs::create_dir_all(site.path("content")).unwrap();

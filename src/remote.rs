@@ -22,7 +22,7 @@ pub enum Status {
 pub struct Http;
 
 impl Http {
-    /// Per-request ceiling, which `links { external { timeout } }` also
+    /// Per-request ceiling, which `check { external { timeout } }` also
     /// defaults to.
     pub const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 

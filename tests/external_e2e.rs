@@ -84,7 +84,7 @@ fn site(host: &Host, paths: &[&str]) -> Site {
         r#"
         site "T"
         paths { content "content"; dist "public" }
-        links { external { fresh "0s" } }
+        check { external { fresh "0s" } }
         "#,
     );
     let mut links = String::new();
@@ -140,6 +140,6 @@ fn a_head_rejection_is_retried_with_get() {
 fn a_build_never_reaches_the_network() {
     let host = Host::start();
     let site = site(&host, &["/gone"]);
-    // `links { external #true }` is set, and only `check` acts on it.
+    // `check { external #true }` is set, and only `check` acts on it.
     site.stats();
 }

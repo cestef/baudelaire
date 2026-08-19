@@ -209,7 +209,7 @@ than its input: if the re-encode grows, the original is kept.
 
 - A social `image` in frontmatter is rewritten to its fingerprinted URL and made
   absolute. See #link("generate/meta.typ")[Meta tags & social].
-- `lint { budget { images } }` weighs what a page references, not its `srcset`
+- `check { budget { images } }` weighs what a page references, not its `srcset`
   alternatives. See #link("linting.typ")[Linting & budgets].
 
 #callout(kind: "warn")[

@@ -210,7 +210,7 @@ pub struct Orphan {
 #[diagnostic(
     code(baudelaire::links::orphans),
     severity(warning),
-    help("link each from a page that is reachable, or drop `links {{ orphans }}`")
+    help("link each from a page that is reachable, or drop `check {{ orphans }}`")
 )]
 pub struct OrphanPages {
     #[related]

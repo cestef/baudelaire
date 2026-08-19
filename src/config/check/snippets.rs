@@ -1,4 +1,4 @@
-//! `lint { snippets { } }`: how the code fences of one language are checked.
+//! `check { snippets { } }`: how the code fences of one language are checked.
 
 use kdl::KdlNode;
 

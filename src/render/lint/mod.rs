@@ -1,4 +1,4 @@
-//! Lint rules over the typed HTML DOM, one module each, gated on `lint { }`.
+//! Lint rules over the typed HTML DOM, one module each, gated on `check { }`.
 //! [`Rules::builtin`] is the single source of what runs.
 
 mod alt;
@@ -13,7 +13,7 @@ pub use weigh::{Load, Reference, Weight};
 use typst::syntax::Span;
 use typst_html::{HtmlAttr, HtmlDocument, HtmlElement, attr, tag};
 
-use crate::config::{LintConfig, Named as _, Rule};
+use crate::config::{CheckConfig, Named as _, Rule};
 use crate::error::Lint;
 use crate::world::PageWorld;
 
@@ -118,7 +118,7 @@ impl Exemption {
 /// project root a checker of its own runs in, and the fences the transform
 /// pipeline gathered.
 pub(super) struct Cx<'a> {
-    pub(super) config: &'a LintConfig,
+    pub(super) config: &'a CheckConfig,
     pub(super) root: &'a std::path::Path,
     pub(super) fences: &'a [crate::render::snippet::Snippet],
 }
@@ -195,7 +195,7 @@ impl Page {
 
 pub(super) trait Check: Send + Sync {
     /// Whether to run, from config alone.
-    fn enabled(&self, config: &LintConfig) -> bool;
+    fn enabled(&self, config: &CheckConfig) -> bool;
     /// Judge the gathered page, recording what it finds.
     fn check(&self, page: &Page, cx: &Cx<'_>, found: &mut Findings<'_>);
 }
@@ -221,7 +221,7 @@ impl Rules {
     pub(super) fn run(
         &self,
         doc: &HtmlDocument,
-        config: &LintConfig,
+        config: &CheckConfig,
         world: &PageWorld,
         root: &std::path::Path,
         fences: &[crate::render::snippet::Snippet],

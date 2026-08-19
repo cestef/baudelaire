@@ -1,4 +1,4 @@
-//! `links { external { } }`: how outbound links are verified over the network.
+//! `check { external { } }`: how outbound links are verified over the network.
 
 use std::time::Duration;
 

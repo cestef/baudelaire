@@ -15,10 +15,10 @@ use super::{Cx, DocumentExt, Transform};
 pub(super) struct Fences;
 
 impl Transform for Fences {
-    /// Runs for the languages `lint { snippets { } }` names, which is where a
+    /// Runs for the languages `check { snippets { } }` names, which is where a
     /// hidden marker is declared and what the lint has to be handed.
     fn enabled(&self, config: &Config) -> bool {
-        !config.lint.snippets.is_empty()
+        !config.check.snippets.is_empty()
     }
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
@@ -39,7 +39,7 @@ impl Fences {
     fn gather(element: &mut HtmlElement, config: &Config) -> Option<Snippet> {
         let lang = element.attrs.get(crate::world::rules::LANG)?;
         let marker = config
-            .lint
+            .check
             .snippet(lang)
             .and_then(|rule| rule.hidden.as_deref());
         let snippet = Snippet::of(element, marker)?;

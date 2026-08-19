@@ -1,7 +1,7 @@
 //! Images with no text alternative: only an *absent* `alt` is reported, since
 //! an empty one is the author's claim that the image is decorative.
 
-use crate::config::LintConfig;
+use crate::config::CheckConfig;
 use crate::error::Lint;
 
 use super::{Check, Cx, Findings, Page};
@@ -10,7 +10,7 @@ use super::{Check, Cx, Findings, Page};
 pub(super) struct Alt;
 
 impl Check for Alt {
-    fn enabled(&self, config: &LintConfig) -> bool {
+    fn enabled(&self, config: &CheckConfig) -> bool {
         config.alt.on()
     }
 

@@ -116,7 +116,7 @@ one per repaired page would cost more than the pass it repairs.
 The same edges, read the other way: the pages nothing links to.
 
 ```kdl
-links {
+check {
   orphans "any"        // or "authored"
 }
 ```
@@ -125,7 +125,7 @@ links {
 baudelaire::links::orphans
 
   ⚠ 2 pages linked from nowhere
-  help: link each from a page that is reachable, or drop `links { orphans }`
+  help: link each from a page that is reachable, or drop `check { orphans }`
 
   ⚠ `guide/exporting.typ` is linked from nowhere, and serves at `/guide/exporting/`
   ⚠ `notes/scratch.typ` is linked from nowhere, and serves at `/notes/scratch/`

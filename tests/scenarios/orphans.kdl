@@ -1,4 +1,4 @@
-// `links { orphans }`: the pages nothing links to, off the same recorded edges
+// `check { orphans }`: the pages nothing links to, off the same recorded edges
 // backlinks are read from.
 
 scenario "a page nothing links to is reported, and a linked one is not" {
@@ -15,7 +15,7 @@ scenario "a page nothing links to is reported, and a linked one is not" {
           posts { template "post.typ" }
         }
       }
-      links {
+      check {
         orphans "any"
       }
       """#
@@ -53,7 +53,7 @@ scenario "a site whose pages all link to each other reports nothing" {
         content "content"
         dist "public"
       }
-      links {
+      check {
         orphans "any"
       }
       """#
@@ -86,7 +86,7 @@ scenario "generated listings are nobody's forgotten page" {
           tags listing=#true
         }
       }
-      links {
+      check {
         orphans "any"
       }
       """#
@@ -121,7 +121,7 @@ scenario "a page an index lists is reachable, and not reported" {
           posts { paginate { size 5 } }
         }
       }
-      links {
+      check {
         orphans "any"
       }
       """#
@@ -156,7 +156,7 @@ scenario "the strict mode names a page only an index links" {
           posts { paginate { size 5 } }
         }
       }
-      links {
+      check {
         orphans "authored"
       }
       """#

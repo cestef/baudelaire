@@ -297,7 +297,7 @@ finds the links a migration broke.
 )
 
 So convert `{{< relref >}}` to the source path, not to the URL it produced: a URL
-survives a rename only if the URL does. `links { strict #false }` demotes the
+survives a rename only if the URL does. `check { links "warn" }` demotes the
 failure to a warning, which is the setting for working through a large tree. See
 #link("../../write/pages.typ")[pages].
 

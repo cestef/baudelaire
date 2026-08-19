@@ -1,11 +1,11 @@
 mod arguments;
 mod assets;
+mod checks;
 mod content;
 mod defaults;
 mod entities;
 mod images;
 mod languages;
-mod links;
 mod provenance;
 mod remote;
 mod schema;
@@ -336,32 +336,32 @@ fn err_a_heading_level_that_is_not_one_is_refused() {
 fn a_lint_rule_names_its_own_severity_or_follows_strict() {
     use crate::config::{Rule, Severity};
 
-    let lenient = parse("lint { }");
-    assert_eq!(lenient.lint.severity(&Rule::Alt.into()), Severity::Warn);
+    let lenient = parse("check { }");
+    assert_eq!(lenient.check.severity(&Rule::Alt.into()), Severity::Warn);
 
-    let strict = parse("lint {\n  strict\n}");
-    assert_eq!(strict.lint.severity(&Rule::Alt.into()), Severity::Error);
+    let strict = parse("check {\n  strict\n}");
+    assert_eq!(strict.check.severity(&Rule::Alt.into()), Severity::Error);
     assert_eq!(
-        strict.lint.severity(&Rule::Headings.into()),
+        strict.check.severity(&Rule::Headings.into()),
         Severity::Error
     );
 
-    let mixed = parse("lint {\n  strict\n  headings \"warn\"\n  ids \"off\"\n}");
-    assert_eq!(mixed.lint.severity(&Rule::Alt.into()), Severity::Error);
-    assert_eq!(mixed.lint.severity(&Rule::Headings.into()), Severity::Warn);
-    assert_eq!(mixed.lint.severity(&Rule::Ids.into()), Severity::Off);
-    assert!(!mixed.lint.ids.on());
-    assert!(mixed.lint.headings.level.on(), "a warning rule still runs");
+    let mixed = parse("check {\n  strict\n  headings \"warn\"\n  ids \"off\"\n}");
+    assert_eq!(mixed.check.severity(&Rule::Alt.into()), Severity::Error);
+    assert_eq!(mixed.check.severity(&Rule::Headings.into()), Severity::Warn);
+    assert_eq!(mixed.check.severity(&Rule::Ids.into()), Severity::Off);
+    assert!(!mixed.check.ids.on());
+    assert!(mixed.check.headings.level.on(), "a warning rule still runs");
 
-    let flags = parse("lint {\n  strict\n  aria #false\n  alt #true\n  headings\n}");
-    assert_eq!(flags.lint.severity(&Rule::Aria.into()), Severity::Off);
+    let flags = parse("check {\n  strict\n  aria #false\n  alt #true\n  headings\n}");
+    assert_eq!(flags.check.severity(&Rule::Aria.into()), Severity::Off);
     assert_eq!(
-        flags.lint.severity(&Rule::Alt.into()),
+        flags.check.severity(&Rule::Alt.into()),
         Severity::Error,
         "`#true` is on, and `strict` says how loud"
     );
     assert_eq!(
-        flags.lint.severity(&Rule::Headings.into()),
+        flags.check.severity(&Rule::Headings.into()),
         Severity::Error,
         "a bare rule is on, and follows `strict` like any other"
     );
@@ -373,24 +373,24 @@ fn a_lint_rule_names_its_own_severity_or_follows_strict() {
 fn a_heading_rule_takes_a_severity_or_a_block() {
     use crate::config::{Rule, Severity};
 
-    let shorthand = parse("lint {\n  headings \"error\"\n}");
+    let shorthand = parse("check {\n  headings \"error\"\n}");
     assert_eq!(
-        shorthand.lint.severity(&Rule::Headings.into()),
+        shorthand.check.severity(&Rule::Headings.into()),
         Severity::Error
     );
-    assert_eq!(shorthand.lint.headings.start, None);
+    assert_eq!(shorthand.check.headings.start, None);
 
-    let block = parse("lint {\n  headings {\n    level \"warn\"\n    start 3\n  }\n}");
-    assert_eq!(block.lint.severity(&Rule::Headings.into()), Severity::Warn);
-    assert_eq!(block.lint.headings.start, Some(3));
-    assert!(block.lint.headings.opens(3));
-    assert!(!block.lint.headings.opens(4));
+    let block = parse("check {\n  headings {\n    level \"warn\"\n    start 3\n  }\n}");
+    assert_eq!(block.check.severity(&Rule::Headings.into()), Severity::Warn);
+    assert_eq!(block.check.headings.start, Some(3));
+    assert!(block.check.headings.opens(3));
+    assert!(!block.check.headings.opens(4));
 }
 
 #[test]
 fn err_an_outline_may_not_open_below_the_last_heading_level() {
     assert_eq!(
-        code("lint {\n  headings {\n    start 7\n  }\n}"),
+        code("check {\n  headings {\n    start 7\n  }\n}"),
         "baudelaire::config::out_of_range"
     );
 }
@@ -398,17 +398,17 @@ fn err_an_outline_may_not_open_below_the_last_heading_level() {
 #[test]
 fn err_a_severity_that_is_not_one_is_refused() {
     assert_eq!(
-        code("lint {\n  alt \"loud\"\n}"),
+        code("check {\n  alt \"loud\"\n}"),
         "baudelaire::config::unknown_value"
     );
 }
 
 #[test]
 fn a_budget_can_report_instead_of_failing() {
-    assert!(parse("lint { }").lint.budget.strict);
+    assert!(parse("check { }").check.budget.strict);
     assert!(
-        !parse("lint {\n  budget {\n    strict #false\n  }\n}")
-            .lint
+        !parse("check {\n  budget {\n    strict #false\n  }\n}")
+            .check
             .budget
             .strict
     );

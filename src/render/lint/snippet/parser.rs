@@ -1,6 +1,6 @@
 //! The parsers a fence is checked with in-process, one per language family.
 //!
-//! [`builtin`] is the single source of which languages a `lint { snippets { } }`
+//! [`builtin`] is the single source of which languages a `check { snippets { } }`
 //! line may name without giving a command of its own.
 
 use std::sync::LazyLock;
@@ -46,7 +46,7 @@ pub trait Parser: Send + Sync {
 static PARSERS: LazyLock<Vec<Box<dyn Parser>>> = LazyLock::new(builtin);
 
 /// The built-in parsers. A new language is one `impl` plus one line here, and
-/// `lint { snippets { } }` accepts its name the same moment.
+/// `check { snippets { } }` accepts its name the same moment.
 fn builtin() -> Vec<Box<dyn Parser>> {
     vec![
         Box::new(Kdl),

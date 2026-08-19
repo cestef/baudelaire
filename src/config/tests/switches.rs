@@ -11,7 +11,7 @@ type Reads = fn(&Config) -> bool;
 /// standing where its own argument goes, and how a config answers whether it is
 /// on.
 const SWITCHES: &[(&str, Reads)] = &[
-    ("lint @", |c| c.lint.enabled),
+    ("check @", |c| c.check.enabled),
     ("headers @", |c| c.headers.file),
     ("headers {\n  cache @\n}", |c| c.headers.cache.enabled),
     ("security {\n  csp @\n}", |c| c.security.csp.enabled),
@@ -24,7 +24,7 @@ const SWITCHES: &[(&str, Reads)] = &[
     ("artifacts {\n  pdf {\n    pages @\n  }\n}", |c| {
         c.artifacts.pdf.pages.enabled
     }),
-    ("links {\n  external @\n}", |c| c.links.external.enabled),
+    ("check {\n  external @\n}", |c| c.check.external.enabled),
     ("assets {\n  minify @\n}", |c| c.assets.minify.css()),
     ("navigation {\n  spa @\n}", |c| c.navigation.spa.enabled),
     ("navigation {\n  standalone @\n}", |c| {
@@ -72,9 +72,9 @@ fn a_flag_on_the_line_turns_a_section_off() {
 /// can keep its settings and still say no.
 #[test]
 fn a_block_still_reads_behind_the_flag() {
-    let cfg = parse("lint #false {\n  strict #true\n}");
-    assert!(!cfg.lint.enabled, "the flag wins");
-    assert!(cfg.lint.strict, "and the block is still read");
+    let cfg = parse("check #false {\n  strict #true\n}");
+    assert!(!cfg.check.enabled, "the flag wins");
+    assert!(cfg.check.strict, "and the block is still read");
 
     let cfg = parse("generate {\n  robots #false {\n    disallow \"/private/\"\n  }\n}");
     assert!(!cfg.generate.robots.enabled);
@@ -87,20 +87,20 @@ fn a_block_still_reads_behind_the_flag() {
 fn a_profile_takes_back_what_the_base_turned_on() {
     let cfg = parse(
         r"
-        lint { strict #true }
+        check { strict #true }
         artifacts { cards { width 800 } }
         profiles {
           dev {
-            lint #false
+            check #false
             artifacts { cards #false }
           }
         }
     ",
     );
-    assert!(cfg.lint.enabled, "the base is untouched");
+    assert!(cfg.check.enabled, "the base is untouched");
     let dev = cfg.with_profile("dev").expect("profile exists");
-    assert!(!dev.lint.enabled);
-    assert!(dev.lint.strict, "and its siblings are still inherited");
+    assert!(!dev.check.enabled);
+    assert!(dev.check.strict, "and its siblings are still inherited");
     assert!(!dev.artifacts.cards.enabled);
     assert_eq!(dev.artifacts.cards.width, 800);
 }
@@ -132,7 +132,7 @@ fn the_policy_outlives_the_file_it_is_usually_written_to() {
 #[test]
 fn err_a_switch_reads_a_boolean_and_nothing_else() {
     for config in [
-        "lint \"junk\"",
+        "check \"junk\"",
         "generate {\n  robots \"junk\"\n}",
         "navigation {\n  spa 1\n}",
     ] {
@@ -142,10 +142,10 @@ fn err_a_switch_reads_a_boolean_and_nothing_else() {
             "{config}: {rendered}"
         );
     }
-    let rendered = err("lint #false #true");
+    let rendered = err("check #false #true");
     assert!(rendered.contains("unexpected argument"), "{rendered}");
     assert!(
-        rendered.contains("`lint` reads a single value"),
+        rendered.contains("`check` reads a single value"),
         "{rendered}"
     );
 }

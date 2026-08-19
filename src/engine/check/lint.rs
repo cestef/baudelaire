@@ -10,7 +10,7 @@ use crate::ui::{Bytes, Ui};
 use super::{CheckedPage, Compiled};
 
 /// The findings of the per-page lint pass, gathered into one report. Fatal
-/// under `lint { strict }`, otherwise the identical diagnostic as a warning.
+/// under `check { strict }`, otherwise the identical diagnostic as a warning.
 pub(in crate::engine) struct Lints;
 
 impl Lints {
@@ -29,7 +29,7 @@ impl Lints {
                     at,
                     sources.at(at, root),
                 );
-                (site.config.lint.severity(&finding.lint.ruled()), flaw)
+                (site.config.check.severity(&finding.lint.ruled()), flaw)
             })
             .collect();
         if flaws.is_empty() {
@@ -56,7 +56,7 @@ pub(in crate::engine) struct Budgets;
 
 impl Budgets {
     pub(in crate::engine) fn run(site: &Compiled, ui: &Ui) -> Result<()> {
-        let budget = &site.config.lint.budget;
+        let budget = &site.config.check.budget;
         let (Some(emitted), true) = (site.emitted, Self::declared(budget)) else {
             return Ok(());
         };
@@ -230,8 +230,8 @@ mod tests {
     fn only_the_budgets_a_page_breaks_are_reported() {
         let weight = Weight::default();
         let scale = Scale::of(&page("0123456789", &weight, &[]), &emitted());
-        let budget = config("lint { budget { html 5; total \"1kB\" } }")
-            .lint
+        let budget = config("check { budget { html 5; total \"1kB\" } }")
+            .check
             .budget;
         let over = scale.against(&budget, "post.typ");
         assert_eq!(over.len(), 1);
@@ -241,7 +241,7 @@ mod tests {
 
     #[test]
     fn a_build_with_nothing_emitted_weighs_nothing() {
-        let config = config("lint { budget { html 1 } }");
+        let config = config("check { budget { html 1 } }");
         let weight = Weight::default();
         let pages = [page("far too long for one byte", &weight, &[])];
         let site = Compiled {
@@ -254,7 +254,7 @@ mod tests {
 
     #[test]
     fn an_oversized_page_fails_the_build() {
-        let config = config("lint { budget { html 1 } }");
+        let config = config("check { budget { html 1 } }");
         let emitted = emitted();
         let weight = Weight::default();
         let pages = [page("far too long for one byte", &weight, &[])];
@@ -268,7 +268,7 @@ mod tests {
 
     #[test]
     fn a_site_with_no_budget_is_never_over_one() {
-        let config = config("lint { }");
+        let config = config("check { }");
         let emitted = emitted();
         let weight = Weight::default();
         let pages = [page("anything at all", &weight, &[])];
@@ -288,7 +288,7 @@ mod tests {
         }];
         let weight = Weight::default();
         let pages = [page("<img>", &weight, &lints)];
-        let lenient = config("lint { }");
+        let lenient = config("check { }");
         let ui = Ui::new(crate::ui::Level::Silent);
         Lints::run(
             &Compiled {
@@ -301,7 +301,7 @@ mod tests {
         .unwrap();
         assert_eq!(ui.warnings(), 1, "all findings fold into one warning");
 
-        let strict = config("lint { strict }");
+        let strict = config("check { strict }");
         assert!(
             Lints::run(
                 &Compiled {

@@ -394,7 +394,7 @@ and both names are settled before the comment is written, so the pair survives
 ]
 
 The map is fetched only when devtools are open, so it costs a visitor nothing;
-`lint { budget { } }` does not count it, because no page references it.
+`check { budget { } }` does not count it, because no page references it.
 
 == TypeScript and JSX <typescript>
 

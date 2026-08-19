@@ -8,8 +8,8 @@ use kdl::{KdlDocument, KdlEntry, KdlNode, KdlValue};
 use miette::SourceSpan;
 
 use crate::config::assets::targets::Version;
+use crate::config::check::severity::{Level, Severity};
 use crate::config::dispatch::Arity;
-use crate::config::lint::severity::{Level, Severity};
 use crate::config::url::BaseUrl;
 use crate::config::value::{Kdl, ValueExt};
 use crate::error::{ConfigError, Result};
@@ -224,7 +224,7 @@ impl NodeExt for KdlNode {
     /// "off"; a string names the severity and so overrides `strict`.
     ///
     /// Everything that is not a string goes through [`NodeExt::boolean`], which
-    /// keeps the bare `lint { alt }` spelling working.
+    /// keeps the bare `check { alt }` spelling working.
     fn level(&self, text: &str, idx: usize) -> Result<Level> {
         let span = NodeExt::span(self);
         match self.get(idx) {

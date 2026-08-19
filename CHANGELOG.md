@@ -14,6 +14,14 @@ chores are visible in the git history and change nothing for a site.
 
 ### Changed
 
+- **One block holds every check the build runs.** Verification was split
+  between `lint { }` (markup rules, size budgets) and `links { }` (broken
+  internal links, the orphan report, the outbound probe), with a `strict` in
+  each meaning different things. All of it is now `check { }`. A broken internal
+  link is a rule with a severity like every other, `links "error"` by default,
+  so it can be turned down to a warning or off by name; `links { }` keeps what
+  it *shapes* rather than what it verifies, `style` and `backlinks`.
+
 - **One block owns both halves of a forward.** The paths a site still answers
   for were a top-level `redirect { }`, and how it answers them was `generate {
   redirects }`, a letter apart and in different blocks. Both are now
@@ -263,6 +271,29 @@ chores are visible in the git history and change nothing for a site.
   as static content. `client` joins the nine blocks a site owns outright.
 
 ### Upgrading
+
+- `lint { }` becomes `check { }`, unchanged inside. From `links { }`, three keys
+  move in: `strict` becomes `links` and takes a severity rather than a flag,
+  `external { }` and `orphans` keep their spelling one block over.
+
+  ```kdl
+  check {
+    links "warn"          // was links { strict #false }
+    orphans "authored"    // was links { orphans }
+    external { }          // was links { external }
+    strict #true
+    headings { start 3 }
+  }
+
+  links {
+    style "clean"
+    backlinks #true
+  }
+  ```
+
+  The markup rules still turn on with the block's presence, and the link rules
+  still answer for themselves, so `check #false { links "warn" }` checks links
+  and lints nothing.
 
 - The top-level `redirect { }` block and `generate { redirects }` merge into
   `redirects { }`. The pairs keep their spelling, one level in:
@@ -1250,6 +1281,7 @@ chores are visible in the git history and change nothing for a site.
   an override:
 
   ```kdl
+  //! @ignore
   lint {
     strict
     headings "warn"
@@ -1431,6 +1463,7 @@ chores are visible in the git history and change nothing for a site.
   of only turned off:
 
   ```kdl
+  //! @ignore
   links {
     external {
       fresh "7d"

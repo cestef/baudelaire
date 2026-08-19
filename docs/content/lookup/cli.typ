@@ -98,7 +98,7 @@ A key is a dotted path, completed by every generated
 
 `check --compact` reports each fault as one `file:line:column: message` line,
 which is what a tool reading the output expects; it is what
-#link("../build/linting.typ")[`lint { snippets }`] runs to check a `kdl` fence.
+#link("../build/linting.typ")[`check { snippets }`] runs to check a `kdl` fence.
 
 == Global flags <global>
 
@@ -230,10 +230,10 @@ fast CI gate. Takes the #link(<build-flags>)[build flags] except `--out` and
   align: (left, left),
   table.header([Flag], [Does]),
   [`--external`], [Also verify outbound `http(s)` links over the network.],
-  [`--no-external`], [Skip them even when `links { external }` is set.],
+  [`--no-external`], [Skip them even when `check { external }` is set.],
 )
 
-Builds never reach the network, whatever `links { external }` says. See
+Builds never reach the network, whatever `check { external }` says. See
 #link("../build/linting.typ")[linting] for what the check covers and how to tune
 its deadline, its cache and what it may skip.
 

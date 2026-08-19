@@ -301,7 +301,7 @@ scenario "a warning is claimed by code, not by the words it printed" {
     "config.kdl" #"""
       site "T"
       paths { content "content"; dist "public" }
-      links { strict #false }
+      check { links "warn" }
       """#
     "content/posts/loose.typ" #"""
       #let frontmatter = (title: "L",)

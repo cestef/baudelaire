@@ -870,7 +870,13 @@ impl Knobs {
         };
         set(&mut config.content.drafts.build, self.drafts);
         set(&mut config.content.future, self.future);
-        set(&mut config.links.strict, self.strict);
+        if let Some(strict) = self.strict {
+            config.check.links = baudelaire::config::Level::named(if strict {
+                baudelaire::config::Severity::Error
+            } else {
+                baudelaire::config::Severity::Warn
+            });
+        }
         set(&mut config.cache.incremental, self.cache);
         Ok(config)
     }

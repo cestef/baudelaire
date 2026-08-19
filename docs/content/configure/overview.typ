@@ -93,12 +93,12 @@ page that answers it in full is on the right.
   [Permalink shape, and how hard a broken link fails.],
   [#link("../write/pages.typ")[pages]],
 
-  [`redirect`],
-  [Old paths no page owns, and where each one moved.],
+  [`redirects`],
+  [Old paths no page owns, where each one moved, and how a host is told.],
   [#link("../write/collections/redirects.typ")[redirects]],
 
-  [`lint`],
-  [Checks and size budgets over the built pages.],
+  [`check`],
+  [What the build verifies: links, markup, size budgets.],
   [#link("../build/linting.typ")[linting & budgets]],
 
   [`security`],
@@ -200,7 +200,7 @@ of this kind takes `#false` on its own line:
 ```kdl
 profiles {
   fast {
-    lint #false
+    check #false
     artifacts {
       cards #false
       pdf { pages #false }

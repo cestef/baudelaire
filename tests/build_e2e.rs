@@ -293,7 +293,7 @@ fn the_orphan_report_names_the_page_no_content_links_to() {
     let site = Site::new();
     site.write(
         "config.kdl",
-        "site \"T\"\nlinks {\n  orphans \"any\"\n}\npaths {\n  content \"content\"\n  templates \"templates\"\n  dist \"public\"\n}\n",
+        "site \"T\"\ncheck {\n  orphans \"any\"\n}\npaths {\n  content \"content\"\n  templates \"templates\"\n  dist \"public\"\n}\n",
     );
     site.write(
         "templates/post.typ",
@@ -606,7 +606,7 @@ fn a_failed_build_leaves_the_previous_assets_in_place() {
 #[test]
 fn broken_links_are_still_reported_on_a_cached_rebuild() {
     let site = Site::with(
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nlinks { strict #false }\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\ncheck { links \"warn\" }\n",
     );
     site.write(
         "content/index.typ",

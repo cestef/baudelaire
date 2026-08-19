@@ -20,7 +20,7 @@ pub(in crate::engine) struct External;
 impl External {
     /// Verify every outbound link the compiled pages carry.
     pub(in crate::engine) fn run(site: &Compiled, ui: &Ui) -> Result<()> {
-        let policy = &site.config.links.external;
+        let policy = &site.config.check.external;
         let ignored = Ignored::of(policy)?;
         let mut targets: BTreeMap<&str, Vec<String>> = BTreeMap::new();
         for page in site.pages {

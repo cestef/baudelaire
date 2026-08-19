@@ -491,6 +491,19 @@ impl Toggle {
         }
     }
 
+    /// Overlay onto a rule's severity, where the flag says whether a finding
+    /// fails the build: a rule the site left alone follows the flag, and one it
+    /// gave a severity of its own is what the flag overrides.
+    fn level(self, target: &mut crate::config::Level) {
+        if let Some(strict) = self.0 {
+            *target = crate::config::Level::named(if strict {
+                crate::config::Severity::Error
+            } else {
+                crate::config::Severity::Warn
+            });
+        }
+    }
+
     /// The value, or `default` when neither flag was passed, for a toggle with
     /// no config field behind it.
     fn or(self, default: bool) -> bool {
@@ -533,7 +546,7 @@ impl Overrides for CommonOverrides {
         }
         Toggle::of(self.drafts, self.no_drafts).apply(&mut config.content.drafts.build);
         Toggle::of(self.future, self.no_future).apply(&mut config.content.future);
-        Toggle::of(self.strict_links, self.no_strict_links).apply(&mut config.links.strict);
+        Toggle::of(self.strict_links, self.no_strict_links).level(&mut config.check.links);
     }
 }
 

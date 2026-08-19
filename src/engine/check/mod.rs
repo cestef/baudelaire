@@ -10,7 +10,7 @@ pub(in crate::engine) use lint::{Budgets, Lints};
 use std::collections::HashSet;
 use std::path::Path;
 
-use crate::config::Config;
+use crate::config::{Config, Severity};
 use crate::error::{Broken, BrokenLinks, Orphan, OrphanPages, Result};
 use crate::render::{Emitted, Finding, Outbound, Target, Weight};
 use crate::ui::Ui;
@@ -65,7 +65,8 @@ pub(super) struct CheckedPage<'a> {
 
 /// Broken internal `.typ` links: every reference must resolve to an existing
 /// page, and a reference naming a `#fragment` must find that heading there.
-/// Fatal under `links.strict`, otherwise the identical diagnostic as a warning.
+/// How loud that is comes from `check { links }`, the identical diagnostic
+/// either way.
 pub(super) struct Links;
 
 impl Links {
@@ -112,11 +113,14 @@ impl Links {
         if broken.is_empty() {
             return Ok(());
         }
-        if site.config.links.strict {
-            return Err(BrokenLinks::new(broken).into());
+        match site.config.check.links.severity(site.config.check.strict) {
+            Severity::Off => Ok(()),
+            Severity::Error => Err(BrokenLinks::new(broken).into()),
+            Severity::Warn => {
+                ui.warn(BrokenLinks::warning(broken));
+                Ok(())
+            }
         }
-        ui.warn(BrokenLinks::warning(broken));
-        Ok(())
     }
 }
 
@@ -136,7 +140,7 @@ impl Orphans {
     }
 
     pub(super) fn run(site: &Compiled, ui: &Ui) {
-        let Some(counts) = site.config.links.orphans else {
+        let Some(counts) = site.config.check.orphans else {
             return;
         };
         let linked: HashSet<&str> = site
@@ -273,7 +277,7 @@ mod tests {
     #[test]
     fn strict_broken_links_fail_the_build() {
         let mut config = Config::default();
-        config.links.strict = true;
+        config.check.links = crate::config::Level::named(Severity::Error);
         let ui = Ui::new(Level::Silent);
         let broken = ["/missing".to_owned()];
         let pages = [page(&broken)];
@@ -295,7 +299,7 @@ mod tests {
     #[test]
     fn lenient_broken_links_warn_without_failing() {
         let mut config = Config::default();
-        config.links.strict = false;
+        config.check.links = crate::config::Level::named(Severity::Warn);
         let ui = Ui::new(Level::Silent);
         let broken = ["/missing".to_owned(), "/gone".to_owned()];
         let pages = [page(&broken)];

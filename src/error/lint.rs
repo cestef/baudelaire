@@ -95,7 +95,7 @@ impl Lint {
             }
             Self::Snippet { .. } => {
                 "fix the snippet, or take the language out of \
-                 `lint { snippets }` if its fences are not meant to check"
+                 `check { snippets }` if its fences are not meant to check"
             }
         }
     }
@@ -137,7 +137,7 @@ pub struct Flaw {
     /// Byte span of the element within that file; `None` for an element this
     /// crate synthesized, which belongs to no `.typ` at all.
     span: Option<SourceSpan>,
-    /// Error under `lint { strict }`, warning otherwise; set by the [`Flaws`]
+    /// Error under `check { strict }`, warning otherwise; set by the [`Flaws`]
     /// constructor so parent and children render alike.
     severity: Severity,
 }
@@ -217,7 +217,7 @@ impl Diagnostic for Flaw {
     }
 }
 
-/// An error under `lint { strict }`, otherwise the identical report as a
+/// An error under `check { strict }`, otherwise the identical report as a
 /// warning.
 pub type Flaws = Aggregate<Flaw>;
 
@@ -231,9 +231,9 @@ impl Flaws {
     const KIND: Kind = Kind {
         noun: ("lint finding", "lint findings"),
         code: "baudelaire::lint::found",
-        strict: "fix each one, turn the rule off by name under `lint { }`, or \
-                 set `lint { strict #false }` to downgrade these to warnings",
-        lenient: Some("fix each one, or set `lint { strict }` to make them fail the build"),
+        strict: "fix each one, turn the rule off by name under `check { }`, or \
+                 set `check { strict #false }` to downgrade these to warnings",
+        lenient: Some("fix each one, or set `check { strict }` to make them fail the build"),
     };
 
     pub fn new(flaws: Vec<Flaw>) -> Self {
@@ -307,11 +307,11 @@ mod tests {
 pub struct Overweight {
     /// Relative to the content root.
     pub page: String,
-    /// As spelled under `lint { budget { } }`.
+    /// As spelled under `check { budget { } }`.
     pub budget: &'static str,
     pub weighed: Bytes,
     pub allowed: Bytes,
-    /// Error under `lint { budget { strict } }`, warning otherwise; set by the
+    /// Error under `check { budget { strict } }`, warning otherwise; set by the
     /// [`Overweights`] constructor so parent and children render alike.
     severity: Severity,
 }
@@ -369,7 +369,7 @@ impl Overweights {
     const KIND: Kind = Kind {
         noun: ("page over budget", "pages over budget"),
         code: "baudelaire::lint::budget",
-        strict: "ship less, or raise the limit under `lint { budget { } }`",
+        strict: "ship less, or raise the limit under `check { budget { } }`",
         lenient: None,
     };
 
@@ -377,7 +377,7 @@ impl Overweights {
         Self::at(over, Severity::Error, &Self::KIND)
     }
 
-    /// For `lint { budget { strict #false } }`.
+    /// For `check { budget { strict #false } }`.
     pub fn warning(over: Vec<Overweight>) -> Self {
         Self::at(over, Severity::Warning, &Self::KIND)
     }

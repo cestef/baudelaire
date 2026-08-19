@@ -469,7 +469,7 @@ fn json_writes_a_machine_readable_summary_to_stdout() {
     let sb = Site::new();
     sb.write(
         "config.kdl",
-        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\nlinks { strict #false }\n",
+        "site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\ncheck { links \"warn\" }\n",
     );
     sb.write("content/a.typ", "#let frontmatter = (title: \"A\",)\na");
     sb.write(

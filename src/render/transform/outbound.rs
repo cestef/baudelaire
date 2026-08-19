@@ -11,7 +11,7 @@ pub(super) struct Outbound;
 
 impl Transform for Outbound {
     fn enabled(&self, config: &Config) -> bool {
-        config.links.external.enabled
+        config.check.external.enabled
     }
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {

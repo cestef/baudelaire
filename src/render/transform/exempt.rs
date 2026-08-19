@@ -18,7 +18,7 @@ pub(super) struct Exempt;
 
 impl Transform for Exempt {
     fn enabled(&self, config: &Config) -> bool {
-        config.lint.enabled
+        config.check.enabled
     }
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {

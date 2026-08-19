@@ -146,7 +146,7 @@ fn err_a_key_value_on_a_list_key_is_refused() {
             "widths",
         ),
         (
-            "links {\n  external {\n    accept 401 foo=1\n  }\n}",
+            "check {\n  external {\n    accept 401 foo=1\n  }\n}",
             "accept",
         ),
         (

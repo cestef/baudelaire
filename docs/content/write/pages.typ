@@ -124,7 +124,7 @@ Only source targets are rewritten, which means `.typ` and, where markdown is on,
 an external URL is left alone.
 
 #callout(kind: "warn")[
-  A source link with no page behind it fails the build. `links { strict #false }`
+  A source link with no page behind it fails the build. `check { links "warn" }`
   downgrades that to a warning, and `baudelaire check` reports broken links
   without writing any output.
 ]

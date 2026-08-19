@@ -54,8 +54,8 @@ scenario "a broken internal link only warns when strictness is off" {
         content "content"
         dist "public"
       }
-      links {
-        strict #false
+      check {
+        links "warn"
       }
       """#
     "content/posts/a.typ" #"""
@@ -321,7 +321,7 @@ scenario "a dangling anchor is a warning when links are not strict" {
   files {
     "config.kdl" #"""
       site "T"
-      links { strict #false }
+      check { links "warn" }
       """#
     "content/guide.typ" #"""
       #let frontmatter = (title: "Guide",)

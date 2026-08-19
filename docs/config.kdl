@@ -55,16 +55,10 @@ html {
   }
 }
 
-// Permalink shape and link checking are one subject. `style "clean"` gives
-// directory-per-page URLs (`/guide/` not `/guide.html`); use "flat" for `.html`
-// files instead.
+// Permalink shape. `style "clean"` gives directory-per-page URLs (`/guide/`
+// not `/guide.html`); use "flat" for `.html` files instead.
 links {
   style "clean"
-  // Reachability: the sidebar does not count as a way in, but the generated
-  // group indexes do. Run `orphans "authored"` by hand to ask the stricter
-  // question -- did anyone *write* about this page -- which is noisy here only
-  // because a blog post is reached from its index and nothing else.
-  orphans "any"
 }
 
 // Asset pipeline: minify CSS (lightningcss), bundle + minify the TypeScript
@@ -171,7 +165,12 @@ client {
 // A page's title is the `h1` the template writes and its own sections open at
 // `==`, which typst-html renders as `h3`. `start` says so, and every level under
 // it is still checked.
-lint {
+check {
+  // Reachability: the sidebar does not count as a way in, but the generated
+  // group indexes do. Run `orphans "authored"` by hand to ask the stricter
+  // question, did anyone *write* about this page, which is noisy here only
+  // because a blog post is reached from its index and nothing else.
+  orphans "any"
   headings {
     start 3
   }

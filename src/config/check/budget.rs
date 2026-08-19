@@ -1,4 +1,4 @@
-//! `lint { budget { } }`: per-page weight limits.
+//! `check { budget { } }`: per-page weight limits.
 
 use crate::config::dispatch::Kind::{Flag, Size};
 use crate::config::dispatch::{Block, Section};

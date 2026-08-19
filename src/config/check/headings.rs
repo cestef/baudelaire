@@ -1,4 +1,4 @@
-//! `lint { headings { } }`: the heading-level rule and the outline it judges
+//! `check { headings { } }`: the heading-level rule and the outline it judges
 //! against.
 
 use crate::config::dispatch::Kind::{Level as Loud, Number};

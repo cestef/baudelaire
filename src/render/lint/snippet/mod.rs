@@ -6,7 +6,7 @@ pub mod parser;
 
 use std::path::Path;
 
-use crate::config::{LintConfig, SnippetConfig};
+use crate::config::{CheckConfig, SnippetConfig};
 use crate::error::Lint;
 use crate::render::snippet::{Fault, Snippet};
 
@@ -47,7 +47,7 @@ impl<'a> Checker<'a> {
 pub(super) struct Snippets;
 
 impl Check for Snippets {
-    fn enabled(&self, config: &LintConfig) -> bool {
+    fn enabled(&self, config: &CheckConfig) -> bool {
         config.snippets.iter().any(|(_, rule)| rule.level.on())
     }
 

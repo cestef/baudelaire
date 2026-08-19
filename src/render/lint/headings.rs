@@ -2,7 +2,7 @@
 //! up any number of levels closes sections and is how a document ends a
 //! chapter.
 
-use crate::config::LintConfig;
+use crate::config::CheckConfig;
 use crate::error::Lint;
 
 use super::{Check, Cx, Findings, Page};
@@ -11,7 +11,7 @@ use super::{Check, Cx, Findings, Page};
 pub(super) struct Headings;
 
 impl Check for Headings {
-    fn enabled(&self, config: &LintConfig) -> bool {
+    fn enabled(&self, config: &CheckConfig) -> bool {
         config.headings.level.on()
     }
 

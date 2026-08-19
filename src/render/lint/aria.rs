@@ -1,7 +1,7 @@
 //! ARIA that says nothing: a `role` that is not a role, an `aria-*` attribute
 //! ARIA does not define, and an id reference pointing at no element.
 
-use crate::config::LintConfig;
+use crate::config::CheckConfig;
 use crate::error::Lint;
 
 use super::{Check, Cx, Findings, Page};
@@ -188,7 +188,7 @@ impl Aria {
 }
 
 impl Check for Aria {
-    fn enabled(&self, config: &LintConfig) -> bool {
+    fn enabled(&self, config: &CheckConfig) -> bool {
         config.aria.on()
     }
 

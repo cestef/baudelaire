@@ -1,7 +1,7 @@
-// `lint { }`: accessibility and structure rules over the typed DOM, and
+// `check { }`: accessibility and structure rules over the typed DOM, and
 // per-page weight budgets.
 //
-// Every rule is off until a `lint { }` block asks for them, and a finding is a
+// Every rule is off until a `check { }` block asks for them, and a finding is a
 // warning until `strict` says otherwise. A budget is the exception: an explicit
 // limit always fails the build.
 
@@ -41,7 +41,7 @@ scenario "a skipped heading level fails a strict build" {
         content "content"
         dist "public"
       }
-      lint { strict }
+      check { strict }
       """#
     "content/a.typ" #"""
       #let frontmatter = (title: "A",)
@@ -65,7 +65,7 @@ scenario "an outline that opens at `start` is not a skip" {
         dist "public"
         templates "templates"
       }
-      lint {
+      check {
         strict
         headings {
           start 3
@@ -100,7 +100,7 @@ scenario "`start` excuses where a page opens and not a skip further down" {
         dist "public"
         templates "templates"
       }
-      lint {
+      check {
         strict
         headings {
           start 4
@@ -135,7 +135,7 @@ scenario "`start` excuses the opening level and nothing deeper" {
         dist "public"
         templates "templates"
       }
-      lint {
+      check {
         strict
         headings {
           start 3
@@ -169,7 +169,7 @@ scenario "a heading that steps down one level at a time is fine" {
         content "content"
         dist "public"
       }
-      lint { strict }
+      check { strict }
       """#
     "content/a.typ" #"""
       #let frontmatter = (title: "A",)
@@ -196,7 +196,7 @@ scenario "an image with no alt fails a strict build" {
         content "content"
         dist "public"
       }
-      lint { strict }
+      check { strict }
       """#
     "content/a.typ" #"""
       #let frontmatter = (title: "A",)
@@ -217,7 +217,7 @@ scenario "an empty alt and a decorative image are both deliberate" {
         content "content"
         dist "public"
       }
-      lint { strict }
+      check { strict }
       """#
     "content/a.typ" #"""
       #let frontmatter = (title: "A",)
@@ -240,7 +240,7 @@ scenario "a rule turned off by name stops reporting" {
         content "content"
         dist "public"
       }
-      lint {
+      check {
         strict
         alt #false
       }
@@ -264,7 +264,7 @@ scenario "a repeated id fails a strict build" {
         content "content"
         dist "public"
       }
-      lint { strict }
+      check { strict }
       """#
     "content/a.typ" #"""
       #let frontmatter = (title: "A",)
@@ -286,7 +286,7 @@ scenario "an unknown role fails a strict build" {
         content "content"
         dist "public"
       }
-      lint { strict }
+      check { strict }
       """#
     "content/a.typ" #"""
       #let frontmatter = (title: "A",)
@@ -307,7 +307,7 @@ scenario "an aria reference to nothing fails a strict build" {
         content "content"
         dist "public"
       }
-      lint { strict }
+      check { strict }
       """#
     "content/a.typ" #"""
       #let frontmatter = (title: "A",)
@@ -328,7 +328,7 @@ scenario "aria that resolves and roles that exist are left alone" {
         content "content"
         dist "public"
       }
-      lint { strict }
+      check { strict }
       """#
     "content/a.typ" #"""
       #let frontmatter = (title: "A",)
@@ -351,7 +351,7 @@ scenario "a finding only warns until strictness is asked for" {
         content "content"
         dist "public"
       }
-      lint { }
+      check { }
       """#
     "content/a.typ" #"""
       #let frontmatter = (title: "A",)
@@ -373,7 +373,7 @@ scenario "a page over its html budget fails the build" {
         content "content"
         dist "public"
       }
-      lint {
+      check {
         budget { html 200 }
       }
       """#
@@ -398,7 +398,7 @@ scenario "a stylesheet counts against the css budget, not the html one" {
         assets "assets"
       }
       assets { minify #false }
-      lint {
+      check {
         budget { css 500 }
       }
       """#
@@ -438,7 +438,7 @@ scenario "a page inside every budget builds" {
         content "content"
         dist "public"
       }
-      lint {
+      check {
         budget {
           html "1MB"
           js 0
@@ -464,7 +464,7 @@ scenario "a budget written in something that is not a size is a config error" {
   files {
     "config.kdl" #"""
       site "T"
-      lint {
+      check {
         budget { html "quite small" }
       }
       """#
@@ -489,7 +489,7 @@ scenario "a rule names its own severity over the site's strict" {
         content "content"
         dist "public"
       }
-      lint {
+      check {
         strict #true
         headings "warn"
       }
@@ -518,7 +518,7 @@ scenario "every rule warning leaves the build green" {
         content "content"
         dist "public"
       }
-      lint {
+      check {
         strict #true
         headings "warn"
         alt "warn"
@@ -547,7 +547,7 @@ scenario "a rule turned off by name or by flag finds nothing" {
         content "content"
         dist "public"
       }
-      lint {
+      check {
         strict #true
         headings "off"
         alt #false
@@ -578,7 +578,7 @@ scenario "a budget can report instead of failing" {
         content "content"
         dist "public"
       }
-      lint {
+      check {
         budget {
           strict #false
           html 1
@@ -596,7 +596,7 @@ scenario "a budget can report instead of failing" {
   }
 }
 
-// `lint { snippets { } }`: a code fence checked against the language it claims,
+// `check { snippets { } }`: a code fence checked against the language it claims,
 // by this build's parser for it or by a command the site names.
 
 scenario "a malformed fence is reported where its checker stopped" {
@@ -607,7 +607,7 @@ scenario "a malformed fence is reported where its checker stopped" {
         content "content"
         dist "public"
       }
-      lint {
+      check {
         snippets { kdl }
       }
       """#
@@ -633,7 +633,7 @@ scenario "a fence that parses is not reported" {
         content "content"
         dist "public"
       }
-      lint {
+      check {
         snippets {
           kdl
           json
@@ -669,7 +669,7 @@ scenario "a language the config does not name is left alone" {
         content "content"
         dist "public"
       }
-      lint {
+      check {
         snippets { json }
       }
       """#
@@ -695,7 +695,7 @@ scenario "a fence language names its own severity" {
         content "content"
         dist "public"
       }
-      lint {
+      check {
         snippets { kdl "error" }
       }
       """#
@@ -720,7 +720,7 @@ scenario "a language nothing here parses is refused rather than never run" {
         content "content"
         dist "public"
       }
-      lint {
+      check {
         snippets { sh }
       }
       """#
@@ -741,7 +741,7 @@ scenario "a language with a command of its own is checked by it" {
         content "content"
         dist "public"
       }
-      lint {
+      check {
         snippets {
           sh run="test -s {file}"
           text run="false"
@@ -776,7 +776,7 @@ scenario "a hidden line is checked but never rendered" {
         content "content"
         dist "public"
       }
-      lint {
+      check {
         snippets {
           kdl hidden="%% "
         }
@@ -810,7 +810,7 @@ scenario "a fragment that only parses with its hidden lines is not reported" {
         content "content"
         dist "public"
       }
-      lint {
+      check {
         snippets {
           kdl hidden="%% "
         }
@@ -839,7 +839,7 @@ scenario "a fence that is wrong on purpose says so and is left alone" {
         content "content"
         dist "public"
       }
-      lint {
+      check {
         snippets {
           kdl "error" hidden="%% "
         }
@@ -871,7 +871,7 @@ scenario "an element marked off is left alone by every rule" {
         content "content"
         dist "public"
       }
-      lint {
+      check {
         strict
         snippets { kdl }
       }
@@ -900,7 +900,7 @@ scenario "a marked region is left alone, native elements included" {
         content "content"
         dist "public"
       }
-      lint {
+      check {
         strict
         snippets { kdl }
       }
@@ -942,7 +942,7 @@ scenario "a marker inside a marker leaves nothing behind" {
         content "content"
         dist "public"
       }
-      lint { strict }
+      check { strict }
       """#
     "content/a.typ" #"""
       #import "@baudelaire/html:0.1.0": nolint
@@ -977,7 +977,7 @@ scenario "a marker names the rules it keeps off" {
         content "content"
         dist "public"
       }
-      lint { }
+      check { }
       """#
     "content/a.typ" #"""
       #import "@baudelaire/html:0.1.0": nolint

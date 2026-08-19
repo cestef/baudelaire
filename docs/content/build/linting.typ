@@ -8,7 +8,7 @@ Accessibility checks over the built pages, and a byte ceiling on what each one
 ships.
 
 ```kdl
-lint {
+check {
   strict
   budget {
     html "50kB"
@@ -18,9 +18,12 @@ lint {
 }
 ```
 
-Nothing is linted until the block is there. Its presence turns every rule on, and
-`lint #false` turns them all off again, which is how a profile says it. Findings
-are warnings: the build still succeeds. `strict` makes a finding fail it instead.
+Nothing is linted until the block is there. Its presence turns every markup rule
+on, and `check #false` turns them all off again, which is how a profile says it.
+Findings are warnings: the build still succeeds. `strict` makes a finding fail it
+instead. The link rules below answer for themselves either way, so
+`check #false { links "warn" }` is a site that checks its links and lints
+nothing.
 
 Because pages are post-processed as a typed DOM and every element still carries
 the typst span it came from, a finding is reported against the line you wrote,
@@ -48,7 +51,7 @@ own severity keeps it, so a site can hold everything to `error` and still let on
 report:
 
 ```kdl
-lint {
+check {
   strict
   headings "warn"
   alt #false
@@ -80,7 +83,7 @@ are accepted by prefix, since they are real ARIA extension modules.
   say which level yours open at:
 
   ```kdl
-  lint {
+  check {
     headings {
       start 3
     }
@@ -93,19 +96,30 @@ are accepted by prefix, since they are real ARIA extension modules.
   spellings take a block.
 ]
 
-`links { strict }` is the same idea for broken internal links, and it defaults to
-failing. That asymmetry is deliberate: a `.typ` link naming no page is a
-certainty, while a missing `alt` is a judgement about content baudelaire did not
-write.
+== Internal links
+
+`links` is the same kind of rule for a `.typ` link that names no page, and it
+takes the same severities. It defaults to `"error"` rather than following
+`strict`, and that asymmetry is deliberate: a link naming no page is a certainty,
+while a missing `alt` is a judgement about content baudelaire did not write.
+
+```kdl
+check {
+  links "warn"
+}
+```
+
+It is read whether or not the markup rules are on, so a site that lints nothing
+still gets its links checked.
 
 == Outbound links
 
-`links { external }` verifies every `http(s)` link the pages carry. It reaches
+`external` verifies every `http(s)` link the pages carry. It reaches
 the network, so only `baudelaire check` runs it: a build produces the same bytes
 offline, on a plane, and when somebody else's host is having a bad afternoon.
 
 ```kdl
-links {
+check {
   external {
     fresh "7d"
     timeout "10s"
@@ -116,7 +130,7 @@ links {
 }
 ```
 
-The block's presence turns the check on, so `links { external }` alone is the
+The block's presence turns the check on, so `check { external }` alone is the
 whole of it; `external #false` turns it back off.
 
 #table(
@@ -160,7 +174,7 @@ A ceiling on what one page ships, written in bytes or in the units the build
 summary prints (`50kB`, `1.5MB`, `0`).
 
 ```kdl
-lint {
+check {
   budget {
     html "50kB"
     js 0
@@ -195,7 +209,7 @@ down, and a limit that only warns is a number in a config file.
 Adopting one on a site that already has pages is the exception, and it says so:
 
 ```kdl
-lint {
+check {
   budget {
     strict #false
     html "50kB"
@@ -209,7 +223,7 @@ it is a limit.
 ```text
 × 1 page over budget
 ├─▶ posts/heavy.typ: `images` is 412.6 KiB, over the 300 KiB budget
-╰─▶ help: ship less, or raise the limit under `lint { budget { } }`
+╰─▶ help: ship less, or raise the limit under `check { budget { } }`
 ```
 
 A file this build did not write weighs nothing: a script pulled from a CDN, or
@@ -230,7 +244,7 @@ worth: nothing until a language is named, and from then on every fence of it is
 read by something that knows the language.
 
 ```kdl
-lint {
+check {
   snippets {
     kdl  run="$BAUDELAIRE config check --isolated --compact {file}"
     json
@@ -321,9 +335,9 @@ it.
 == Elsewhere
 
 Two more checks are documented elsewhere, because neither is about a page's own
-markup: broken internal links (`links { strict }`, see
+markup: broken internal links (`check { links }`, see
 #link("../write/pages.typ")[pages]) and the pages nothing links to
-(`links { orphans }`, see #link("../write/backlinks.typ")[backlinks]).
+(`check { orphans }`, see #link("../write/backlinks.typ")[backlinks]).
 
 == Under the cache
 

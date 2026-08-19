@@ -97,7 +97,7 @@ pub struct Rewrite {
     /// dependencies: baudelaire reads them, not typst, so nothing else would
     /// notice an edit.
     pub read: Vec<std::path::PathBuf>,
-    /// What the lint pass found on this page, empty unless `lint { }` is on.
+    /// What the lint pass found on this page, empty unless `check { }` is on.
     pub lints: Vec<Finding>,
     /// What the page ships, for the budget check.
     pub weight: Weight,
@@ -206,10 +206,15 @@ impl Renderer {
                 .push(crate::error::TemplateOwnsRoot::new(named.display()).into());
         }
         self.transforms.apply(doc, &mut cx);
-        if config.lint.enabled {
-            let (lints, weight) =
-                self.lints
-                    .run(doc, &config.lint, world, &self.root, &cx.fences, &cx.exempt);
+        if config.check.enabled {
+            let (lints, weight) = self.lints.run(
+                doc,
+                &config.check,
+                world,
+                &self.root,
+                &cx.fences,
+                &cx.exempt,
+            );
             cx.found.lints = lints;
             cx.found.weight = weight;
         }

@@ -3,7 +3,7 @@
 
 use std::collections::HashSet;
 
-use crate::config::LintConfig;
+use crate::config::CheckConfig;
 use crate::error::Lint;
 
 use super::{Check, Cx, Findings, Page};
@@ -12,7 +12,7 @@ use super::{Check, Cx, Findings, Page};
 pub(super) struct Ids;
 
 impl Check for Ids {
-    fn enabled(&self, config: &LintConfig) -> bool {
+    fn enabled(&self, config: &CheckConfig) -> bool {
         config.ids.on()
     }
 

@@ -58,15 +58,15 @@ fn addressable(path: &str) -> bool {
 
 #[test]
 fn a_key_reads_the_value_its_own_line_writes() {
-    let config = parse("lint {\n  headings {\n    start 3\n  }\n}");
+    let config = parse("check {\n  headings {\n    start 3\n  }\n}");
     let values = config.values();
-    assert_eq!(values.at("lint.headings.start"), Some(&Value::Number(3)));
+    assert_eq!(values.at("check.headings.start"), Some(&Value::Number(3)));
     assert_eq!(
         values.at("paths.dist"),
         Some(&Value::Text("public".to_owned())),
         "a key nothing writes still reads its default"
     );
-    assert_eq!(values.at("lint.headings.nothing"), None);
+    assert_eq!(values.at("check.headings.nothing"), None);
 }
 
 /// A section turned off carries the boolean its own line would, and its keys
@@ -75,14 +75,14 @@ fn a_key_reads_the_value_its_own_line_writes() {
 #[test]
 fn a_section_that_is_off_says_so_on_its_own_line() {
     let off = Config::default().values();
-    let Some(Value::Node { args, keys, .. }) = off.at("lint") else {
+    let Some(Value::Node { args, keys, .. }) = off.at("check") else {
         panic!("a section reads as a node");
     };
     assert_eq!(args, &vec![Value::Flag(false)]);
     assert!(!keys.is_empty(), "and still holds its keys");
 
-    let on = parse("lint {\n  strict\n}");
-    assert_eq!(on.values().at("lint.strict"), Some(&Value::Flag(true)));
+    let on = parse("check {\n  strict\n}");
+    assert_eq!(on.values().at("check.strict"), Some(&Value::Flag(true)));
 }
 
 #[test]
@@ -118,10 +118,10 @@ fn an_untouched_key_comes_from_the_defaults() {
 #[test]
 fn a_block_is_written_back_as_kdl() {
     let config =
-        parse("lint {\n  headings {\n    start 3\n  }\n  budget {\n    html \"1kB\"\n  }\n}");
+        parse("check {\n  headings {\n    start 3\n  }\n  budget {\n    html \"1kB\"\n  }\n}");
     let written = config
         .values()
-        .at("lint.budget")
+        .at("check.budget")
         .expect("a held block")
         .scalar();
     assert!(written.contains("html 1024"), "{written}");
@@ -178,10 +178,10 @@ fn a_block_carries_its_arguments_and_quotes_the_keys_that_need_it() {
         "{written}"
     );
 
-    let config = parse("lint {\n  snippets {\n    kdl \"warn\"\n  }\n}");
+    let config = parse("check {\n  snippets {\n    kdl \"warn\"\n  }\n}");
     let written = config
         .values()
-        .at("lint.snippets")
+        .at("check.snippets")
         .expect("a held block")
         .scalar();
     assert!(written.starts_with("kdl \"warn\""), "{written}");

@@ -53,7 +53,7 @@ Because config is only a default, adopting a theme never touches a site's `site`
 
 Ten blocks are the site's alone, and `theme.kdl` is refused outright for naming any of them: `paths`, `hooks`, `announce`, `deploy`, `profiles`, `serve`, `typst`, `security`, `lint` and `client`. They decide what runs on the machine doing the building, where the result is sent, and what a browser is told to trust, none of which is a styling decision or something a reader of your README would think to check. `client` is on the list because its values are written into the bundled JavaScript verbatim, and a config string expands `${VAR}` from the build machine's environment.
 
-Two of them run commands through the system shell: `hooks` around the build, and `lint { snippets { run } }` over every code fence. A theme that could set either would run code on every build of every site that adopted it, and for a package theme that code need not appear in the project at all.
+Two of them run commands through the system shell: `hooks` around the build, and `check { snippets { run } }` over every code fence. A theme that could set either would run code on every build of every site that adopted it, and for a package theme that code need not appear in the project at all.
 
 Two keys inside blocks a theme *is* allowed are refused for the same reason: a `headers { rules { } }` rule, and a `redirect` whose old path carries a `*`. Both let a fetched theme speak to a browser in the site's name. A header rule sends any header on any path, and `Refresh` alone forwards every page somewhere else; a wildcard redirect claims no output file, so the check that stops a theme's redirect burying a real page has nothing to compare it against.
 

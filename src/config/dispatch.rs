@@ -353,7 +353,7 @@ pub(super) trait Section: Sized + 'static {
     const LEADING: usize = 0;
 
     /// The flag this section's own presence turns on, for a section that has
-    /// one: `lint` enables linting, and `lint #false` takes it back off again.
+    /// one: `check` enables linting, and `check #false` takes it back off again.
     ///
     /// Declared as the setter so that "this section has a switch" and "here is
     /// the field it sets" are one statement. Off has to be sayable: a profile

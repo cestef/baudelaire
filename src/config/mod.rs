@@ -10,6 +10,7 @@ pub mod announce;
 pub mod artifacts;
 pub mod assets;
 pub mod cache;
+pub mod check;
 pub mod content;
 pub mod deploy;
 pub(crate) mod dispatch;
@@ -22,7 +23,6 @@ pub mod html;
 pub mod key;
 pub mod lang;
 pub mod links;
-pub mod lint;
 pub mod named;
 pub mod navigation;
 mod node;
@@ -68,6 +68,14 @@ pub use assets::sourcemap::{SourceMapConfig, SourceMaps};
 pub use assets::tailwind::TailwindConfig;
 pub use assets::targets::{TargetConfig, Version};
 pub use cache::CacheConfig;
+pub use check::CheckConfig;
+pub use check::Linked;
+pub use check::budget::BudgetConfig;
+pub use check::external::ExternalConfig;
+pub use check::headings::HeadingConfig;
+pub use check::rule::{Rule, Ruled};
+pub use check::severity::{Level, Severity};
+pub use check::snippets::SnippetConfig;
 pub use content::ContentConfig;
 pub use content::collection::{CollectionConfig, PaginateConfig, SortKey};
 pub use content::drafts::DraftConfig;
@@ -97,14 +105,7 @@ pub use html::meta::MetaConfig;
 pub use html::region::RegionConfig;
 pub use html::{Footnotes, HtmlConfig};
 pub use lang::LanguageConfig;
-pub use links::external::ExternalConfig;
-pub use links::{LinkConfig, Linked};
-pub use lint::LintConfig;
-pub use lint::budget::BudgetConfig;
-pub use lint::headings::HeadingConfig;
-pub use lint::rule::{Rule, Ruled};
-pub use lint::severity::{Level, Severity};
-pub use lint::snippets::SnippetConfig;
+pub use links::LinkConfig;
 pub use named::Named;
 pub use navigation::NavigationConfig;
 pub use navigation::spa::{Prefetch, SpaConfig};
@@ -158,9 +159,9 @@ pub struct Config {
     /// Where the paths no page owns forward to, and whether a rule file or an
     /// HTML stub says so.
     pub redirects: RedirectsConfig,
-    /// Post-render linting of the built pages: accessibility and structure
-    /// rules over the typed DOM, and per-page weight budgets.
-    pub lint: LintConfig,
+    /// What the build verifies about the pages it produced: that their links
+    /// resolve, that their markup holds, and that none outweighs its budget.
+    pub check: CheckConfig,
     /// Integrity attributes and the content security policy, both derived from
     /// what the pages actually load and inline.
     pub security: SecurityConfig,
@@ -380,7 +381,7 @@ impl Config {
     /// Suffixed because [`Config::TYPST`] is already the *extension* `typ`.
     const TYPST_SECTION: &'static str = "typst";
     const SECURITY: &'static str = "security";
-    const LINT: &'static str = "lint";
+    const CHECK: &'static str = "check";
     const CLIENT: &'static str = "client";
 
     /// The sections a site owns outright, and so the ones a theme's `theme.kdl`
@@ -394,9 +395,15 @@ impl Config {
         Self::SERVE,
         Self::TYPST_SECTION,
         Self::SECURITY,
-        Self::LINT,
+        Self::CHECK,
         Self::CLIENT,
     ];
+
+    /// Whether this build needs the site's link graph at all; the one gate the
+    /// render pass records edges behind.
+    pub fn graph(&self) -> bool {
+        self.links.backlinks || self.check.orphans.is_some()
+    }
 
     /// The text this was parsed from, which is what `config explain` reads a
     /// key's own line back out of.
@@ -819,8 +826,8 @@ impl Config {
 /// custom port does not invalidate a `build`; `profiles`, since applying a
 /// profile mutates the fields above and those already carry the change; and
 /// `source`, kept only for error spans, so a comment-only edit is not a
-/// rebuild. `lint` is in, though it shapes no markup: with linting off a page
-/// records no findings and no weight.
+/// rebuild. `check` is in, though it shapes no markup: with the rules off a
+/// page records no findings and no weight.
 impl std::hash::Hash for Config {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         let Self {
@@ -838,7 +845,7 @@ impl std::hash::Hash for Config {
             html,
             links,
             redirects,
-            lint,
+            check,
             security,
             headers,
             generate,
@@ -869,7 +876,7 @@ impl std::hash::Hash for Config {
         )
             .hash(state);
         (
-            assets, html, links, redirects, lint, security, headers, generate, artifacts,
+            assets, html, links, redirects, check, security, headers, generate, artifacts,
             navigation, prune,
         )
             .hash(state);
@@ -906,7 +913,7 @@ impl Default for Config {
             html: HtmlConfig::default(),
             links: LinkConfig::default(),
             redirects: RedirectsConfig::default(),
-            lint: LintConfig::default(),
+            check: CheckConfig::default(),
             security: SecurityConfig::default(),
             headers: HeadersConfig::default(),
             generate: GenerateConfig::default(),
@@ -960,8 +967,8 @@ pub enum Scratch {
     /// What the external-link check has already seen: loss re-requests every
     /// outbound URL.
     Links,
-    /// Code fences written out for a `lint { snippets { } }` command to read:
-    /// loss is rewritten by the next lint pass.
+    /// Code fences written out for a `check { snippets { } }` command to read:
+    /// loss is rewritten by the next check pass.
     Snippets,
 }
 
@@ -1092,11 +1099,11 @@ impl Section for Config {
             |c, n, t| c.redirects.fill(n, t),
         ),
         (
-            Self::LINT,
-            Nested(LintConfig::rows),
-            "Checks run over the built pages. Its presence turns them on; `#false` turns them off again.",
-            |c| c.lint.values(),
-            |c, n, t| c.lint.fill(n, t),
+            Self::CHECK,
+            Nested(CheckConfig::rows),
+            "What the build verifies about the pages it produced. Its presence turns the markup rules on; `#false` turns them off again.",
+            |c| c.check.values(),
+            |c, n, t| c.check.fill(n, t),
         ),
         (
             Self::SECURITY,
