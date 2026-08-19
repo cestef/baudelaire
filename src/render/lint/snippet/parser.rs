@@ -10,6 +10,29 @@ use typst::syntax::{DiagSpanKind, Source};
 use crate::render::snippet::{Fault, Position, Snippet};
 use crate::world::rules::TYPST;
 
+/// The registered parsers, looked up by the language a fence names.
+pub struct Parsers;
+
+impl Parsers {
+    /// The parser claiming `lang`, or `None` for a language nothing parses.
+    pub fn of(lang: &str) -> Option<&'static dyn Parser> {
+        PARSERS
+            .iter()
+            .find(|parser| parser.langs().contains(&lang))
+            .map(AsRef::as_ref)
+    }
+
+    /// Every language a fence may name without giving a command of its own, in
+    /// registration order.
+    pub fn langs() -> Vec<&'static str> {
+        PARSERS
+            .iter()
+            .flat_map(|parser| parser.langs())
+            .copied()
+            .collect()
+    }
+}
+
 /// A language whose snippets baudelaire can check without spawning anything.
 pub trait Parser: Send + Sync {
     /// The fence languages this claims, in the spelling an author writes after
@@ -32,24 +55,6 @@ fn builtin() -> Vec<Box<dyn Parser>> {
         Box::new(Yaml),
         Box::new(Typ),
     ]
-}
-
-/// The parser claiming `lang`, or `None` for a language nothing parses.
-pub fn of(lang: &str) -> Option<&'static dyn Parser> {
-    PARSERS
-        .iter()
-        .find(|parser| parser.langs().contains(&lang))
-        .map(AsRef::as_ref)
-}
-
-/// Every language a fence may name without giving a command of its own, in
-/// registration order.
-pub fn langs() -> Vec<&'static str> {
-    PARSERS
-        .iter()
-        .flat_map(|parser| parser.langs())
-        .copied()
-        .collect()
 }
 
 struct Kdl;
@@ -170,7 +175,7 @@ impl Parser for Typ {
 mod tests {
     use typst::syntax::Span;
 
-    use super::{Snippet, langs, of};
+    use super::{Parsers, Snippet};
 
     fn snippet(lang: &str, text: &str) -> Snippet {
         Snippet::new(lang, text, Span::detached())
@@ -185,7 +190,7 @@ mod tests {
             ("toml", "a = 1\n"),
             ("yaml", "a: 1\n"),
         ] {
-            let parser = of(lang).unwrap_or_else(|| panic!("{lang} has a parser"));
+            let parser = Parsers::of(lang).unwrap_or_else(|| panic!("{lang} has a parser"));
             let faults = parser.check(&snippet(lang, text));
             assert!(faults.is_empty(), "{lang} objected to {text:?}");
         }
@@ -200,7 +205,7 @@ mod tests {
             ("toml", "a = \n"),
             ("yaml", "a: [1\n"),
         ] {
-            let parser = of(lang).unwrap_or_else(|| panic!("{lang} has a parser"));
+            let parser = Parsers::of(lang).unwrap_or_else(|| panic!("{lang} has a parser"));
             let faults = parser.check(&snippet(lang, text));
             assert!(!faults.is_empty(), "{lang} accepted {text:?}");
             for fault in faults {
@@ -214,7 +219,7 @@ mod tests {
 
     #[test]
     fn a_language_nothing_parses_has_no_parser() {
-        assert!(of("sh").is_none());
-        assert!(langs().contains(&"kdl"));
+        assert!(Parsers::of("sh").is_none());
+        assert!(Parsers::langs().contains(&"kdl"));
     }
 }

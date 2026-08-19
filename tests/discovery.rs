@@ -2,7 +2,7 @@ mod common;
 
 use std::fs;
 
-use baudelaire::content::discover;
+use baudelaire::content::Discovery;
 
 use common::{Site, load_page, project};
 
@@ -50,7 +50,7 @@ fn collection_sort_and_reverse_applied() {
         "content/posts/new.typ",
         &frontmatter_post("New", "new", "year: 2024, month: 1, day: 1", &[]),
     );
-    let cols = discover(&site.config(), &project(&site.config())).unwrap();
+    let cols = Discovery::all(&site.config(), &project(&site.config())).unwrap();
     let posts = cols.iter().find(|c| c.id == "posts").unwrap();
     let slugs: Vec<_> = posts
         .pages
@@ -92,7 +92,7 @@ fn discovers_collections_and_pages() {
     );
 
     let cfg = site.config();
-    let collections = discover(&cfg, &project(&cfg)).unwrap();
+    let collections = Discovery::all(&cfg, &project(&cfg)).unwrap();
     let ids: Vec<&str> = collections.iter().map(|c| c.id.as_str()).collect();
     assert!(ids.contains(&"posts"));
     assert!(ids.contains(&"notes"));
@@ -126,7 +126,7 @@ fn glob_assigns_files_to_its_collection_regardless_of_directory() {
         "content/articles/sub/b.typ",
         "#let frontmatter = (title: \"B\",)\nb",
     );
-    let cols = discover(&site.config(), &project(&site.config())).unwrap();
+    let cols = Discovery::all(&site.config(), &project(&site.config())).unwrap();
     let ids: Vec<&str> = cols.iter().map(|c| c.id.as_str()).collect();
     assert!(ids.contains(&"blog"), "glob collection missing: {ids:?}");
     assert!(
@@ -145,7 +145,7 @@ fn invalid_glob_reports_error() {
         "site \"T\"\npaths {\n  content \"content\"\n}\ncontent {\n  collections {\n    x \"a/{unclosed\"\n  }\n}\n",
     );
     site.write("content/a/p.typ", "#let frontmatter = (title: \"P\",)\np");
-    let err = discover(&site.config(), &project(&site.config())).unwrap_err();
+    let err = Discovery::all(&site.config(), &project(&site.config())).unwrap_err();
     assert!(
         err.to_string().contains("glob"),
         "expected a glob error: {err}"
@@ -328,7 +328,7 @@ fn empty_content_dir_returns_empty() {
     );
     fs::create_dir_all(site.root.join("content")).unwrap();
     let cfg = site.config();
-    let collections = discover(&cfg, &project(&cfg)).unwrap();
+    let collections = Discovery::all(&cfg, &project(&cfg)).unwrap();
     assert!(collections.is_empty());
 }
 
@@ -340,7 +340,7 @@ fn missing_content_dir_returns_empty() {
         "site \"T\"\npaths {\n  content \"content\"\n}",
     );
     let cfg = site.config();
-    let collections = discover(&cfg, &project(&cfg)).unwrap();
+    let collections = Discovery::all(&cfg, &project(&cfg)).unwrap();
     assert!(collections.is_empty());
 }
 
@@ -357,7 +357,7 @@ fn nested_dirs_traversed() {
         "#let frontmatter = (title: \"Feb\",)\nbody",
     );
     let cfg = site.config();
-    let collections = discover(&cfg, &project(&cfg)).unwrap();
+    let collections = Discovery::all(&cfg, &project(&cfg)).unwrap();
     let posts = collections.iter().find(|c| c.id == "posts").unwrap();
     assert_eq!(posts.pages.len(), 2);
 }
@@ -375,7 +375,7 @@ fn hidden_dirs_skipped() {
         "#let frontmatter = (title: \"F\",)\nbody",
     );
     let cfg = site.config();
-    let collections = discover(&cfg, &project(&cfg)).unwrap();
+    let collections = Discovery::all(&cfg, &project(&cfg)).unwrap();
     assert_eq!(collections.len(), 1);
     assert_eq!(collections[0].pages.len(), 1);
 }

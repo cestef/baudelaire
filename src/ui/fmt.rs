@@ -259,10 +259,14 @@ impl<T: Display> Display for List<'_, T> {
     }
 }
 
-/// Wall-clock `HH:MM:SS` (UTC) stamped on dev-server log lines.
-pub(super) fn clock() -> String {
-    let t = OffsetDateTime::now_utc();
-    format!("{:02}:{:02}:{:02}", t.hour(), t.minute(), t.second())
+/// Wall-clock `HH:MM:SS` (UTC), stamped on dev-server log lines.
+pub(super) struct Clock;
+
+impl Display for Clock {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let t = OffsetDateTime::now_utc();
+        write!(f, "{:02}:{:02}:{:02}", t.hour(), t.minute(), t.second())
+    }
 }
 
 const DOT: &str = " · ";

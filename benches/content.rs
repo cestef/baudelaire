@@ -15,7 +15,7 @@ use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 
-use baudelaire::content::{discover, plan};
+use baudelaire::content::{Discovery, Plan};
 
 use common::{PAGE_COUNTS, Shape};
 
@@ -34,7 +34,7 @@ fn discover_pages(c: &mut Criterion) {
         let project = common::project(cfg);
         group.throughput(Throughput::Elements(n as u64));
         group.bench_with_input(BenchmarkId::from_parameter(n), &dir, |b, _| {
-            b.iter(|| black_box(discover(cfg, &project).unwrap()));
+            b.iter(|| black_box(Discovery::all(cfg, &project).unwrap()));
         });
     }
     group.finish();
@@ -47,7 +47,7 @@ fn plan_pages(c: &mut Criterion) {
         let project = common::project(cfg);
         group.throughput(Throughput::Elements(n as u64));
         group.bench_with_input(BenchmarkId::from_parameter(n), &dir, |b, _| {
-            b.iter(|| black_box(plan(cfg, &project).unwrap()));
+            b.iter(|| black_box(Plan::of(cfg, &project).unwrap()));
         });
     }
     group.finish();

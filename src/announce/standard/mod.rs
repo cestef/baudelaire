@@ -22,7 +22,7 @@ use self::record::{Document, PUBLICATION_RKEY, Publication};
 use super::{Backend, SiteView, SkipCache};
 use crate::remote::Options;
 
-pub use self::record::{DOCUMENT, PUBLICATION, document_uri, publication_uri};
+pub use self::record::{DOCUMENT, PUBLICATION};
 
 /// Environment variable holding the app password (never stored in config).
 const PASSWORD_ENV: &str = "BAUDELAIRE_ATPROTO_PASSWORD";
@@ -57,7 +57,7 @@ impl Backend<SiteView<'_>> for Standard {
         if let Some(advice) = Self::pinned(self.config.did.as_deref(), target.did())? {
             ui.advice(advice);
         }
-        let publication = publication_uri(target.did().as_str());
+        let publication = AtUri::publication(target.did().as_str());
 
         if let Target::Live(session) = &target {
             let record = Publication::new(site, &base, self.icon(session)?, self.config.discover);

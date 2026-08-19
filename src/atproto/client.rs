@@ -15,12 +15,6 @@ use super::id::{Did, Nsid, Rkey};
 #[derive(Debug, Clone, Serialize)]
 pub struct Blob(Value);
 
-/// An agent that surfaces 4xx/5xx as ordinary responses, not transport errors,
-/// so an XRPC error body can be read and surfaced instead of swallowed.
-fn agent() -> ureq::Agent {
-    crate::remote::Http::agent("announce", crate::remote::Status::Read)
-}
-
 /// A read-only handle to a repository on a PDS; every read it offers is a
 /// public XRPC call needing no auth.
 pub struct Repo {
@@ -32,10 +26,17 @@ pub struct Repo {
 }
 
 impl Repo {
+    /// An agent that surfaces 4xx/5xx as ordinary responses, not transport
+    /// errors, so an XRPC error body can be read and surfaced instead of
+    /// swallowed.
+    fn agent() -> ureq::Agent {
+        crate::remote::Http::agent("announce", crate::remote::Status::Read)
+    }
+
     /// Resolve `identifier`, a handle or a DID, to a repo reader on `host`.
     pub fn resolve(host: &str, identifier: &str) -> Result<Self, AnnounceError> {
         let host = host.trim_end_matches('/').to_owned();
-        let agent = agent();
+        let agent = Self::agent();
         let did = if identifier.starts_with("did:") {
             Did::new(identifier)
         } else {
@@ -110,7 +111,7 @@ pub struct Session {
 impl Session {
     /// Authenticate to `host` with a handle (or DID) and app password.
     pub fn login(host: &str, identifier: &str, password: &str) -> Result<Self, AnnounceError> {
-        let agent = agent();
+        let agent = Repo::agent();
         let host = host.trim_end_matches('/').to_owned();
         let url = format!("{host}/xrpc/com.atproto.server.createSession");
         let body = json!({ "identifier": identifier, "password": password });

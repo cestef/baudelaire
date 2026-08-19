@@ -115,6 +115,28 @@ pub struct Options<'a> {
 }
 
 impl Options<'_> {
+    /// Run every configured backend over `payload` in turn, confirming before
+    /// each one writes anything. `verb` names the action in the prompt,
+    /// `summary` the size of the payload in the section header.
+    pub fn publish<P>(
+        &self,
+        verb: &str,
+        backends: Vec<Box<dyn Backend<P>>>,
+        payload: &P,
+        summary: impl Fn(&P) -> String,
+        ui: &Ui,
+    ) -> Result<()> {
+        for backend in backends {
+            ui.section(format_args!("{} - {}", backend.name(), summary(payload)));
+            if !self.dry_run && !self.confirm(&format!("{verb} to {}", backend.name()))? {
+                ui.detail(format_args!("skipped {}", backend.name()));
+                continue;
+            }
+            backend.run(payload, self, ui)?;
+        }
+        Ok(())
+    }
+
     /// Resolve a secret: the CLI value (or stdin when it is the conventional
     /// `-`), else the `env` variable, else an interactive prompt labeled
     /// `label`. An empty value from any source is no secret, never an empty
@@ -179,28 +201,6 @@ pub trait Backend<P> {
     /// Publish `payload` under `opts`, reporting the plan without writing under
     /// `opts.dry_run`.
     fn run(&self, payload: &P, opts: &Options, ui: &Ui) -> Result<()>;
-}
-
-/// Run every configured backend over `payload` in turn, confirming before each
-/// one writes anything. `verb` names the action in the prompt, `summary` the
-/// size of the payload in the section header.
-pub fn publish<P>(
-    verb: &str,
-    backends: Vec<Box<dyn Backend<P>>>,
-    payload: &P,
-    summary: impl Fn(&P) -> String,
-    opts: &Options,
-    ui: &Ui,
-) -> Result<()> {
-    for backend in backends {
-        ui.section(format_args!("{} - {}", backend.name(), summary(payload)));
-        if !opts.dry_run && !opts.confirm(&format!("{verb} to {}", backend.name()))? {
-            ui.detail(format_args!("skipped {}", backend.name()));
-            continue;
-        }
-        backend.run(payload, opts, ui)?;
-    }
-    Ok(())
 }
 
 #[cfg(test)]

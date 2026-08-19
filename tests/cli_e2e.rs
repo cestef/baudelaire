@@ -1,6 +1,6 @@
 mod common;
 
-use baudelaire::content::discover;
+use baudelaire::content::Discovery;
 
 use common::{Site, free_port, project, wait_for_port};
 
@@ -342,7 +342,7 @@ fn discover_with_collection_override() {
         "#let frontmatter = (title: \"Hi\",)\nbody",
     );
     let cfg = sb.config();
-    let cols = discover(&cfg, &project(&cfg)).unwrap();
+    let cols = Discovery::all(&cfg, &project(&cfg)).unwrap();
     let posts = cols.iter().find(|c| c.id == "posts").unwrap();
     assert_eq!(posts.pages.len(), 1);
     assert_eq!(posts.pages[0].permalink, "/blog/hello/");

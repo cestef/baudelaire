@@ -23,7 +23,7 @@ pub mod taxonomy;
 
 pub use cache::DiscoveryCache;
 pub use date::{Iso, Localized};
-pub use discovery::{Collection, ROOT, discover};
+pub use discovery::{Collection, Discovery, ROOT};
 pub use entities::{Attribution, Byline, Credit, Entity, Registries, Registry, Resolved};
 pub use frontmatter::{Frontmatter, Generated, Origin};
 pub use page::{Data, Page, PageId, Sibling, Siblings, Withheld};
@@ -97,68 +97,70 @@ impl std::fmt::Display for Held {
     }
 }
 
-/// The site's full page set: eligible content pages plus generated taxonomy and
-/// paginated index pages, with permalink collisions rejected.
-pub fn plan(config: &Config, project: &Project) -> Result<Plan> {
-    let collections = discover(config, project)?;
-    let held = Held::of(&collections, config);
-    for collection in &collections {
-        tracing::debug!(
-            collection = collection.id,
-            pages = collection.pages.len(),
-            "collected"
-        );
-    }
-    let mut pages: Vec<Page> = Vec::new();
-    for collection in &collections {
-        let eligible: Vec<&Page> = collection
-            .pages
-            .iter()
-            .filter(|p| p.eligible(config))
-            .collect();
-        for group in Page::groups(&eligible) {
-            let (linked, rest): (Vec<&Page>, Vec<&Page>) =
-                group.into_iter().partition(|p| p.listed(config));
-            for (i, page) in linked.iter().enumerate() {
-                let mut page = (*page).clone();
-                page.siblings = page::Siblings {
-                    prev: i.checked_sub(1).map(|j| linked[j].sibling()),
-                    next: linked.get(i + 1).map(|n| n.sibling()),
-                };
-                pages.push(page);
-            }
-            pages.extend(rest.into_iter().cloned());
-        }
-    }
-    let entities = Registries::build(config, project, &pages)?;
-    let generated = generate::Generators::builtin().generate(&generate::PlanCtx {
-        config,
-        entities: &entities,
-        pages: &pages,
-        collections: &collections,
-    })?;
-    tracing::debug!(
-        generated = generated.len(),
-        authored = pages.len(),
-        held = held.total(),
-        "planned"
-    );
-    pages.extend(generated);
-    Page::relate(&mut pages, config);
-    Claim::unique(&pages, config)?;
-    Ok(Plan {
-        pages,
-        held,
-        entities,
-    })
-}
-
 /// What planning produced: the pages a build renders, what it left out, and the
 /// entity registries every one of them resolves references against.
 pub struct Plan {
     pub pages: Vec<Page>,
     pub held: Held,
     pub entities: Registries,
+}
+
+impl Plan {
+    /// The site's full page set: eligible content pages plus generated taxonomy and
+    /// paginated index pages, with permalink collisions rejected.
+    pub fn of(config: &Config, project: &Project) -> Result<Self> {
+        let collections = Discovery::all(config, project)?;
+        let held = Held::of(&collections, config);
+        for collection in &collections {
+            tracing::debug!(
+                collection = collection.id,
+                pages = collection.pages.len(),
+                "collected"
+            );
+        }
+        let mut pages: Vec<Page> = Vec::new();
+        for collection in &collections {
+            let eligible: Vec<&Page> = collection
+                .pages
+                .iter()
+                .filter(|p| p.eligible(config))
+                .collect();
+            for group in Page::groups(&eligible) {
+                let (linked, rest): (Vec<&Page>, Vec<&Page>) =
+                    group.into_iter().partition(|p| p.listed(config));
+                for (i, page) in linked.iter().enumerate() {
+                    let mut page = (*page).clone();
+                    page.siblings = page::Siblings {
+                        prev: i.checked_sub(1).map(|j| linked[j].sibling()),
+                        next: linked.get(i + 1).map(|n| n.sibling()),
+                    };
+                    pages.push(page);
+                }
+                pages.extend(rest.into_iter().cloned());
+            }
+        }
+        let entities = Registries::build(config, project, &pages)?;
+        let generated = generate::Generators::builtin().generate(&generate::PlanCtx {
+            config,
+            entities: &entities,
+            pages: &pages,
+            collections: &collections,
+        })?;
+        tracing::debug!(
+            generated = generated.len(),
+            authored = pages.len(),
+            held = held.total(),
+            "planned"
+        );
+        pages.extend(generated);
+        Page::relate(&mut pages, config);
+        Claim::unique(&pages, config)?;
+        Ok(Self {
+            pages,
+            held,
+            entities,
+        })
+    }
 }
 
 /// One claim on an output file, and where it came from.

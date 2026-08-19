@@ -213,7 +213,29 @@ pub trait Format {
 }
 
 /// Generated Typst source: parenthesised arrays/dicts, bare identifier keys.
-struct TypstFmt;
+pub(crate) struct TypstFmt;
+
+impl TypstFmt {
+    /// Whether `s` is a name a `#let` can bind and a dict key that can be
+    /// written bare.
+    ///
+    /// Not [`typst::syntax::is_ident`], which is the lexer's character rule and
+    /// so admits every keyword; the keyword set is derived by parsing `s` as
+    /// code rather than restated here.
+    pub(crate) fn bindable(s: &str) -> bool {
+        if !typst::syntax::is_ident(s) {
+            return false;
+        }
+        let code = typst::syntax::parse_code(s);
+        let mut nodes = code.children();
+        match (nodes.next(), nodes.next()) {
+            (Some(node), None) => {
+                node.kind() == typst::syntax::SyntaxKind::Ident && node.leaf_text() == s
+            }
+            _ => false,
+        }
+    }
+}
 
 impl Format for TypstFmt {
     const NONE: &'static str = "none";
@@ -241,7 +263,7 @@ impl Format for TypstFmt {
     }
 
     fn key(key: &str, out: &mut String) {
-        if bindable(key) {
+        if Self::bindable(key) {
             out.push_str(key);
         } else {
             let _ = write!(out, "{}", Str(key));
@@ -257,7 +279,19 @@ impl Format for TypstFmt {
 /// A JavaScript expression: bracketed arrays, always-quoted object keys, and
 /// strings whose `<`, `>`, `&` and U+2028/U+2029 are escaped, so a value cannot
 /// close the `<script>` element it is inlined in or break its parse.
-struct JsFmt;
+pub(crate) struct JsFmt;
+
+impl JsFmt {
+    /// Whether `s` is a plain JavaScript identifier, and so needs no quoting as
+    /// an object key or a declared name. Reserved words are *not* excluded,
+    /// since they are legal keys.
+    pub(crate) fn ident(s: &str) -> bool {
+        let mut chars = s.chars();
+        let head =
+            matches!(chars.next(), Some(c) if c.is_ascii_alphabetic() || c == '_' || c == '$');
+        head && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
+    }
+}
 
 impl Format for JsFmt {
     const NONE: &'static str = "null";
@@ -355,7 +389,7 @@ impl fmt::Display for Ts<'_> {
                     if i > 0 {
                         f.write_str("; ")?;
                     }
-                    if ident(key) {
+                    if JsFmt::ident(key) {
                         f.write_str(key)?;
                     } else {
                         write!(f, "{}", JsonStr(key))?;
@@ -391,35 +425,6 @@ impl fmt::Display for JsonStr<'_> {
         let mut out = String::new();
         JsFmt::string(self.0, &mut out);
         f.write_str(&out)
-    }
-}
-
-/// Whether `s` is a plain JavaScript identifier, and so needs no quoting as an
-/// object key or a declared name. Reserved words are *not* excluded, since they
-/// are legal keys.
-pub(crate) fn ident(s: &str) -> bool {
-    let mut chars = s.chars();
-    let head = matches!(chars.next(), Some(c) if c.is_ascii_alphabetic() || c == '_' || c == '$');
-    head && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
-}
-
-/// Whether `s` is a name a `#let` can bind and a dict key that can be written
-/// bare.
-///
-/// Not [`typst::syntax::is_ident`], which is the lexer's character rule and so
-/// admits every keyword; the keyword set is derived by parsing `s` as code
-/// rather than restated here.
-pub(crate) fn bindable(s: &str) -> bool {
-    if !typst::syntax::is_ident(s) {
-        return false;
-    }
-    let code = typst::syntax::parse_code(s);
-    let mut nodes = code.children();
-    match (nodes.next(), nodes.next()) {
-        (Some(node), None) => {
-            node.kind() == typst::syntax::SyntaxKind::Ident && node.leaf_text() == s
-        }
-        _ => false,
     }
 }
 
@@ -701,10 +706,16 @@ mod tests {
     #[test]
     fn a_bindable_name_is_an_identifier_that_is_not_a_keyword() {
         for name in ["title", "_x", "a-b", "x2", "élan"] {
-            assert!(super::bindable(name), "{name} is a typst identifier");
+            assert!(
+                super::TypstFmt::bindable(name),
+                "{name} is a typst identifier"
+            );
         }
         for name in ["in", "none", "true", "a b", "2col", "", "a.b"] {
-            assert!(!super::bindable(name), "{name} is not one typst can bind");
+            assert!(
+                !super::TypstFmt::bindable(name),
+                "{name} is not one typst can bind"
+            );
         }
     }
 

@@ -3,7 +3,8 @@
 //! `at://` URI.
 
 use super::{Emit, Processor, Site};
-use crate::announce::standard::{PUBLICATION, publication_uri};
+use crate::announce::standard::PUBLICATION;
+use crate::atproto::AtUri;
 use crate::config::Config;
 use crate::error::Result;
 
@@ -24,7 +25,7 @@ impl Processor for WellKnown {
             return Ok(());
         };
         let path = site.dist(&[Self::DIR, PUBLICATION.as_str()]);
-        out.file(&path, &publication_uri(did).to_string())?;
+        out.file(&path, &AtUri::publication(did).to_string())?;
         out.wrote(&path);
         Ok(())
     }

@@ -8,7 +8,7 @@ use crate::config::dispatch::{Attributed, Attrs};
 use crate::config::node::NodeExt;
 use crate::config::value::ValueExt;
 use crate::error::{ConfigError, ConfigErrorKind, Result};
-use crate::render::lint::snippet::parser;
+use crate::render::lint::snippet::parser::Parsers;
 use crate::ui::markup;
 
 /// How the fences claiming one language are checked.
@@ -44,7 +44,7 @@ impl SnippetConfig {
     /// it would parse, check nothing, and leave a site believing its fences are
     /// looked at.
     fn check(&self, lang: &str, node: &KdlNode, text: &str) -> Result<()> {
-        if self.run.is_some() || !self.level.on() || parser::of(lang).is_some() {
+        if self.run.is_some() || !self.level.on() || Parsers::of(lang).is_some() {
             return Ok(());
         }
         Err(ConfigError::at(
@@ -55,7 +55,7 @@ impl SnippetConfig {
                     "give it a command, as in `{} run=\"..\"`, or name a language \
                      this build parses itself: {}",
                     lang,
-                    parser::langs().join(", ")
+                    Parsers::langs().join(", ")
                 ),
             },
             NodeExt::span(node),

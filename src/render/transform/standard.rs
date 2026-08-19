@@ -3,7 +3,8 @@
 
 use typst_html::{HtmlDocument, HtmlElement, attr, tag};
 
-use crate::announce::standard::{DOCUMENT, document_uri};
+use crate::announce::standard::DOCUMENT;
+use crate::atproto::AtUri;
 use crate::config::Config;
 
 use super::{Cx, DocumentExt, Transform};
@@ -24,7 +25,7 @@ impl Transform for Verify {
         ) else {
             return;
         };
-        let href = document_uri(did, &cx.page.permalink).to_string();
+        let href = AtUri::document(did, &cx.page.permalink).to_string();
         if let Some(head) = doc.head() {
             head.children.push(
                 HtmlElement::new(tag::link)

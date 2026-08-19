@@ -12,14 +12,14 @@ use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 
-use baudelaire::content::{Page, discover};
+use baudelaire::content::{Discovery, Page};
 use baudelaire::render::LinkMap;
 
 use common::Shape;
 
 fn link_classify(c: &mut Criterion) {
     let (dir, cfg) = Shape::Templated.site(50);
-    let pages: Vec<Page> = discover(&cfg, &common::project(&cfg))
+    let pages: Vec<Page> = Discovery::all(&cfg, &common::project(&cfg))
         .unwrap()
         .into_iter()
         .flat_map(|col| col.pages)

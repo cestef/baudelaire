@@ -185,6 +185,6 @@ impl Esm {
             "while", "break", "continue", "this", "super", "void", "yield", "await", "null",
             "true", "false",
         ];
-        crate::codegen::ident(s) && !RESERVED.contains(&s)
+        crate::codegen::JsFmt::ident(s) && !RESERVED.contains(&s)
     }
 }

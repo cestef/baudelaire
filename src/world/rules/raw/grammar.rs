@@ -104,7 +104,7 @@ impl Grammar {
     /// syntect's own first, then the grammars this binary ships for languages
     /// it has none of.
     fn sets() -> Vec<Set> {
-        vec![Set::Builtin, Set::Loaded(super::shipped::set())]
+        vec![Set::Builtin, Set::Loaded(super::shipped::Shipped::set())]
     }
 
     /// What `elem` should be highlighted with, resolved the way typst resolves

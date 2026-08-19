@@ -60,7 +60,7 @@ impl Draft {
         let sort = collection
             .as_deref()
             .map(|c| config.collection(c).map(|cc| cc.sort).unwrap_or_default());
-        let discovered = match project.map(|p| crate::content::discover(config, p)) {
+        let discovered = match project.map(|p| crate::content::Discovery::all(config, p)) {
             Some(Ok(collections)) => collections,
             Some(Err(error)) => {
                 ui.warn(Uninferred {

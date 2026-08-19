@@ -23,19 +23,24 @@ static SET: LazyLock<Arc<SyntaxSet>> = LazyLock::new(|| {
     Arc::new(builder.build())
 });
 
-/// The shipped set, for a language the bundled one does not name.
-pub(super) fn set() -> Arc<SyntaxSet> {
-    SET.clone()
+/// The grammars that ship with the binary.
+pub(super) struct Shipped;
+
+impl Shipped {
+    /// The shipped set, for a language the bundled one does not name.
+    pub(super) fn set() -> Arc<SyntaxSet> {
+        SET.clone()
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{SHIPPED, set};
+    use super::{SHIPPED, Shipped};
 
     #[test]
     fn every_shipped_grammar_loads() {
         assert_eq!(
-            set().syntaxes().len(),
+            Shipped::set().syntaxes().len(),
             SHIPPED.len(),
             "a shipped grammar failed to parse"
         );
@@ -43,6 +48,6 @@ mod tests {
 
     #[test]
     fn the_config_language_is_one_of_them() {
-        assert!(set().find_syntax_by_token("kdl").is_some());
+        assert!(Shipped::set().find_syntax_by_token("kdl").is_some());
     }
 }

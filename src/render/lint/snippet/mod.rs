@@ -11,7 +11,7 @@ use crate::error::Lint;
 use crate::render::snippet::{Fault, Snippet};
 
 use command::Command;
-use parser::Parser;
+use parser::{Parser, Parsers};
 
 use super::{Check, Cx, Findings};
 
@@ -30,7 +30,7 @@ impl<'a> Checker<'a> {
             return None;
         }
         rule.run.as_deref().map_or_else(
-            || parser::of(lang).map(Self::Parse),
+            || Parsers::of(lang).map(Self::Parse),
             |line| Some(Self::Run(Command::new(line, root))),
         )
     }

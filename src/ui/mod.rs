@@ -495,7 +495,7 @@ impl Ui {
             s.out,
             "{}  {}  {} {}  {} {}",
             clear,
-            fmt::clock().dimmed(),
+            fmt::Clock.to_string().dimmed(),
             Marker::Changed,
             Paths(&path.to_string()),
             Count::pages(pages).dimmed(),
@@ -512,7 +512,7 @@ impl Ui {
         let _ = writeln!(
             s.out,
             "  {}  {} {}",
-            fmt::clock().dimmed(),
+            fmt::Clock.to_string().dimmed(),
             code.yellow(),
             url.dimmed()
         );

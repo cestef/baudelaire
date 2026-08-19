@@ -11,10 +11,10 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
-use crate::content::{Page, discover};
+use crate::content::{Discovery, Page};
 use crate::error::{AnnounceError, Result};
 use crate::graph::Hash;
-use crate::remote::{self, Backend, Options};
+use crate::remote::{Backend, Options};
 use crate::ui::{Count, Ui};
 
 use self::standard::Standard;
@@ -62,12 +62,11 @@ impl Announce {
             return Err(AnnounceError::Unconfigured.into());
         }
         let site = Self::view(config)?;
-        remote::publish(
+        opts.publish(
             "announce",
             backends,
             &site,
             |site| Count::documents(site.documents.len()).to_string(),
-            opts,
             ui,
         )
     }
@@ -87,7 +86,7 @@ impl Announce {
         let theme = crate::theme::Theme::of(config)?;
         let project =
             crate::world::Project::new(config, crate::world::Mode::Build, theme.as_ref())?;
-        let collections = discover(config, &project)?;
+        let collections = Discovery::all(config, &project)?;
         let documents = collections
             .iter()
             .flat_map(|c| c.pages.iter())

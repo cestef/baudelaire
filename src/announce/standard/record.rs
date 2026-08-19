@@ -17,15 +17,17 @@ pub const DOCUMENT: Nsid = Nsid::new("site.standard.document");
 /// The conventional single record key for a site's publication.
 pub(super) const PUBLICATION_RKEY: &str = "self";
 
-/// The publication record's `at://` URI under `did`.
-pub fn publication_uri(did: &str) -> AtUri {
-    AtUri::new(Did::new(did), PUBLICATION, Rkey::literal(PUBLICATION_RKEY))
-}
+impl AtUri {
+    /// The publication record's URI under `did`.
+    pub fn publication(did: &str) -> Self {
+        Self::new(Did::new(did), PUBLICATION, Rkey::literal(PUBLICATION_RKEY))
+    }
 
-/// A document's `at://` URI under `did`, keyed by a pure function of its page
-/// `path`, so the build names the same record the backend writes.
-pub fn document_uri(did: &str, path: &str) -> AtUri {
-    AtUri::new(Did::new(did), DOCUMENT, Rkey::derived(path))
+    /// A document's URI under `did`, keyed by a pure function of its page
+    /// `path`, so the build names the same record the backend writes.
+    pub fn document(did: &str, path: &str) -> Self {
+        Self::new(Did::new(did), DOCUMENT, Rkey::derived(path))
+    }
 }
 
 /// A `site.standard.publication` record.
@@ -137,11 +139,11 @@ mod tests {
     #[test]
     fn uris_have_the_canonical_shape() {
         assert_eq!(
-            publication_uri("did:plc:x").to_string(),
+            AtUri::publication("did:plc:x").to_string(),
             "at://did:plc:x/site.standard.publication/self"
         );
         assert!(
-            document_uri("did:plc:x", "/a/")
+            AtUri::document("did:plc:x", "/a/")
                 .to_string()
                 .starts_with("at://did:plc:x/site.standard.document/")
         );
@@ -157,7 +159,7 @@ mod tests {
 
     #[test]
     fn document_serializes_to_the_lexicon_shape() {
-        let publication = publication_uri("did:plc:x");
+        let publication = AtUri::publication("did:plc:x");
         let record = Document::new(&sample(None), &publication, date(2026, 1, 2));
         let value = serde_json::to_value(&record).unwrap();
         assert_eq!(value["$type"], "site.standard.document");
@@ -174,7 +176,7 @@ mod tests {
 
     #[test]
     fn document_omits_absent_optionals() {
-        let publication = publication_uri("did:plc:x");
+        let publication = AtUri::publication("did:plc:x");
         let mut doc = sample(None);
         doc.description = None;
         doc.tags.clear();

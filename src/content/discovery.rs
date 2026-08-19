@@ -45,29 +45,9 @@ impl Collection {
     }
 }
 
-/// Discover all collections and pages under `config.paths.content`.
-///
-/// A collection whose config carries a `glob` claims every content file that
-/// pattern matches, wherever it lives. Files no glob claims fall back to
-/// convention: one in a subdirectory joins a collection named after that top
-/// directory; one directly under `content/` joins `_root` (mapped to `/`).
-///
-/// A missing content directory is an empty site when nothing named one, and an
-/// error the walk reports when something did.
-pub fn discover(config: &Config, project: &Project) -> Result<Vec<Collection>> {
-    if !config.paths.content.exists() && !Discovery::named(config) {
-        return Ok(Vec::new());
-    }
-    let tracked = project.tracked();
-    let cache = DiscoveryCache::load(config, project, &tracked);
-    let collections = Discovery::new(config, project).run(&cache)?;
-    cache.save()?;
-    Ok(collections)
-}
-
 /// Assigns discovered content files to collections, glob-configured
 /// collections first, then convention for whatever remains.
-struct Discovery<'a> {
+pub struct Discovery<'a> {
     config: &'a Config,
     project: &'a Project,
     /// Every content file, paired with whether a collection has claimed it.
@@ -75,6 +55,27 @@ struct Discovery<'a> {
 }
 
 impl<'a> Discovery<'a> {
+    /// Every collection and page under `config.paths.content`.
+    ///
+    /// A collection whose config carries a `glob` claims every content file
+    /// that pattern matches, wherever it lives. Files no glob claims fall back
+    /// to convention: one in a subdirectory joins a collection named after that
+    /// top directory; one directly under `content/` joins `_root` (mapped to
+    /// `/`).
+    ///
+    /// A missing content directory is an empty site when nothing named one, and
+    /// an error the walk reports when something did.
+    pub fn all(config: &'a Config, project: &'a Project) -> Result<Vec<Collection>> {
+        if !config.paths.content.exists() && !Self::named(config) {
+            return Ok(Vec::new());
+        }
+        let tracked = project.tracked();
+        let cache = DiscoveryCache::load(config, project, &tracked);
+        let collections = Self::new(config, project).run(&cache)?;
+        cache.save()?;
+        Ok(collections)
+    }
+
     fn new(config: &'a Config, project: &'a Project) -> Self {
         Self {
             config,

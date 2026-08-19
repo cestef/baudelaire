@@ -5,7 +5,7 @@ mod common;
 
 use std::fs;
 
-use baudelaire::content::discover;
+use baudelaire::content::Discovery;
 
 use common::{Site, has_ext, project};
 
@@ -399,7 +399,7 @@ fn nested_dirs_traverse_and_build() {
         "#let frontmatter = (title: \"Feb\",)\nFebruary",
     );
     site.stats();
-    let cols = discover(&site.config(), &project(&site.config())).unwrap();
+    let cols = Discovery::all(&site.config(), &project(&site.config())).unwrap();
     let posts = cols.iter().find(|c| c.id == "posts").unwrap();
     assert_eq!(posts.pages.len(), 2);
 }

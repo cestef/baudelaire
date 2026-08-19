@@ -24,7 +24,7 @@ use typst_html::{HtmlDocument, HtmlOptions};
 
 use crate::codegen::Value;
 use crate::config::Config;
-use crate::content::{Data, Page, plan};
+use crate::content::{Data, Page, Plan};
 use crate::engine::asset::Assets;
 #[cfg(feature = "js")]
 use crate::engine::asset::JsCtx;
@@ -271,7 +271,7 @@ impl Engine {
     fn planned(&self, what: &'static str, ui: &Ui) -> Result<Planned> {
         let planned = {
             let _step = ui.step("reading content");
-            plan(&self.config, &self.project)?
+            Plan::of(&self.config, &self.project)?
         };
         debug!(
             pages = planned.pages.len(),

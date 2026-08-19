@@ -15,7 +15,7 @@ use crate::engine::gate::Gate;
 use crate::error::deploy::Phase;
 use crate::error::warning::RemotePathsRefused;
 use crate::error::{DeployError, Result};
-use crate::remote::{self, Backend, Options};
+use crate::remote::{Backend, Options};
 use crate::ui::{Count, Marker, Ui};
 
 /// Files keyed by dist-relative path, each mapped to a content digest.
@@ -232,12 +232,11 @@ impl Deploy {
             return Err(DeployError::Unconfigured.into());
         }
         let dist = Dist::scan(&config.paths.dist)?;
-        remote::publish(
+        opts.publish(
             "deploy",
             backends,
             &dist,
             |dist| Count::files(dist.files.len()).to_string(),
-            opts,
             ui,
         )
     }
