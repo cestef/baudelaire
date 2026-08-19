@@ -5,16 +5,31 @@
 use std::fmt;
 use std::path::Path;
 
-use crate::codegen::{Import, Str};
+use crate::codegen::{Import, Str, Typst, Value};
 use crate::content::Frontmatter;
 
 /// Where a page's frontmatter dict comes from, as an expression in the
 /// synthetic module.
-pub(in crate::engine) enum Bind<'a> {
+pub(in crate::engine) enum Bind {
     /// Import the page module's own `frontmatter` export.
     Import,
     /// A dict literal, for a page with no export.
-    Literal(&'a str),
+    Literal(String),
+}
+
+impl Bind {
+    /// The expression the `frontmatter` key holds, written after the import
+    /// line [`Bind::Import`] needs.
+    fn expr(&self, f: &mut fmt::Formatter<'_>, page: &str) -> Result<Value, fmt::Error> {
+        match self {
+            Self::Import => {
+                let import = Import::new(page, Frontmatter::EXPORT, Frontmatter::ALIAS);
+                writeln!(f, "{import}")?;
+                Ok(Value::Raw(Frontmatter::ALIAS.to_owned()))
+            }
+            Self::Literal(dict) => Ok(Value::Raw(dict.clone())),
+        }
+    }
 }
 
 /// The page content the template wraps.
@@ -31,53 +46,46 @@ pub(in crate::engine) enum Body<'a> {
 ///
 /// Nothing *site-wide* may enter it, since the wrapper text is the page's cache
 /// fingerprint and would then tie every page's identity to every other.
-pub(in crate::engine) struct Context<'a> {
-    pub data: Bind<'a>,
-    /// Parsed taxonomies as a dict literal, e.g. `(tags: ("a", "b"))`.
-    pub taxonomies: &'a str,
-    /// Prev/next sibling links as a dict literal, e.g.
-    /// `(prev: (url: "..", title: ".."), next: none)`.
-    pub nav: &'a str,
-    pub lang: &'a str,
-    /// The page's editions in every language as an array literal, e.g.
-    /// `((lang: "en", url: "..", title: ".."), ..)`. Empty on a
+pub(in crate::engine) struct Context {
+    pub data: Bind,
+    /// The page's terms, keyed by taxonomy: `(tags: ("a", "b"))`.
+    pub taxonomies: Value,
+    /// Prev/next sibling links: `(prev: (url: .., title: ..), next: none)`.
+    pub nav: Value,
+    pub lang: Value,
+    /// The page's editions in every language, itself included. Empty on a
     /// single-language site.
-    pub translations: &'a str,
-    /// The current language's UI-string table as a dict literal.
-    pub strings: &'a str,
-    /// The page's reading estimate as a dict literal,
-    /// `(words: 1200, minutes: 6)`.
-    pub reading: &'a str,
-    /// The pages whose content links to this one, as an array literal:
-    /// `((url: "..", title: "..", lang: "en"), ..)`, empty unless
+    pub translations: Value,
+    /// The current language's UI-string table.
+    pub strings: Value,
+    /// The page's reading estimate, `(words: 1200, minutes: 6)`.
+    pub reading: Value,
+    /// The pages whose content links to this one, empty unless
     /// `links { backlinks }` is on.
     ///
     /// The one entry that is *not* part of the page's cache fingerprint: the
     /// graph it comes from does not exist until every page has rendered.
-    pub backlinks: &'a str,
-    pub url: &'a str,
-    pub collection: &'a str,
-    /// The files sitting beside a page bundle, as a dict of authored name to
-    /// served URL: `(cover.png: "/assets/posts/hello/cover.png")`. Empty for a
-    /// page that shares its directory with its neighbours.
-    pub assets: &'a str,
-    /// Who the page credits, as a dict literal keyed by role:
-    /// `(author: ((name: "Zoe", url: "..", ..),))`.
-    pub credits: &'a str,
-    /// The pages that name this one as an entity, as an array literal of the
-    /// same rows a listing carries. Empty for a page nothing names.
-    pub members: &'a str,
-    /// The page's date in both forms as a dict literal,
-    /// `(iso: "2026-07-30", display: "30 juillet 2026")`, or `none` when the
-    /// page carries no date; typst's `datetime.display` knows English month
+    pub backlinks: Value,
+    pub url: Value,
+    pub collection: Value,
+    /// The files sitting beside a page bundle, as authored name to served URL.
+    /// Empty for a page that shares its directory with its neighbours.
+    pub assets: Value,
+    /// Who the page credits, keyed by role.
+    pub credits: Value,
+    /// The pages that name this one as an entity, as the rows a listing
+    /// carries. Empty for a page nothing names.
+    pub members: Value,
+    /// The page's date in both forms, `(iso: .., display: ..)`, or `none` when
+    /// the page carries no date; typst's `datetime.display` knows English month
     /// names only, so a template cannot localize `frontmatter.date` itself.
-    pub date: &'a str,
+    pub date: Value,
 }
 
-impl Context<'_> {
-    /// The `page` dict a template is applied to, as typst source, with
-    /// `frontmatter` already spelled as whatever expression holds it.
-    pub(in crate::engine) fn dict(&self, frontmatter: &dyn fmt::Display) -> String {
+impl Context {
+    /// The `page` dict a template is applied to, with `frontmatter` already
+    /// spelled as whatever expression holds it.
+    pub(in crate::engine) fn dict(&self, frontmatter: Value) -> Value {
         let Self {
             data: _,
             taxonomies,
@@ -94,12 +102,22 @@ impl Context<'_> {
             collection,
             assets,
         } = self;
-        format!(
-            "(frontmatter: {frontmatter}, taxonomies: {taxonomies}, credits: {credits}, members: {members}, nav: {nav}, lang: {}, translations: {translations}, strings: {strings}, reading: {reading}, backlinks: {backlinks}, date: {date}, url: {}, collection: {}, assets: {assets})",
-            Str(lang),
-            Str(url),
-            Str(collection)
-        )
+        Value::dict([
+            ("frontmatter", frontmatter),
+            ("taxonomies", taxonomies.clone()),
+            ("credits", credits.clone()),
+            ("members", members.clone()),
+            ("nav", nav.clone()),
+            ("lang", lang.clone()),
+            ("translations", translations.clone()),
+            ("strings", strings.clone()),
+            ("reading", reading.clone()),
+            ("backlinks", backlinks.clone()),
+            ("date", date.clone()),
+            ("url", url.clone()),
+            ("collection", collection.clone()),
+            ("assets", assets.clone()),
+        ])
     }
 }
 
@@ -115,7 +133,7 @@ pub(in crate::engine) struct Layout<'a> {
     /// Project-root-absolute virtual path of the page (`/content/posts/a.typ`);
     /// what [`Bind::Import`] and [`Body::Include`] resolve against.
     page: &'a str,
-    context: Context<'a>,
+    context: Context,
     body: Body<'a>,
 }
 
@@ -124,7 +142,7 @@ impl<'a> Layout<'a> {
         dir: &'a str,
         file: &'a str,
         page: &'a str,
-        context: Context<'a>,
+        context: Context,
         body: Body<'a>,
     ) -> Self {
         Self {
@@ -157,22 +175,9 @@ impl fmt::Display for Layout<'_> {
             "{}",
             Import::new(&self.import(), self.func(), "__layout")
         )?;
-        let frontmatter: &dyn fmt::Display = match &self.context.data {
-            Bind::Import => {
-                writeln!(
-                    f,
-                    "{}",
-                    Import::new(self.page, Frontmatter::EXPORT, Frontmatter::ALIAS)
-                )?;
-                &Frontmatter::ALIAS
-            }
-            Bind::Literal(dict) => dict,
-        };
-        writeln!(
-            f,
-            "#show: __body => __layout({}, __body)",
-            self.context.dict(frontmatter)
-        )?;
+        let frontmatter = self.context.data.expr(f, self.page)?;
+        let page = self.context.dict(frontmatter);
+        writeln!(f, "#show: __body => __layout({}, __body)", Typst(&page))?;
         match &self.body {
             Body::Include => write!(f, "#include {}", Str(self.page)),
             Body::Inline(markup) => f.write_str(markup),
@@ -184,6 +189,42 @@ impl fmt::Display for Layout<'_> {
 mod tests {
     use super::*;
 
+    fn raw(source: &str) -> Value {
+        Value::Raw(source.to_owned())
+    }
+
+    /// A context holding one spelling of every value, so a test names only what
+    /// it is about.
+    fn context(data: Bind) -> Context {
+        Context {
+            data,
+            taxonomies: raw("(:)"),
+            credits: raw("(:)"),
+            members: raw("()"),
+            nav: raw("(prev: none, next: none)"),
+            lang: Value::str("en"),
+            translations: raw("()"),
+            strings: raw("(:)"),
+            reading: raw("(words: 0, minutes: 0)"),
+            backlinks: raw("()"),
+            date: Value::None,
+            url: Value::str("/posts/a/"),
+            collection: Value::str("posts"),
+            assets: raw("(:)"),
+        }
+    }
+
+    /// The dict as every assertion below reads it, with `frontmatter` spelled
+    /// as the test's own binding.
+    fn dict(frontmatter: &str) -> String {
+        format!(
+            "(frontmatter: {frontmatter}, taxonomies: (:), credits: (:), members: (), \
+             nav: (prev: none, next: none), lang: \"en\", translations: (), strings: (:), \
+             reading: (words: 0, minutes: 0), backlinks: (), date: none, url: \"/posts/a/\", \
+             collection: \"posts\", assets: (:))"
+        )
+    }
+
     #[test]
     fn imports_the_export_and_includes_the_page() {
         let out = Layout::new(
@@ -191,30 +232,21 @@ mod tests {
             "post.typ",
             "/content/posts/a.typ",
             Context {
-                data: Bind::Import,
-                taxonomies: "(tags: (\"a\",))",
-                credits: "(author: ((name: \"Zoe\"),))",
-                members: "()",
-                nav: "(prev: none, next: none)",
-                lang: "en",
-                translations: "()",
-                strings: "(:)",
-                reading: "(words: 0, minutes: 0)",
-                backlinks: "()",
-                date: "none",
-                url: "/posts/a/",
-                collection: "posts",
-                assets: "(:)",
+                taxonomies: raw("(tags: (\"a\",))"),
+                ..context(Bind::Import)
             },
             Body::Include,
         )
         .to_string();
         assert_eq!(
             out,
-            "#import \"/templates/post.typ\": post as __layout\n\
-             #import \"/content/posts/a.typ\": frontmatter as __data\n\
-             #show: __body => __layout((frontmatter: __data, taxonomies: (tags: (\"a\",)), credits: (author: ((name: \"Zoe\"),)), members: (), nav: (prev: none, next: none), lang: \"en\", translations: (), strings: (:), reading: (words: 0, minutes: 0), backlinks: (), date: none, url: \"/posts/a/\", collection: \"posts\", assets: (:)), __body)\n\
-             #include \"/content/posts/a.typ\""
+            format!(
+                "#import \"/templates/post.typ\": post as __layout\n\
+                 #import \"/content/posts/a.typ\": frontmatter as __data\n\
+                 #show: __body => __layout({}, __body)\n\
+                 #include \"/content/posts/a.typ\"",
+                dict("__data").replace("taxonomies: (:)", "taxonomies: (tags: (\"a\",))")
+            )
         );
     }
 
@@ -224,30 +256,18 @@ mod tests {
             "/templates",
             "list.typ",
             "/content/tags/x.typ",
-            Context {
-                data: Bind::Literal("(title: \"X\")"),
-                taxonomies: "(:)",
-                credits: "(:)",
-                members: "()",
-                nav: "(prev: none, next: none)",
-                lang: "en",
-                translations: "()",
-                strings: "(:)",
-                reading: "(words: 0, minutes: 0)",
-                backlinks: "()",
-                date: "none",
-                url: "/posts/a/",
-                collection: "posts",
-                assets: "(:)",
-            },
+            context(Bind::Literal("(title: \"X\")".to_owned())),
             Body::Inline("listing body"),
         )
         .to_string();
         assert_eq!(
             out,
-            "#import \"/templates/list.typ\": list as __layout\n\
-             #show: __body => __layout((frontmatter: (title: \"X\"), taxonomies: (:), credits: (:), members: (), nav: (prev: none, next: none), lang: \"en\", translations: (), strings: (:), reading: (words: 0, minutes: 0), backlinks: (), date: none, url: \"/posts/a/\", collection: \"posts\", assets: (:)), __body)\n\
-             listing body"
+            format!(
+                "#import \"/templates/list.typ\": list as __layout\n\
+                 #show: __body => __layout({}, __body)\n\
+                 listing body",
+                dict("(title: \"X\")")
+            )
         );
     }
 
@@ -257,22 +277,7 @@ mod tests {
             "/a\"b",
             "x.typ",
             "/content/x.typ",
-            Context {
-                data: Bind::Literal("(:)"),
-                taxonomies: "(:)",
-                credits: "(:)",
-                members: "()",
-                nav: "(prev: none, next: none)",
-                lang: "en",
-                translations: "()",
-                strings: "(:)",
-                reading: "(words: 0, minutes: 0)",
-                backlinks: "()",
-                date: "none",
-                url: "/posts/a/",
-                collection: "posts",
-                assets: "(:)",
-            },
+            context(Bind::Literal("(:)".to_owned())),
             Body::Include,
         )
         .to_string();
@@ -285,30 +290,13 @@ mod tests {
             "/templates",
             "page.typ",
             "/content/b.typ",
-            Context {
-                data: Bind::Literal("(t: 1)"),
-                taxonomies: "(:)",
-                credits: "(:)",
-                members: "()",
-                nav: "(prev: none, next: none)",
-                lang: "en",
-                translations: "()",
-                strings: "(:)",
-                reading: "(words: 0, minutes: 0)",
-                backlinks: "()",
-                date: "none",
-                url: "/posts/a/",
-                collection: "posts",
-                assets: "(:)",
-            },
+            context(Bind::Literal("(t: 1)".to_owned())),
             Body::Inline("b"),
         )
         .to_string();
         assert!(out.contains(": page as __layout"), "{out}");
         assert!(
-            out.contains(
-                "__layout((frontmatter: (t: 1), taxonomies: (:), credits: (:), members: (), nav: (prev: none, next: none), lang: \"en\", translations: (), strings: (:), reading: (words: 0, minutes: 0), backlinks: (), date: none, url: \"/posts/a/\", collection: \"posts\", assets: (:)), __body)"
-            ),
+            out.contains(&format!("__layout({}, __body)", dict("(t: 1)"))),
             "{out}"
         );
     }

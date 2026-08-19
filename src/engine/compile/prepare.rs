@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use typst::syntax::{FileId, RootedPath};
 
-use crate::codegen::{Typst, Value};
+use crate::codegen::Value;
 use crate::config::Config;
 use crate::content::{
     Byline, Data, Iso, Localized, Page, Registries, Section, Sibling, Siblings, Strings,
@@ -215,9 +215,8 @@ impl<'a> Prepare<'a> {
             Data::Generated { .. } => Body::Inline(&page.body),
             _ => Body::Include,
         };
-        self.with(page, backlinks, |context| {
-            Layout::new(dir, file, &vpath, context, body).to_string()
-        })
+        let context = self.context(page, backlinks);
+        Layout::new(dir, file, &vpath, context, body).to_string()
     }
 
     /// The `page` dict this page is handed as, with its frontmatter spelled as
@@ -225,51 +224,40 @@ impl<'a> Prepare<'a> {
     /// there is no wrapper module per page to hold the binding.
     #[cfg(feature = "pdf")]
     pub(in crate::engine) fn dict(&self, page: &Page, frontmatter: &str) -> String {
-        self.with(page, &Backlinks::Off, |context| context.dict(&frontmatter))
+        let context = self.context(page, &Backlinks::Off);
+        crate::codegen::Typst(&context.dict(Value::Raw(frontmatter.to_owned()))).to_string()
     }
 
-    /// Build this page's [`Context`] and hand it to `f`; its pieces borrow from
-    /// locals, so it cannot be returned.
-    fn with<T>(&self, page: &Page, backlinks: &Backlinks, f: impl FnOnce(Context<'_>) -> T) -> T {
-        let taxonomies = Typst(&page.taxonomies()).to_string();
-        let credits = Typst(&Value::from(&self.byline(page))).to_string();
-        let members = Typst(&Value::array(
-            self.members
-                .get(&crate::fs::resolved(&page.source))
-                .cloned()
-                .unwrap_or_default(),
-        ))
-        .to_string();
-        let nav = Typst(&Self::nav(&page.siblings)).to_string();
-        let translations = Typst(&Self::translations(page)).to_string();
-        let strings = Typst(&self.strings(&page.lang)).to_string();
-        let reading = Typst(&self.reading(page)).to_string();
-        let backlinks = Typst(&backlinks.value(page)).to_string();
-        let date = Typst(&self.date(page)).to_string();
-        let assets = Typst(&self.colocated(page)).to_string();
-        let bind = match &page.data {
-            Data::Export => Bind::Import,
-            Data::Empty => Bind::Literal("(:)"),
-            #[cfg(feature = "markdown")]
-            Data::Lowered { dict, .. } => Bind::Literal(dict),
-            Data::Generated { dict, .. } => Bind::Literal(dict),
-        };
-        f(Context {
-            data: bind,
-            taxonomies: &taxonomies,
-            credits: &credits,
-            members: &members,
-            nav: &nav,
-            lang: &page.lang,
-            translations: &translations,
-            strings: &strings,
-            reading: &reading,
-            backlinks: &backlinks,
-            date: &date,
-            url: &self.config.prefixed(&page.permalink),
-            collection: page.section(),
-            assets: &assets,
-        })
+    /// This page's [`Context`]: every value a template is handed, read off the
+    /// page and the plan around it.
+    fn context(&self, page: &Page, backlinks: &Backlinks) -> Context {
+        Context {
+            data: match &page.data {
+                Data::Export => Bind::Import,
+                Data::Empty => Bind::Literal("(:)".to_owned()),
+                #[cfg(feature = "markdown")]
+                Data::Lowered { dict, .. } => Bind::Literal(dict.clone()),
+                Data::Generated { dict, .. } => Bind::Literal(dict.clone()),
+            },
+            taxonomies: page.taxonomies(),
+            credits: Value::from(&self.byline(page)),
+            members: Value::array(
+                self.members
+                    .get(&crate::fs::resolved(&page.source))
+                    .cloned()
+                    .unwrap_or_default(),
+            ),
+            nav: Self::nav(&page.siblings),
+            lang: Value::str(&page.lang),
+            translations: Self::translations(page),
+            strings: self.strings(&page.lang),
+            reading: self.reading(page),
+            backlinks: backlinks.value(page),
+            date: self.date(page),
+            url: Value::str(self.config.prefixed(&page.permalink)),
+            collection: Value::str(page.section()),
+            assets: self.colocated(page),
+        }
     }
 
     /// The files sitting beside a *page bundle*, as authored name to served
