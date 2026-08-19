@@ -2,7 +2,7 @@
 //! its template, the compiles that typeset it, and the files written beside its
 //! HTML.
 
-#[cfg(feature = "pdf")]
+#[cfg(any(feature = "pdf", feature = "epub"))]
 pub(super) mod bundle;
 #[cfg(feature = "cards")]
 pub(super) mod card;

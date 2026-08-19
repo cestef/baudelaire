@@ -12,6 +12,7 @@ use crate::error::{BundleError, Result};
 
 use super::xml::Xml;
 use super::{Emit, Processor, Site};
+use crate::engine::compile::bundle::Bundle;
 
 /// What the format pins: the names and namespaces a reader matches on.
 struct Epub3;
@@ -66,22 +67,18 @@ impl Processor for Epub {
     }
 
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
-        for (id, cfg) in &site.config.generate.bundles {
-            if !cfg.active().contains(&BundleFormat::Epub) {
+        for bundle in Bundle::planned(site.config, site.pages) {
+            if bundle.format() != BundleFormat::Epub {
                 continue;
             }
-            for selection in Selection::planned(id, cfg, site.config, site.pages) {
-                let path = site
-                    .config
-                    .file(&selection.url(site.config, BundleFormat::Epub.ext()));
-                if out.claimed(&path) {
-                    continue;
-                }
-                let book = Book::new(&selection, site);
-                let bytes = book.write()?;
-                out.binary(&path, &bytes)?;
-                out.wrote_with(&path, format_args!("{} chapters", book.chapters.len()));
+            let path = bundle.path(site.config);
+            if out.claimed(&path) {
+                continue;
             }
+            let book = Book::new(bundle.selection(), site);
+            let bytes = book.write()?;
+            out.binary(&path, &bytes)?;
+            out.wrote_with(&path, format_args!("{} chapters", book.chapters.len()));
         }
         Ok(())
     }

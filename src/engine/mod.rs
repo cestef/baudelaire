@@ -30,7 +30,7 @@ use crate::engine::asset::Assets;
 use crate::engine::asset::JsCtx;
 use crate::engine::check::External;
 use crate::engine::check::{Budgets, CheckedPage, Compiled, Links, Lints, Orphans};
-#[cfg(feature = "pdf")]
+#[cfg(any(feature = "pdf", feature = "epub"))]
 use crate::engine::compile::bundle::Bundle;
 use crate::engine::compile::image::Images;
 use crate::engine::compile::prepare::{Prepare, Prepared};
@@ -496,14 +496,16 @@ impl Engine {
     /// read.
     #[cfg(feature = "pdf")]
     fn bundles(&self, pass: &Pass<'_>, cache: &mut Cache, ui: &Ui) -> Result<Bundled> {
-        let mut bundled = Bundled::default();
+        let mut bundled = Bundled {
+            paths: Bundle::claimed(&self.config, pass.pages),
+            ..Bundled::default()
+        };
         for bundle in Bundle::planned(&self.config, pass.pages) {
             if !bundle.typeset() {
                 continue;
             }
             let id = bundle.id();
             let path = bundle.path(&self.config);
-            bundled.paths.push(path.clone());
             let text = bundle.source(&pass.prepare, &self.project)?;
             let fingerprint = Hash::of_bytes(text.as_bytes());
             if cache.reuse_bundle(&id, &fingerprint, &path) {
@@ -522,11 +524,19 @@ impl Engine {
         Ok(bundled)
     }
 
-    /// Without the exporter nothing binds a document, and the signature mirrors
-    /// the `pdf`-on one so the caller compiles unchanged in both flavors.
+    /// Without the exporter nothing is typeset, but the files an emitted format
+    /// writes are still the site's, so the sweep still has to be told about
+    /// them. The signature mirrors the `pdf`-on one so the caller compiles
+    /// unchanged in both flavors.
     #[cfg(not(feature = "pdf"))]
     #[allow(clippy::unused_self, clippy::unnecessary_wraps)]
     fn bundles(&self, _pass: &Pass<'_>, _cache: &mut Cache, _ui: &Ui) -> Result<Bundled> {
+        #[cfg(feature = "epub")]
+        return Ok(Bundled {
+            paths: Bundle::claimed(&self.config, _pass.pages),
+            ..Bundled::default()
+        });
+        #[cfg(not(feature = "epub"))]
         Ok(Bundled::default())
     }
 

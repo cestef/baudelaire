@@ -4,26 +4,32 @@
 //! A bundle belongs to no page, so it has a cache entry of its own and rebuilds
 //! when any of its pages moves.
 
-use std::fmt::{self, Write as _};
 use std::path::PathBuf;
 
-use crate::codegen::{Import, Str, Typst, Value};
-use crate::config::{BundleConfig, BundleFormat, Config};
-use crate::content::{Data, Page, Selection};
-use crate::error::Result;
-use crate::graph::Deps;
-use crate::world::Project;
+use crate::config::{BundleFormat, Config};
+use crate::content::{Page, Selection};
 
-use super::paged::Paged;
-use super::prepare::Prepare;
-use crate::content::Frontmatter;
+#[cfg(feature = "pdf")]
+use {
+    super::paged::Paged,
+    super::prepare::Prepare,
+    crate::codegen::{Import, Str, Typst, Value},
+    crate::config::BundleConfig,
+    crate::content::{Data, Frontmatter},
+    crate::error::Result,
+    crate::graph::Deps,
+    crate::world::Project,
+    std::fmt::{self, Write as _},
+};
 
 /// One bundle, in one format: the pages it binds and where the file goes.
 pub(in crate::engine) struct Bundle<'a> {
     /// The config's name for the bundle, and the filename stem every format is
     /// written under.
+    #[cfg(feature = "pdf")]
     key: &'a str,
     format: BundleFormat,
+    #[cfg(feature = "pdf")]
     cfg: &'a BundleConfig,
     /// The pages, in order, under their title.
     selection: Selection<'a>,
@@ -41,8 +47,10 @@ impl<'a> Bundle<'a> {
             for selection in Selection::planned(key, cfg, config, pages) {
                 for format in cfg.active() {
                     out.push(Self {
+                        #[cfg(feature = "pdf")]
                         key,
                         format,
+                        #[cfg(feature = "pdf")]
                         cfg,
                         url: selection.url(config, format.ext()),
                         selection: Selection {
@@ -60,21 +68,25 @@ impl<'a> Bundle<'a> {
 
     /// The cache id: the bundle, its language, and its format, since two
     /// formats of one selection are two files and two entries.
+    #[cfg(feature = "pdf")]
     pub(in crate::engine) fn id(&self) -> String {
         format!("{}.{}", self.selection.id, self.format.ext())
     }
 
     /// What this bundle is called in the summary.
+    #[cfg(feature = "pdf")]
     pub(in crate::engine) fn label(&self) -> String {
         self.url.trim_start_matches('/').to_owned()
     }
 
     /// The module's file id, the label its compile errors carry, and the noun
     /// the summary counts.
+    #[cfg(feature = "pdf")]
     pub(in crate::engine) const KIND: &'static str = "bundle";
 
     /// Whether this one is written by the paged compile; the other formats are
     /// built from the rendered pages instead.
+    #[cfg(feature = "pdf")]
     pub(in crate::engine) fn typeset(&self) -> bool {
         self.format == BundleFormat::Pdf
     }
@@ -85,6 +97,27 @@ impl<'a> Bundle<'a> {
         config.file(&self.url)
     }
 
+    /// Every file the bundles this site asks for occupy, whatever writes them.
+    ///
+    /// Read from the config and the page set rather than from what a build
+    /// produced, because neither producer writes on every build: a typeset
+    /// bundle can be reused from the cache, and an emitted one can be claimed
+    /// by a static file. Either way the sweep must keep it.
+    pub(in crate::engine) fn claimed(config: &'a Config, pages: &'a [Page]) -> Vec<PathBuf> {
+        Self::planned(config, pages)
+            .iter()
+            .map(|bundle| bundle.path(config))
+            .collect()
+    }
+
+    pub(in crate::engine) fn format(&self) -> BundleFormat {
+        self.format
+    }
+
+    pub(in crate::engine) fn selection(&self) -> &Selection<'a> {
+        &self.selection
+    }
+
     /// The synthetic module: the template, one frontmatter import per page, and
     /// every page's body included in order. Its text is the bundle's cache
     /// fingerprint, so reordering pages invalidates it even though no file any
@@ -92,6 +125,7 @@ impl<'a> Bundle<'a> {
     /// must match what `Prepare::bound` decides for that page's own compile, or
     /// it reads one way on screen and another on paper. A markdown page's body
     /// is spliced in as markup, its file being nothing typst could `#include`.
+    #[cfg(feature = "pdf")]
     pub(in crate::engine) fn source(
         &self,
         prepare: &Prepare<'_>,
@@ -144,6 +178,7 @@ impl<'a> Bundle<'a> {
 
     /// What the template is told about the document itself, as opposed to about
     /// any one page.
+    #[cfg(feature = "pdf")]
     fn meta(&self, config: &Config) -> Value {
         Value::dict([
             ("id", Value::str(self.key)),
@@ -161,6 +196,7 @@ impl<'a> Bundle<'a> {
 
     /// Lay the bundle out and export it, reporting what the compile read: every
     /// page it bound, the template, and everything either imports.
+    #[cfg(feature = "pdf")]
     pub(in crate::engine) fn export(
         &self,
         project: &Project,
@@ -178,6 +214,7 @@ impl<'a> Bundle<'a> {
 }
 
 /// The generated module.
+#[cfg(feature = "pdf")]
 struct Module {
     import: String,
     func: String,
@@ -189,6 +226,7 @@ struct Module {
     entries: Vec<String>,
 }
 
+#[cfg(feature = "pdf")]
 impl fmt::Display for Module {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "{}", Import::new(&self.import, &self.func, "__bundle"))?;
@@ -201,7 +239,7 @@ impl fmt::Display for Module {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "pdf"))]
 mod tests {
     use super::Module;
 
