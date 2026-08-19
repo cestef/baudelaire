@@ -14,7 +14,7 @@ use crate::config::{Config, Slashed};
 use crate::engine::gate::Gate;
 use crate::error::deploy::Phase;
 use crate::error::warning::RemotePathsRefused;
-use crate::error::{DeployError, Result};
+use crate::error::{BaudelaireErrorKind, DeployError, Result};
 use crate::remote::{Backend, Options};
 use crate::ui::{Count, Marker, Ui};
 
@@ -130,9 +130,14 @@ impl Dist {
     }
 
     /// Digest every file with `hash`, keyed by relative path.
-    pub fn digests(&self, hash: impl Fn(&[u8]) -> String) -> Result<Digests> {
+    ///
+    /// Reading and hashing are the local half of a deploy and answer to nothing
+    /// remote, so they run over the build's own threads whatever the store
+    /// takes.
+    pub fn digests(&self, hash: impl Fn(&[u8]) -> String + Sync) -> Result<Digests> {
+        use rayon::prelude::*;
         self.files
-            .iter()
+            .par_iter()
             .map(|rel| Ok((rel.clone(), hash(&self.read(rel)?))))
             .collect()
     }
@@ -153,40 +158,115 @@ impl Dist {
         if opts.dry_run {
             return Ok(());
         }
-        for (done, key) in plan.uploads.iter().enumerate() {
-            let sent = self.read(key).and_then(|body| store.upload(key, &body));
-            if let Err(why) = sent {
-                return Err(DeployError::interrupted(
-                    Phase::Upload,
-                    done,
-                    plan.uploads.len(),
-                    key,
-                    why,
-                )
-                .into());
-            }
-            ui.item(format_args!("{} {key}", Marker::Uploaded));
-        }
-        for (done, key) in plan.deletes.iter().enumerate() {
-            if let Err(why) = store.delete(key) {
-                return Err(DeployError::interrupted(
-                    Phase::Delete,
-                    done,
-                    plan.deletes.len(),
-                    key,
-                    why,
-                )
-                .into());
-            }
-            ui.item(format_args!("{} {key}", Marker::Removed));
-        }
+        let concurrency = store.concurrency();
+        Self::each(
+            &plan.uploads,
+            Phase::Upload,
+            Marker::Uploaded,
+            concurrency,
+            ui,
+            |key| self.read(key).and_then(|body| store.upload(key, &body)),
+        )?;
+        Self::each(
+            &plan.deletes,
+            Phase::Delete,
+            Marker::Removed,
+            concurrency,
+            ui,
+            |key| store.delete(key),
+        )?;
         plan.done(ui, store.target());
         Ok(())
+    }
+
+    /// Act on every key of one phase, in as many threads as the store takes,
+    /// and stop the run at the first failure.
+    ///
+    /// A concurrent run names *a* key that failed rather than the first in
+    /// order, since the requests are in flight together; the count beside it is
+    /// how many had finished when the run stopped.
+    fn each(
+        keys: &[String],
+        phase: Phase,
+        marker: Marker,
+        concurrency: Option<usize>,
+        ui: &Ui,
+        act: impl Fn(&str) -> Result<()> + Sync,
+    ) -> Result<()> {
+        let done = std::sync::atomic::AtomicUsize::new(0);
+        let failed: parking_lot::Mutex<Option<(String, BaudelaireErrorKind)>> =
+            parking_lot::Mutex::new(None);
+        let one = |key: &String| -> std::result::Result<(), Stop> {
+            match act(key) {
+                Ok(()) => {
+                    done.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    ui.item(format_args!("{marker} {key}"));
+                    Ok(())
+                }
+                Err(why) => {
+                    failed.lock().get_or_insert((key.clone(), why));
+                    Err(Stop)
+                }
+            }
+        };
+        let ran = match concurrency {
+            Some(1) => keys.iter().try_for_each(one),
+            threads => Pool::of(threads).install(|| {
+                use rayon::prelude::*;
+                keys.par_iter().try_for_each(one)
+            }),
+        };
+        if ran.is_ok() {
+            return Ok(());
+        }
+        let (key, why) = failed.lock().take().expect("a stopped run failed");
+        Err(DeployError::interrupted(
+            phase,
+            done.load(std::sync::atomic::Ordering::Relaxed),
+            keys.len(),
+            &key,
+            why,
+        )
+        .into())
+    }
+}
+
+/// That a key failed, which is all the loop carries: the failure itself is put
+/// aside, since a `Result` big enough to hold one would be paid for on every
+/// key that did not.
+struct Stop;
+
+/// The threads one phase of a reconcile runs over: a pool of the store's own
+/// size, or the build's own threads where it names none.
+enum Pool {
+    Own(rayon::ThreadPool),
+    Build,
+}
+
+impl Pool {
+    fn of(threads: Option<usize>) -> Self {
+        let Some(threads) = threads else {
+            return Self::Build;
+        };
+        match rayon::ThreadPoolBuilder::new().num_threads(threads).build() {
+            Ok(pool) => Self::Own(pool),
+            Err(e) => {
+                tracing::debug!("deploy pool of {threads} not built: {e}");
+                Self::Build
+            }
+        }
+    }
+
+    fn install<T: Send>(&self, run: impl FnOnce() -> T + Send) -> T {
+        match self {
+            Self::Own(pool) => pool.install(run),
+            Self::Build => run(),
+        }
     }
 }
 
 /// The remote side of a deploy: the store a [`Dist`] is mirrored into.
-pub trait Store {
+pub trait Store: Sync {
     /// Digest a local file's bytes with the same algorithm [`Store::list`]
     /// reports, so the two are comparable.
     fn digest(&self, bytes: &[u8]) -> String;
@@ -205,6 +285,10 @@ pub trait Store {
 
     /// The destination as the summary line names it.
     fn target(&self) -> String;
+
+    /// How many requests this store answers at once: `Some(1)` for a store
+    /// driven over one connection, `None` for as many as the build has threads.
+    fn concurrency(&self) -> Option<usize>;
 }
 
 /// The `deploy` command: which destinations a run targets, and what it hands
@@ -349,6 +433,167 @@ mod tests {
     }
 
     use super::*;
+
+    /// A store that records what it was asked to do, and how many requests were
+    /// in flight at the busiest moment.
+    struct Fake {
+        concurrency: Option<usize>,
+        acted: parking_lot::Mutex<Vec<String>>,
+        inflight: std::sync::atomic::AtomicUsize,
+        peak: std::sync::atomic::AtomicUsize,
+        /// The key every request fails on, if any.
+        refusing: Option<&'static str>,
+    }
+
+    impl Fake {
+        fn new(concurrency: Option<usize>) -> Self {
+            Self {
+                concurrency,
+                acted: parking_lot::Mutex::new(Vec::new()),
+                inflight: std::sync::atomic::AtomicUsize::new(0),
+                peak: std::sync::atomic::AtomicUsize::new(0),
+                refusing: None,
+            }
+        }
+
+        fn refusing(key: &'static str) -> Self {
+            Self {
+                refusing: Some(key),
+                ..Self::new(Some(1))
+            }
+        }
+
+        fn act(&self, what: &str, key: &str) -> Result<()> {
+            use std::sync::atomic::Ordering::Relaxed;
+            let now = self.inflight.fetch_add(1, Relaxed) + 1;
+            self.peak.fetch_max(now, Relaxed);
+            self.acted.lock().push(format!("{what} {key}"));
+            self.inflight.fetch_sub(1, Relaxed);
+            if self.refusing == Some(key) {
+                return Err(DeployError::required(crate::error::deploy::Required::S3Bucket).into());
+            }
+            Ok(())
+        }
+    }
+
+    impl Store for Fake {
+        fn digest(&self, bytes: &[u8]) -> String {
+            format!("{}", bytes.len())
+        }
+
+        fn list(&self, _ui: &Ui) -> Result<Digests> {
+            Ok(Digests::from([("gone.html".to_owned(), "0".to_owned())]))
+        }
+
+        fn upload(&self, key: &str, _body: &[u8]) -> Result<()> {
+            self.act("PUT", key)
+        }
+
+        fn delete(&self, key: &str) -> Result<()> {
+            self.act("DELETE", key)
+        }
+
+        fn target(&self) -> String {
+            "fake".to_owned()
+        }
+
+        fn concurrency(&self) -> Option<usize> {
+            self.concurrency
+        }
+    }
+
+    /// A dist of `n` files, named so their plan order is their name order.
+    fn dist(dir: &std::path::Path, n: usize) -> Dist {
+        for i in 0..n {
+            std::fs::write(dir.join(format!("{i:03}.html")), format!("page {i}")).unwrap();
+        }
+        Dist::scan(dir).expect("a scannable dist")
+    }
+
+    fn opts() -> Options<'static> {
+        Options {
+            dry_run: false,
+            yes: true,
+            secret: None,
+            interaction: &Headless,
+        }
+    }
+
+    #[test]
+    fn a_store_on_one_connection_acts_in_plan_order() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dist = dist(tmp.path(), 4);
+        let store = Fake::new(Some(1));
+
+        dist.reconcile(&store, true, &opts(), &Ui::new(Level::Silent))
+            .expect("mirrored");
+
+        assert_eq!(
+            *store.acted.lock(),
+            vec![
+                "PUT 000.html",
+                "PUT 001.html",
+                "PUT 002.html",
+                "PUT 003.html",
+                "DELETE gone.html",
+            ]
+        );
+        assert_eq!(store.peak.load(std::sync::atomic::Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn a_store_that_takes_many_gets_every_key_once() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dist = dist(tmp.path(), 32);
+        let store = Fake::new(None);
+
+        dist.reconcile(&store, true, &opts(), &Ui::new(Level::Silent))
+            .expect("mirrored");
+
+        let mut acted = store.acted.lock().clone();
+        acted.sort();
+        assert_eq!(acted.len(), 33, "32 uploads and one delete: {acted:?}");
+        assert_eq!(
+            acted.iter().filter(|line| line.starts_with("PUT")).count(),
+            32
+        );
+        let mut keys: Vec<&String> = acted.iter().collect();
+        keys.dedup();
+        assert_eq!(keys.len(), acted.len(), "a key was acted on twice");
+    }
+
+    #[test]
+    fn a_refused_key_stops_the_run_and_says_how_far_it_got() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dist = dist(tmp.path(), 4);
+        let store = Fake::refusing("002.html");
+
+        let err = dist
+            .reconcile(&store, true, &opts(), &Ui::new(Level::Silent))
+            .expect_err("the store refused");
+
+        let crate::error::BaudelaireErrorKind::Deploy(DeployError::Interrupted {
+            phase,
+            done,
+            total,
+            key,
+            ..
+        }) = err
+        else {
+            panic!("not an interrupted deploy: {err:?}");
+        };
+        assert!(matches!(phase, Phase::Upload), "not the upload phase");
+        assert_eq!(key, "002.html");
+        assert_eq!((done, total), (2, 4));
+        assert!(
+            !store
+                .acted
+                .lock()
+                .iter()
+                .any(|line| line.contains("DELETE")),
+            "a failed upload phase must not go on to delete"
+        );
+    }
 
     #[test]
     fn unconfigured_deploy_errors() {

@@ -58,6 +58,7 @@ fn s3_config(site: &Site, port: u16) -> Config {
         region: None,
         prefix: String::new(),
         delete: true,
+        concurrency: None,
     });
     config.headers.cache = CacheControl {
         enabled: true,

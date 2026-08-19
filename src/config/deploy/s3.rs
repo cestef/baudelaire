@@ -1,8 +1,9 @@
 //! `deploy { s3 { } }`: an S3-compatible bucket.
 
-use crate::config::dispatch::Kind::{Flag, Text, Url};
+use crate::config::dispatch::Kind::{Flag, Number, Text, Url};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
+use crate::config::value::ValueExt;
 
 /// An S3-compatible bucket target. Works against AWS S3 by default; set
 /// `endpoint` for R2 or any S3-compatible host.
@@ -19,6 +20,9 @@ pub struct S3Config {
     pub prefix: String,
     /// Delete remote objects under `prefix` that the build no longer produces.
     pub delete: bool,
+    /// How many objects are transferred at once. `None` is as many as the build
+    /// has threads.
+    pub concurrency: Option<usize>,
 }
 
 impl S3Config {
@@ -42,6 +46,7 @@ impl Default for S3Config {
             region: None,
             prefix: String::new(),
             delete: true,
+            concurrency: None,
         }
     }
 }
@@ -95,6 +100,17 @@ impl Section for S3Config {
             |c| c.delete.into(),
             |c, n, t| {
                 c.delete = n.boolean(t, 0)?;
+                Ok(())
+            },
+        ),
+        (
+            "concurrency",
+            Number,
+            "How many objects are transferred at once. Unset, as many as the build has threads.",
+            |c| c.concurrency.into(),
+            |c, n, t| {
+                let at_once: u16 = n.arg(t, 0)?.bounded(t, NodeExt::span(n), 1, u16::MAX)?;
+                c.concurrency = Some(usize::from(at_once));
                 Ok(())
             },
         ),

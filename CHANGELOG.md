@@ -12,6 +12,16 @@ chores are visible in the git history and change nothing for a site.
 
 ## [Unreleased]
 
+### Performance
+
+- **A deploy digests and uploads in parallel.** Every local file was read and
+  hashed one at a time, and every object uploaded and deleted over one request
+  in flight, so a site of a few thousand files spent the whole deploy waiting on
+  round trips. Digesting now runs over the build's threads, and a store that
+  answers many requests at once (a bucket) is given many: `deploy { s3 {
+  concurrency } }` caps it where a host wants fewer. An SSH deploy is one
+  session and stays serial.
+
 ### Changed
 
 - **A taxonomy is a block, and its listings are a block inside it.** One concept

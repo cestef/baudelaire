@@ -153,6 +153,8 @@ pub struct Bucket {
     root: String,
     cache: CacheControl,
     assets: Fingerprinted,
+    /// How many objects the reconcile transfers at once.
+    concurrency: Option<usize>,
 }
 
 impl Bucket {
@@ -194,6 +196,7 @@ impl Bucket {
             root,
             cache,
             assets,
+            concurrency: config.concurrency,
         }
     }
 
@@ -366,6 +369,12 @@ impl Bucket {
 }
 
 impl Store for Bucket {
+    /// Every object is its own request, so a bucket takes as many at once as
+    /// the site asks for.
+    fn concurrency(&self) -> Option<usize> {
+        self.concurrency
+    }
+
     /// A single-part upload's ETag is the hex MD5 of its bytes.
     fn digest(&self, bytes: &[u8]) -> String {
         Self::etag(bytes)
@@ -541,6 +550,7 @@ mod tests {
             region: None,
             prefix: prefix.into(),
             delete: true,
+            concurrency: None,
         }
     }
 

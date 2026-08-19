@@ -46,6 +46,11 @@ AWS_ACCESS_KEY_ID=AKIA... AWS_SECRET_ACCESS_KEY=... baudelaire deploy --yes
   [flag],
   [`#true`],
   [Remove objects under `prefix` that the build no longer produces.],
+
+  [`concurrency`],
+  [int],
+  [the build's threads],
+  [How many objects are transferred at once.],
 )
 
 Set `endpoint` for anything that is not AWS. It selects path-style addressing
@@ -119,6 +124,28 @@ deploy {
   }
 }
 ```
+
+== How fast it goes
+
+Every object is its own request, so the upload and the delete both fan out: as
+many at once as the build has threads, and `concurrency` if a bucket wants
+fewer.
+
+```kdl
+deploy {
+  s3 {
+    bucket "my-site"
+    concurrency 4
+  }
+}
+```
+
+Digesting the local files runs over the build's threads either way, since that
+half asks the bucket nothing. A key that fails stops the run, and the report
+names it and how many objects had finished; with requests in flight together it
+names *a* key that failed rather than the first one in order.
+
+An #link("ssh.typ")[SSH deploy] is one session and stays one request at a time.
 
 == Cache headers
 

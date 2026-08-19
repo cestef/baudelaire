@@ -297,6 +297,7 @@
   (path: "deploy.s3.region", key: "region", shape: "text", doc: "The bucket's region.", depth: 2, section: false),
   (path: "deploy.s3.prefix", key: "prefix", shape: "text", doc: "A key prefix every uploaded object goes under.", depth: 2, section: false),
   (path: "deploy.s3.delete", key: "delete", shape: "flag", doc: "Delete remote objects this build did not produce.", depth: 2, section: false),
+  (path: "deploy.s3.concurrency", key: "concurrency", shape: "number", doc: "How many objects are transferred at once. Unset, as many as the build has threads.", depth: 2, section: false),
   (path: "deploy.ssh", key: "ssh", shape: "block", doc: "Upload over SSH. Its presence turns it on.", depth: 1, section: true),
   (path: "deploy.ssh.host", key: "host", shape: "text", doc: "The host uploaded to.", depth: 2, section: false),
   (path: "deploy.ssh.path", key: "path", shape: "text", doc: "The remote directory the site is written into.", depth: 2, section: false),

@@ -112,6 +112,11 @@ impl Sftp<'_> {
 }
 
 impl Store for Sftp<'_> {
+    /// One SFTP session, one request at a time.
+    fn concurrency(&self) -> Option<usize> {
+        Some(1)
+    }
+
     /// The host hashes its own files with `sha256sum`, so the local side must
     /// match it exactly.
     fn digest(&self, bytes: &[u8]) -> String {
