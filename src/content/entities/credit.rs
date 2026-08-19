@@ -109,6 +109,11 @@ pub struct Resolved<'a> {
 }
 
 impl<'a> Resolved<'a> {
+    /// The fields a display name falls back to when `slots { display }` names
+    /// none, in order. The `content { entities { slots { display } } }` doc
+    /// spells this list out, and nothing but the reference test compares them.
+    pub(crate) const FALLBACK: &'static [&'static str] = &["name", "title"];
+
     fn new(registry: &'a Registry, term: &'a str, lang: &'a str) -> Self {
         Self {
             term,
@@ -134,12 +139,11 @@ impl<'a> Resolved<'a> {
         self.kind
     }
 
-    /// The name a reader sees: the display slot, else a `name` or `title`
-    /// field, else the term itself.
+    /// The name a reader sees: the display slot, else the first
+    /// [`FALLBACK`](Self::FALLBACK) field it has, else the term itself.
     pub fn display(&self) -> &str {
         self.slot(self.slots.display.as_deref())
-            .or_else(|| self.text("name"))
-            .or_else(|| self.text("title"))
+            .or_else(|| Self::FALLBACK.iter().find_map(|field| self.text(field)))
             .unwrap_or(self.term)
     }
 
