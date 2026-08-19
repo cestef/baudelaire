@@ -64,7 +64,8 @@ impl TailwindSheet {
         if !config.assets.tailwind.scan.is_empty() {
             return true;
         }
-        [Config::TYPST, Config::MARKDOWN]
+        config
+            .sources()
             .iter()
             .any(|ext| Config::has_ext(file, ext))
     }
