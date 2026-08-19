@@ -69,8 +69,8 @@ headers {
   cache { }
 }
 
-generate {
-  redirects #true
+redirects {
+  file #true
 }
 ```
 
@@ -82,7 +82,7 @@ generate {
   [block],
   [Write `_headers` from the cache and CSP policies, plus any rule under `rules`.],
 
-  [`generate { redirects }`],
+  [`redirects { file }`],
   [flag],
   [Write `_redirects` from each page's declared aliases.],
 )

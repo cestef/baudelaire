@@ -411,6 +411,6 @@ to be named in the body as well, or it has a URL and no file. See
   formats beyond the generated ones, and the whole `resources` chain except
   bundling, minifying, fingerprinting and image variants. Hugo also writes
   `/posts/page/1/` and a `page/1` under every term; nothing here does, and a
-  top-level `redirect { }` pair is what claims those paths back. Check what your
+  `redirects { rules }` pair is what claims those paths back. Check what your
   theme relies on before you start.
 ]

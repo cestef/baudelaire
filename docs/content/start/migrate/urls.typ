@@ -108,8 +108,8 @@ manual anchor. It works on any host. On Netlify or Cloudflare Pages, turn the
 same declarations into real 301s:
 
 ```kdl
-generate {
-  redirects #true
+redirects {
+  file #true
 }
 ```
 
@@ -122,13 +122,15 @@ a section you dropped on the way over have no source file to declare anything
 in. Claim those in the config, old path first:
 
 ```kdl
-redirect {
-  "/blog/page/1/" "/blog/"
-  "/tags/rs/" "/tags/rust/"
+redirects {
+  rules {
+    "/blog/page/1/" "/blog/"
+    "/tags/rs/" "/tags/rust/"
+  }
 }
 ```
 
-Same output, same `generate { redirects }` switch. A pair aiming at a path some
+Same output, same `redirects { file }` switch. A pair aiming at a path some
 page already publishes fails the build rather than burying that page.
 
 == Feeds

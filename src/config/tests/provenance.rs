@@ -167,10 +167,10 @@ fn every_block() -> String {
 /// comment in everything printed after it.
 #[test]
 fn a_block_carries_its_arguments_and_quotes_the_keys_that_need_it() {
-    let config = parse("redirect {\n  \"/latest/*\" \"/:splat\" status=302\n}");
+    let config = parse("redirects {\n  rules {\n    \"/latest/*\" \"/:splat\" status=302\n  }\n}");
     let written = config
         .values()
-        .at("redirect")
+        .at("redirects.rules")
         .expect("a held block")
         .scalar();
     assert!(

@@ -113,7 +113,7 @@ See #link("../../lookup/context.typ")[Build metadata] for what the build exposes
 == Rule files
 
 GitHub Pages reads neither `_headers` nor `_redirects`, so leave
-`generate { headers }` and `generate { redirects }` off. Redirects fall back to
+`headers { }` and `redirects { file }` off. Redirects fall back to
 HTML stubs, which work anywhere, and cache headers are GitHub's to set. Both
 files are for #link("static-hosts.typ")[Netlify and Cloudflare Pages].
 

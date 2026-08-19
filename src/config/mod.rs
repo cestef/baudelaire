@@ -30,7 +30,7 @@ pub mod paths;
 pub mod permalink;
 pub mod profile;
 pub mod prune;
-pub mod redirect;
+pub mod redirects;
 pub mod reference;
 pub mod schema;
 pub mod security;
@@ -46,8 +46,8 @@ use std::path::{Path, PathBuf};
 
 use kdl::{KdlDocument, KdlNode};
 
-use crate::config::dispatch::Kind::{Block as Nested, Items, Lines, Overlay, Table, Text, Url};
-use crate::config::dispatch::{Attributed, Block, Section};
+use crate::config::dispatch::Kind::{Block as Nested, Items, Overlay, Table, Text, Url};
+use crate::config::dispatch::{Block, Section};
 use crate::config::lang::Rtl;
 use crate::config::node::NodeExt;
 use crate::content::listing::Titlecase;
@@ -113,7 +113,8 @@ pub use navigation::standalone::{Router, StandaloneConfig};
 pub use paths::{Paths, Rooted};
 pub use permalink::{Permalink, PermalinkCtx, PermalinkError};
 pub use prune::PruneConfig;
-pub use redirect::RedirectConfig;
+pub use redirects::RedirectsConfig;
+pub use redirects::rule::RedirectConfig;
 pub use schema::{FieldSchema, FieldType, TypeError, Words};
 pub use security::SecurityConfig;
 pub use security::csp::CspConfig;
@@ -154,11 +155,9 @@ pub struct Config {
     pub assets: AssetConfig,
     pub html: HtmlConfig,
     pub links: LinkConfig,
-    /// Old paths with no page behind them, each paired with where it moved.
-    ///
-    /// A frontmatter `redirect` covers a page that still exists; this covers a
-    /// URL with nothing left to declare it (a deleted page, a generated index).
-    pub redirect: Vec<(String, RedirectConfig)>,
+    /// Where the paths no page owns forward to, and whether a rule file or an
+    /// HTML stub says so.
+    pub redirects: RedirectsConfig,
     /// Post-render linting of the built pages: accessibility and structure
     /// rules over the typed DOM, and per-page weight budgets.
     pub lint: LintConfig,
@@ -297,7 +296,8 @@ impl Config {
         if !self.headers.rules.is_empty() {
             return Some("headers { rules { .. } }");
         }
-        self.redirect
+        self.redirects
+            .rules
             .iter()
             .any(|(old, _)| Self::wildcard(old))
             .then_some("a wildcard `redirect`")
@@ -837,7 +837,7 @@ impl std::hash::Hash for Config {
             assets,
             html,
             links,
-            redirect,
+            redirects,
             lint,
             security,
             headers,
@@ -869,7 +869,7 @@ impl std::hash::Hash for Config {
         )
             .hash(state);
         (
-            assets, html, links, redirect, lint, security, headers, generate, artifacts,
+            assets, html, links, redirects, lint, security, headers, generate, artifacts,
             navigation, prune,
         )
             .hash(state);
@@ -905,7 +905,7 @@ impl Default for Config {
             assets: AssetConfig::default(),
             html: HtmlConfig::default(),
             links: LinkConfig::default(),
-            redirect: Vec::default(),
+            redirects: RedirectsConfig::default(),
             lint: LintConfig::default(),
             security: SecurityConfig::default(),
             headers: HeadersConfig::default(),
@@ -1085,14 +1085,11 @@ impl Section for Config {
             |c, n, t| c.links.fill(n, t),
         ),
         (
-            "redirect",
-            Lines(RedirectConfig::rows),
-            "Old paths no page owns, each forwarded to where its content moved.",
-            |c| Value::each(&c.redirect, Attributed::values),
-            |c, n, t| {
-                c.redirect = n.unique(t, "redirect", RedirectConfig::item)?;
-                Ok(())
-            },
+            "redirects",
+            Nested(RedirectsConfig::rows),
+            "The old paths this site still answers for, and how it answers them.",
+            |c| c.redirects.values(),
+            |c, n, t| c.redirects.fill(n, t),
         ),
         (
             Self::LINT,

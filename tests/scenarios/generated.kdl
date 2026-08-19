@@ -262,10 +262,12 @@ scenario "a redirect names the status it forwards with" {
         content "content"
         dist "public"
       }
-      generate { redirects #true }
-      redirect {
-        "/moved/" "/new/"
-        "/temp/" "/elsewhere/" status=302
+      redirects {
+        file #true
+        rules {
+          "/moved/" "/new/"
+          "/temp/" "/elsewhere/" status=302
+        }
       }
       """#
     "content/a.typ" #"""
@@ -293,8 +295,10 @@ scenario "a status without the rule file is reported as inert" {
         content "content"
         dist "public"
       }
-      redirect {
-        "/temp/" "/elsewhere/" status=307
+      redirects {
+        rules {
+          "/temp/" "/elsewhere/" status=307
+        }
       }
       """#
     "content/a.typ" #"""
@@ -320,8 +324,10 @@ scenario "a status that is not a redirect is refused" {
         content "content"
         dist "public"
       }
-      redirect {
-        "/a/" "/b/" status=200
+      redirects {
+        rules {
+          "/a/" "/b/" status=200
+        }
       }
       """#
     "content/a.typ" #"""

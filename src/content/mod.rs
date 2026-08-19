@@ -213,7 +213,8 @@ impl Claim {
     /// pair claims nothing, being written as a rule and never as a file.
     fn declared(config: &Config) -> impl Iterator<Item = Self> + '_ {
         config
-            .redirect
+            .redirects
+            .rules
             .iter()
             .filter(|(old, _)| !Config::wildcard(old))
             .map(|(old, _)| Self {

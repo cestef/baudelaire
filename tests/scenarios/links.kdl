@@ -97,11 +97,11 @@ scenario "frontmatter redirects emit stub pages beside the real one" {
   }
 }
 
-// `generate { redirects }` swaps the stubs for a rule file the host answers
+// `redirects { file }` swaps the stubs for a rule file the host answers
 // with a real 301. The stubs have to go: Netlify and Cloudflare Pages both
 // serve a static file in preference to a redirect rule, so a stub left at the
 // old path would win and the rule would never fire.
-scenario "generate redirects writes a rule file instead of stubs" {
+scenario "a redirects file replaces the stubs" {
   files {
     "config.kdl" #"""
       site "T"
@@ -109,8 +109,8 @@ scenario "generate redirects writes a rule file instead of stubs" {
         content "content"
         dist "public"
       }
-      generate {
-        redirects #true
+      redirects {
+        file #true
       }
       """#
     "content/posts/new.typ" #"""
@@ -141,10 +141,12 @@ scenario "the config redirects a path no page owns" {
         content "content"
         dist "public"
       }
-      redirect {
-        "/blog/page/1/" "/posts/"
-        "/2019/gone/" "/posts/new/"
-        "/elsewhere/" "https://example.org/moved"
+      redirects {
+        rules {
+          "/blog/page/1/" "/posts/"
+          "/2019/gone/" "/posts/new/"
+          "/elsewhere/" "https://example.org/moved"
+        }
       }
       """#
     "content/posts/new.typ" #"""
@@ -174,11 +176,11 @@ scenario "config redirects join the generated rule file" {
         content "content"
         dist "public"
       }
-      generate {
-        redirects #true
-      }
-      redirect {
-        "/blog/page/1/" "/posts/"
+      redirects {
+        file #true
+        rules {
+          "/blog/page/1/" "/posts/"
+        }
       }
       """#
     "content/posts/new.typ" #"""
@@ -202,8 +204,10 @@ scenario "a config redirect onto a real page is a collision" {
   files {
     "config.kdl" #"""
       site "T"
-      redirect {
-        "/posts/new/" "/posts/other/"
+      redirects {
+        rules {
+          "/posts/new/" "/posts/other/"
+        }
       }
       """#
     "content/posts/new.typ" #"""
@@ -371,8 +375,8 @@ scenario "a hand-written rule file brings the stubs back rather than dropping th
   files {
     "config.kdl" #"""
       site "T"
-      generate {
-        redirects #true
+      redirects {
+        file #true
       }
       """#
     "static/_redirects" #"""

@@ -248,22 +248,29 @@ const INERT: &[Inert] = &[
         setting: "a `redirect` old path carrying `*`",
         asked: |config| {
             config
-                .redirect
+                .redirects
+                .rules
                 .iter()
                 .any(|(old, _)| crate::config::Config::wildcard(old))
         },
-        needs: "generate { redirects }",
-        met: |config| config.generate.redirects,
+        needs: "redirects { file }",
+        met: |config| config.redirects.file,
         effect: "the pattern is dropped, since a wildcard cannot be an HTML stub",
-        help: "turn on `generate { redirects }`, or write the old paths out one by one",
+        help: "turn on `redirects { file }`, or write the old paths out one by one",
     },
     Inert {
         setting: "a `redirect` naming a `status`",
-        asked: |config| config.redirect.iter().any(|(_, rule)| rule.needs_rules()),
-        needs: "generate { redirects }",
-        met: |config| config.generate.redirects,
+        asked: |config| {
+            config
+                .redirects
+                .rules
+                .iter()
+                .any(|(_, rule)| rule.needs_rules())
+        },
+        needs: "redirects { file }",
+        met: |config| config.redirects.file,
         effect: "the HTML stub forwards the browser, and no host is told the status",
-        help: "turn on `generate { redirects }`, or drop the `status` and let it be a permanent move",
+        help: "turn on `redirects { file }`, or drop the `status` and let it be a permanent move",
     },
     Inert {
         setting: "security { csp }",
@@ -518,8 +525,8 @@ mod tests {
             ),
             (
                 "a `redirect` old path carrying `*`",
-                "redirect {\n  \"/latest/*\" \"/:splat\"\n}",
-                "generate {\n  redirects #true\n}\nredirect {\n  \"/latest/*\" \"/:splat\"\n}",
+                "redirects {\n  rules {\n    \"/latest/*\" \"/:splat\"\n  }\n}",
+                "redirects {\n  file #true\n  rules {\n    \"/latest/*\" \"/:splat\"\n  }\n}",
             ),
         ];
         for (setting, asked, satisfied) in cases {

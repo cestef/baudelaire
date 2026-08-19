@@ -84,16 +84,18 @@ lazy #true
 // Old paths nothing on the site owns. `/latest/` is the URL that never goes
 // stale: `docs/versions.sh` publishes the newest release at the root, and this
 // forwards every path under `/latest/` to the same page there. A pattern, so it
-// covers the whole site in one line, and it needs `generate { redirects }`
-// below: a family of URLs has no single file an HTML stub could sit at.
-redirect {
-  "/latest/*" "/:splat"
+// covers the whole site in one line, and it needs `file` below: a family of
+// URLs has no single file an HTML stub could sit at.
+redirects {
+  file #true
+  rules {
+    "/latest/*" "/:splat"
+  }
 }
 
 // Files the build emits beside the pages themselves.
 generate {
   sitemap #true
-  redirects #true
 
   // Client-side search: prebuilt postings, so the browser looks a term up
   // rather than reading every page's prose. The palette UI is the generated

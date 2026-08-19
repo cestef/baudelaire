@@ -14,6 +14,11 @@ chores are visible in the git history and change nothing for a site.
 
 ### Changed
 
+- **One block owns both halves of a forward.** The paths a site still answers
+  for were a top-level `redirect { }`, and how it answers them was `generate {
+  redirects }`, a letter apart and in different blocks. Both are now
+  `redirects { }`: the pairs under `rules { }`, the rule file under `file`.
+
 - **A page's artifacts leave the `generate` block.** `cards`, `pdf` and
   `bundles` are drawn by a paged second compile of the pages themselves, not
   written beside them like a sitemap or a feed, and they now say so: they live
@@ -258,6 +263,19 @@ chores are visible in the git history and change nothing for a site.
   as static content. `client` joins the nine blocks a site owns outright.
 
 ### Upgrading
+
+- The top-level `redirect { }` block and `generate { redirects }` merge into
+  `redirects { }`. The pairs keep their spelling, one level in:
+
+  ```kdl
+  redirects {
+    file #true
+    rules {
+      "/blog/page/1/" "/blog/"
+      "/latest/*" "/:splat"
+    }
+  }
+  ```
 
 - `generate { cards }`, `generate { pdf }` and `generate { bundles }` move to
   `artifacts { }` with their keys unchanged:
@@ -1214,6 +1232,7 @@ chores are visible in the git history and change nothing for a site.
 - **A redirect names the status it forwards with:**
 
   ```kdl
+  //! @ignore
   redirect {
     "/moved/" "/new/"
     "/beta/" "/preview/" status=302
@@ -1468,6 +1487,7 @@ chores are visible in the git history and change nothing for a site.
   one:
 
   ```kdl
+  //! @ignore
   redirect {
     "/latest/*" "/:splat"
   }
@@ -2218,6 +2238,7 @@ chores are visible in the git history and change nothing for a site.
 - **config**: a top-level `redirect { }` block, for the old paths no page owns.
 
   ```kdl
+  //! @ignore
   redirect {
     "/blog/page/1/" "/blog/"
     "/tags/rs/" "/tags/rust/"

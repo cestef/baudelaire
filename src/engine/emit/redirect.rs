@@ -42,8 +42,8 @@ impl Processor for Redirects {
     /// `redirect` names, and those are claimed by the page that names them.
     fn claims(&self, config: &Config) -> Vec<PathBuf> {
         config
-            .generate
             .redirects
+            .file
             .then(|| config.paths.dist.join(Self::RULES))
             .into_iter()
             .collect()
@@ -55,7 +55,7 @@ impl Processor for Redirects {
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
         let mut rules: Vec<(String, String, u16)> = Vec::new();
         let path = site.dist(&[Self::RULES]);
-        let mut rules_wanted = site.config.generate.redirects;
+        let mut rules_wanted = site.config.redirects.file;
         if rules_wanted && out.claimed(&path) {
             out.warn(RedirectsShadowed { path: path.clone() });
             rules_wanted = false;
@@ -121,7 +121,7 @@ impl Redirects {
                 status: crate::config::RedirectConfig::PERMANENT,
             })
         });
-        let config = site.config.redirect.iter().map(|(old, rule)| Rule {
+        let config = site.config.redirects.rules.iter().map(|(old, rule)| Rule {
             old: old.clone(),
             target: site.config.prefixed(&rule.target),
             lang: &site.config.lang,
@@ -274,7 +274,7 @@ mod tests {
     #[test]
     fn a_wildcard_old_path_is_written_as_a_rule() {
         let config = Config::parse(
-            "generate {\n  redirects #true\n}\nredirect {\n  \"/latest/*\" \"/:splat\"\n}\n",
+            "redirects {\n  file #true\n  rules {\n    \"/latest/*\" \"/:splat\"\n  }\n}\n",
         )
         .expect("should parse");
         let site = Site {
@@ -296,7 +296,8 @@ mod tests {
     #[test]
     fn a_wildcard_writes_no_stub() {
         let config =
-            Config::parse("redirect {\n  \"/latest/*\" \"/:splat\"\n}\n").expect("should parse");
+            Config::parse("redirects {\n  rules {\n    \"/latest/*\" \"/:splat\"\n  }\n}\n")
+                .expect("should parse");
         let site = Site {
             entities: crate::content::Registries::none(),
             config: &config,

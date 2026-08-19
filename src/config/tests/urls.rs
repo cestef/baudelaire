@@ -275,10 +275,11 @@ fn a_dist_beside_the_sources_is_accepted() {
 /// status an attribute.
 #[test]
 fn a_redirect_carries_its_own_status() {
-    let cfg =
-        parse("redirect {\n  \"/moved/\" \"/new/\"\n  \"/temp/\" \"/elsewhere/\" status=302\n}");
-    let [(first, moved), (second, temp)] = cfg.redirect.as_slice() else {
-        panic!("two redirects, got {:?}", cfg.redirect);
+    let cfg = parse(
+        "redirects {\n  rules {\n    \"/moved/\" \"/new/\"\n    \"/temp/\" \"/elsewhere/\" status=302\n  }\n}",
+    );
+    let [(first, moved), (second, temp)] = cfg.redirects.rules.as_slice() else {
+        panic!("two redirects, got {:?}", cfg.redirects.rules);
     };
     assert_eq!(first, "/moved/");
     assert_eq!(moved.target, "/new/");
@@ -296,8 +297,8 @@ fn a_redirect_carries_its_own_status() {
 #[test]
 fn err_a_redirect_key_cannot_climb_out_of_dist() {
     for text in [
-        "redirect {\n  \"/../escaped.html\" \"/\"\n}",
-        "redirect {\n  \"/old/../../escaped/\" \"/\"\n}",
+        "redirects {\n  rules {\n    \"/../escaped.html\" \"/\"\n  }\n}",
+        "redirects {\n  rules {\n    \"/old/../../escaped/\" \"/\"\n  }\n}",
     ] {
         assert_eq!(code(text), "baudelaire::config::url_traversal", "{text}");
     }
@@ -306,8 +307,8 @@ fn err_a_redirect_key_cannot_climb_out_of_dist() {
 #[test]
 fn err_a_redirect_status_outside_the_class_is_refused() {
     for text in [
-        "redirect {\n  \"/a/\" \"/b/\" status=200\n}",
-        "redirect {\n  \"/a/\" \"/b/\" status=3012\n}",
+        "redirects {\n  rules {\n    \"/a/\" \"/b/\" status=200\n  }\n}",
+        "redirects {\n  rules {\n    \"/a/\" \"/b/\" status=3012\n  }\n}",
     ] {
         assert_eq!(code(text), "baudelaire::config::out_of_range", "{text}");
     }
@@ -317,7 +318,7 @@ fn err_a_redirect_status_outside_the_class_is_refused() {
 #[test]
 fn err_a_repeated_old_path_is_refused() {
     assert_eq!(
-        code("redirect {\n  \"/a/\" \"/b/\"\n  \"/a/\" \"/c/\"\n}"),
+        code("redirects {\n  rules {\n    \"/a/\" \"/b/\"\n    \"/a/\" \"/c/\"\n  }\n}"),
         "baudelaire::config::duplicate_id"
     );
 }

@@ -1,4 +1,5 @@
-//! `redirect { }`: an old path no page owns, and where it forwards to.
+//! `redirects { rules { } }`: an old path no page owns, and where it
+//! forwards to.
 
 use kdl::KdlNode;
 
@@ -42,7 +43,7 @@ impl RedirectConfig {
 
     /// Whether this redirect says anything a rule file is needed to say: an
     /// HTML stub can only forward a browser, so any non-default status needs
-    /// `generate { redirects }`.
+    /// `redirects { file }`.
     pub fn needs_rules(&self) -> bool {
         self.status != Self::PERMANENT
     }

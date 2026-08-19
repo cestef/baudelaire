@@ -24,10 +24,12 @@ Baudelaire writes a small HTML stub at each old path: a meta refresh, a canonica
 Frontmatter only speaks for a page that still exists. A generated index, a term listing and a page you deleted have no frontmatter, so the config claims those paths instead:
 
 ```kdl
-redirect {
-  "/blog/page/1/" "/blog/"
-  "/tags/rs/" "/tags/rust/"
-  "/shop/" "https://shop.example.com"
+redirects {
+  rules {
+    "/blog/page/1/" "/blog/"
+    "/tags/rs/" "/tags/rust/"
+    "/shop/" "https://shop.example.com"
+  }
 }
 ```
 
@@ -38,7 +40,7 @@ Old path first, destination second. Both sides are literal: nothing is localized
   align: (left, left),
   table.header([Declare it], [When]),
   [`redirect` in frontmatter], [the content moved, and a page still holds it],
-  [`redirect { }` in the config], [the path was generated, or nothing holds it any more],
+  [`redirects { rules }` in the config], [the path was generated, or nothing holds it any more],
 )
 
 Both produce the same output, whichever format you pick below.
@@ -52,8 +54,8 @@ Both produce the same output, whichever format you pick below.
 A stub is a client-side round trip: the browser loads a page, reads the refresh, and asks again. Netlify and Cloudflare Pages both read a `_redirects` file from the publish directory instead, so on those hosts turn it on:
 
 ```kdl
-generate {
-  redirects #true
+redirects {
+  file #true
 }
 ```
 
@@ -73,16 +75,18 @@ Every declared old path becomes one rule, pointing at the page that claimed it:
 `301` is the default because that is what most of these are: the page moved and the old URL is not coming back. A diversion that *is* coming back says so:
 
 ```kdl
-redirect {
-  "/moved/" "/new/"
-  "/beta/" "/preview/" status=302
+redirects {
+  rules {
+    "/moved/" "/new/"
+    "/beta/" "/preview/" status=302
+  }
 }
 ```
 
 `status` takes anything in the redirect class, `300` to `399`. Anything else is refused: `200` and `404` are different features under the same file name, and `500` is a typo.
 
 #callout(kind: "warn")[
-  A `status` only reaches a host through `generate { redirects }`. A stub is a meta refresh: it forwards a browser and tells a crawler nothing about *how* the page moved. Setting one without the rule file is reported, and the stub is still written, so the old path keeps working.
+  A `status` only reaches a host through `redirects { file }`. A stub is a meta refresh: it forwards a browser and tells a crawler nothing about *how* the page moved. Setting one without the rule file is reported, and the stub is still written, so the old path keeps working.
 ]
 
 Frontmatter `redirect` carries no status. A page declaring one still exists, and the old path pointing at it is a permanent move by construction.
@@ -92,14 +96,16 @@ Frontmatter `redirect` carries no status. A page declaring one still exists, and
 An old path carrying a `*` matches a family of URLs rather than one. Whatever the host reads on the destination side (`:splat` on Netlify and Cloudflare Pages) is passed through untouched:
 
 ```kdl
-redirect {
-  "/latest/*" "/:splat"
-  "/docs/*" "/guide/:splat"
+redirects {
+  rules {
+    "/latest/*" "/:splat"
+    "/docs/*" "/guide/:splat"
+  }
 }
 ```
 
 #callout(kind: "warn")[
-  A pattern only works with `generate { redirects }` on. A stub is a file at one path, and a family of URLs has no single path to put one at, so without the rule file the pattern is dropped. The build says so rather than dropping it quietly.
+  A pattern only works with `redirects { file }` on. A stub is a file at one path, and a family of URLs has no single path to put one at, so without the rule file the pattern is dropped. The build says so rather than dropping it quietly.
 ]
 
 Leave it off for a host that reads no rule file. The stubs work anywhere, which is why they are the default. See #link("../../ship/deploy.typ")[deploying] for which host reads what.
@@ -110,7 +116,7 @@ A file in `static/` is published verbatim and wins the path, so a hand-written `
 
 ```text
 ⚠ `public/_redirects` is your own file, so redirects were written as stubs
-  help: merge the generated rules into it by hand, or drop `generate { redirects }` and keep the stubs
+  help: merge the generated rules into it by hand, or drop `redirects { file }` and keep the stubs
 ```
 
 The old paths keep working either way. To get real 301s for them, paste the rules into your own file.

@@ -14,7 +14,7 @@ type Claim = (&'static str, fn() -> Vec<String>);
 /// the docs site, and neither compares it with the `Default` impl: a changed
 /// default otherwise ships wrong documentation out of a green build.
 const CLAIMED: &[Claim] = &[
-    ("redirect.status", || {
+    ("redirects.rules.status", || {
         vec![RedirectConfig::PERMANENT.to_string()]
     }),
     ("generate.feed.names.rss", || {

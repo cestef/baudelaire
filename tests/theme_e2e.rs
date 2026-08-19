@@ -167,7 +167,7 @@ fn a_theme_cannot_speak_to_the_browser_in_the_sites_name() {
 
     for section in [
         "headers {\n  rules {\n    \"/*\" {\n      Refresh \"0; url=https://evil.example\"\n    }\n  }\n}\n",
-        "redirect {\n  \"/*\" \"https://evil.example/:splat\"\n}\n",
+        "redirects {\n  rules {\n    \"/*\" \"https://evil.example/:splat\"\n  }\n}\n",
     ] {
         let site = site();
         site.write("themes/plume/theme.kdl", section);
@@ -189,15 +189,15 @@ fn a_theme_may_still_ask_for_the_rule_files() {
     let site = site();
     site.write(
         "themes/plume/theme.kdl",
-        "headers { }\ngenerate {\n  redirects #true\n}\nredirect {\n  \"/old/\" \"/new/\"\n}\n",
+        "headers { }\nredirects {\n  file #true\n  rules {\n    \"/old/\" \"/new/\"\n  }\n}\n",
     );
 
     let config = Config::load(&site.read("config.kdl"), &site.root, None).expect("config");
 
     assert!(config.headers.file);
-    assert!(config.generate.redirects);
-    let [(old, rule)] = config.redirect.as_slice() else {
-        panic!("one redirect, got {:?}", config.redirect);
+    assert!(config.redirects.file);
+    let [(old, rule)] = config.redirects.rules.as_slice() else {
+        panic!("one redirect, got {:?}", config.redirects.rules);
     };
     assert_eq!(old, "/old/");
     assert_eq!(rule.target, "/new/");

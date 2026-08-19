@@ -17,10 +17,6 @@ use crate::config::{FeedConfig, LlmsConfig, ManifestConfig, RobotsConfig, Search
 pub struct GenerateConfig {
     /// Emit `sitemap.xml`, which needs `url` set.
     pub sitemap: bool,
-    /// Emit a `_redirects` file in place of the per-path HTML stubs; both
-    /// Netlify and Cloudflare Pages serve a static file over a redirect rule,
-    /// so a stub would shadow the rule if the two coexisted.
-    pub redirects: bool,
     pub robots: RobotsConfig,
     pub llms: LlmsConfig,
     pub manifest: ManifestConfig,
@@ -37,16 +33,6 @@ impl Section for GenerateConfig {
             |c| c.sitemap.into(),
             |c, n, t| {
                 c.sitemap = n.boolean(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "redirects",
-            Flag,
-            "Write a `_redirects` file from each page's declared aliases.",
-            |c| c.redirects.into(),
-            |c, n, t| {
-                c.redirects = n.boolean(t, 0)?;
                 Ok(())
             },
         ),
