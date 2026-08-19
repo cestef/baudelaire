@@ -54,6 +54,9 @@ impl<'a> Command<'a> {
         Ok(path)
     }
 
+    /// Once a position is parsed out of what the checker said, the line that
+    /// carried it is the whole finding: the `file:line:column:` it opened with
+    /// is dropped, because the finding already points at the fence.
     fn run(&self, snippet: &Snippet, path: &Path) -> Vec<Fault> {
         let line = self
             .line
@@ -76,9 +79,6 @@ impl<'a> Command<'a> {
         let at = said.position(path);
         vec![Fault {
             at: at.and_then(|at| snippet.offset(at)),
-            // With a position parsed, the line that carried it is the whole
-            // finding, and the `file:line:column:` it opened with is ours to
-            // drop: the finding already points at the fence.
             message: at.map_or_else(|| said.0.to_owned(), |_| said.said().to_owned()),
         }]
     }

@@ -805,11 +805,19 @@ impl Config {
 /// Feeds every build-affecting setting into the hasher so a config change
 /// invalidates the build cache. Destructuring means a newly added field fails to
 /// compile until it is accounted for here.
+///
+/// Five fields are deliberately left out, and each has to be: `root`, because
+/// hashing where the project sits would undo the portable manifest keys
+/// (`mv site site2` must still hit); `caching`, whose one file is written by a
+/// processor that runs whatever the cache says; `serve`, so a dev server on a
+/// custom port does not invalidate a `build`; `profiles`, since applying a
+/// profile mutates the fields above and those already carry the change; and
+/// `source`, kept only for error spans, so a comment-only edit is not a
+/// rebuild. `lint` is in, though it shapes no markup: with linting off a page
+/// records no findings and no weight.
 impl std::hash::Hash for Config {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         let Self {
-            // Where the project sits, not what it builds: hashing it would undo
-            // the portable manifest keys (`mv site site2` must still hit).
             root: _,
             site,
             url,
@@ -824,8 +832,6 @@ impl std::hash::Hash for Config {
             html,
             links,
             redirect,
-            // Shapes no markup, but decides what a page *records* while it
-            // renders: with linting off a page stores no findings and no weight.
             lint,
             security,
             generate,
@@ -834,21 +840,13 @@ impl std::hash::Hash for Config {
             typst,
             client,
             cache,
-            // `Cache-Control` shapes no page, and the one file it does shape is
-            // written by a processor, which runs whatever the cache says.
             caching: _,
             hooks,
             announce,
             deploy,
-            // Dev-server settings never affect output, so `serve` on a custom
-            // port must not invalidate a `build`'s cache.
             serve: _,
             profile,
-            // Applying a profile mutates the fields above, so any change to the
-            // raw partials is already captured.
             profiles: _,
-            // Kept only for error spans; a comment-only edit must not bust the
-            // cache.
             source: _,
         } = self;
         (

@@ -408,10 +408,11 @@ pub(super) trait Section: Sized + 'static {
     /// accepts and refuses exactly what the long spelling does.
     ///
     /// A block may still follow the argument, and either alone is enough.
+    ///
+    /// The section is enabled unconditionally: the line's own boolean belongs to
+    /// `stands_for`'s handler, and [`enable`](Section::enable) records only that
+    /// the section was named at all.
     fn shorthand(&mut self, node: &KdlNode, text: &str, stands_for: &'static str) -> Result<()> {
-        // Unconditionally `true`: here the line's own boolean belongs to
-        // `stands_for`'s handler, and `enable` records only that the section was
-        // named at all.
         self.enable(true);
         match node.children() {
             Some(block) => {

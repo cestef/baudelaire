@@ -47,7 +47,6 @@ impl Fonts {
             store: LazyLock::new(Box::new(move || {
                 let started = std::time::Instant::now();
                 let mut fonts = FontStore::new();
-                // Without this feature the defaults are not bundled at all.
                 #[cfg(feature = "embedded-fonts")]
                 fonts.extend(typst_kit::fonts::embedded());
                 for dir in &paths {

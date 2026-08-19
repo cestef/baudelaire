@@ -125,6 +125,9 @@ impl Parser for Yaml {
         &["yaml", "yml"]
     }
 
+    /// `saphyr`'s marker index counts characters whatever its accessor is
+    /// called, so it goes through `char_indices` rather than straight into a
+    /// byte offset.
     fn check(&self, snippet: &Snippet) -> Vec<Fault> {
         use saphyr::LoadableYamlNode as _;
 
@@ -132,7 +135,6 @@ impl Parser for Yaml {
             Ok(_) => Vec::new(),
             Err(error) => vec![Fault {
                 message: error.info().to_owned(),
-                // saphyr counts characters, whatever its accessor is called.
                 at: snippet
                     .text()
                     .char_indices()

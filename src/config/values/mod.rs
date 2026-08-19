@@ -181,13 +181,13 @@ impl<'a> Tree<'a> {
     }
 }
 
+/// Written at depth zero the node carries its own line, which at any greater
+/// depth its key has already written.
 impl fmt::Display for Tree<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Value::Node { args, attrs, keys } = self.value else {
             return self.value.fmt(f);
         };
-        // The value's own line, which a nested node writes after its key and a
-        // printed value has to carry itself.
         if self.depth == 0 && !(args.is_empty() && attrs.is_empty()) {
             let mut line = String::new();
             Self::line(&mut line, args, attrs)?;

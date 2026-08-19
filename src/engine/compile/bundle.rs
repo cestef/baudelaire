@@ -90,7 +90,8 @@ impl<'a> Bundle<'a> {
     /// fingerprint, so reordering pages invalidates it even though no file any
     /// of them names has changed. Where a page's frontmatter and body come from
     /// must match what `Prepare::bound` decides for that page's own compile, or
-    /// it reads one way on screen and another on paper.
+    /// it reads one way on screen and another on paper. A markdown page's body
+    /// is spliced in as markup, its file being nothing typst could `#include`.
     pub(in crate::engine) fn source(
         &self,
         prepare: &Prepare<'_>,
@@ -118,7 +119,6 @@ impl<'a> Bundle<'a> {
                     .expect("writing to a String cannot fail");
                     (alias, format!("include {}", Str(&vpath)))
                 }
-                // A markdown page's file is not one typst could `#include`.
                 #[cfg(feature = "markdown")]
                 Data::Lowered { dict, .. } => (dict.clone(), format!("[{}]", page.body)),
                 _ => ("(:)".to_owned(), format!("include {}", Str(&vpath))),

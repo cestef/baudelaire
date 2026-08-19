@@ -449,9 +449,9 @@ impl World for PageWorld {
         self.project.fonts.font(index)
     }
 
+    /// The offset is clamped before the narrowing, so the cast cannot truncate.
     fn today(&self, offset: Option<typst::foundations::Duration>) -> Option<Datetime> {
         let offset = match offset {
-            // Clamped before the narrowing, so the cast cannot truncate.
             #[allow(clippy::cast_possible_truncation)]
             Some(o) => time::UtcOffset::from_whole_seconds(
                 o.seconds().clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i32,

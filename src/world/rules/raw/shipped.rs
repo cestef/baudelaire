@@ -10,10 +10,10 @@ use syntect::parsing::{SyntaxDefinition, SyntaxSet, SyntaxSetBuilder};
 /// pages, `config show`, a `--help` example -- picks it up at once.
 const SHIPPED: &[&str] = &[include_str!("kdl.sublime-syntax")];
 
+/// The loaded grammars. One that fails to parse is dropped rather than
+/// panicking, because the test below already refuses a build that ships one.
 static SET: LazyLock<Arc<SyntaxSet>> = LazyLock::new(|| {
     let mut builder = SyntaxSetBuilder::new();
-    // A grammar that ships with the binary is checked by the test below, so one
-    // that does not parse is a build nobody ran.
     for definition in SHIPPED
         .iter()
         .filter_map(|grammar| SyntaxDefinition::load_from_str(grammar, false, None).ok())

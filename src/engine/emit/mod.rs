@@ -185,6 +185,8 @@ pub(super) trait Processor {
 pub(super) struct Processors(Vec<Box<dyn Processor>>);
 
 impl Processors {
+    /// Standalone runs last: it reads every other page's markup, not what the
+    /// processors before it emit.
     pub(super) fn builtin() -> Self {
         Self(vec![
             Box::new(redirect::Redirects),
@@ -200,7 +202,6 @@ impl Processors {
             #[cfg(feature = "announce")]
             Box::new(standard::WellKnown),
             Box::new(spa::Spa),
-            // last: it reads every other page's markup, not what they emit
             Box::new(standalone::Standalone),
         ])
     }

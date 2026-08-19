@@ -38,7 +38,6 @@ pub const IMAGE_RULE: ShowFn<ImageElem> = |elem, engine, styles| {
     if let Some(alt) = elem.alt.get_cloned(styles) {
         attrs.push(attr::alt, alt);
     }
-    // Pixel dimensions of a decoded raster, far inside `i64` either way.
     #[allow(clippy::cast_possible_truncation)]
     let cast = |v: f64| format!("{}", v.round() as i64);
     attrs.push(attr::width, cast(image.width()));
