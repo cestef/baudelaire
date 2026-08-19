@@ -18,7 +18,7 @@ struct Epub3;
 
 impl Epub3 {
     /// The media type, written as the zip's first entry.
-    const MIME: &'static str = "application/epub+zip";
+    const MIME: &'static str = crate::mime::Mime::EPUB;
     /// The entry that carries it, stored rather than deflated, as the spec
     /// pins both.
     const MIMETYPE: &'static str = "mimetype";

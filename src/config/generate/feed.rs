@@ -6,6 +6,7 @@ use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
 use crate::config::value::ValueExt;
 use crate::config::{BaseUrl, Named, Permalink};
+use crate::mime::Mime;
 
 /// Syndication feeds.
 #[derive(Debug, Clone, Hash)]
@@ -109,9 +110,9 @@ impl FeedKind {
     /// The media type a `<link rel="alternate">` announces this format under.
     pub fn mime(self) -> &'static str {
         match self {
-            Self::Rss => "application/rss+xml",
-            Self::Atom => "application/atom+xml",
-            Self::Json => "application/feed+json",
+            Self::Rss => Mime::RSS,
+            Self::Atom => Mime::ATOM,
+            Self::Json => Mime::JSON_FEED,
         }
     }
 }

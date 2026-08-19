@@ -16,6 +16,18 @@ impl Mime {
     /// The type a page's PDF is served and advertised as.
     pub const PDF: &'static str = "application/pdf";
 
+    /// The type an RSS feed is announced under.
+    pub const RSS: &'static str = "application/rss+xml";
+
+    /// The type an Atom feed is announced under.
+    pub const ATOM: &'static str = "application/atom+xml";
+
+    /// The type a JSON Feed is announced under.
+    pub const JSON_FEED: &'static str = "application/feed+json";
+
+    /// The type an EPUB is served and written into the book's own manifest as.
+    pub const EPUB: &'static str = "application/epub+zip";
+
     /// The MIME type named by `path`'s extension, matched case-insensitively.
     pub fn of(path: impl AsRef<Path>) -> Self {
         let Some(ext) = path.as_ref().extension().and_then(|e| e.to_str()) else {
@@ -41,6 +53,7 @@ impl Mime {
             "xml" => "application/xml",
             "txt" => "text/plain",
             "pdf" => Self::PDF,
+            "epub" => Self::EPUB,
             _ => Self::BINARY,
         })
     }
@@ -133,6 +146,8 @@ mod tests {
             ("data.json", "application/json"),
             ("feed.xml", "application/xml"),
             ("notes.txt", "text/plain"),
+            ("book.epub", "application/epub+zip"),
+            ("paper.pdf", "application/pdf"),
         ];
         for (path, want) in cases {
             assert_eq!(Mime::of(path).to_string(), want, "{path}");

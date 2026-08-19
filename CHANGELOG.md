@@ -148,6 +148,11 @@ chores are visible in the git history and change nothing for a site.
   and then overridden by the config. A name none of them knows is now an error
   at the call rather than a silently dropped setting.
 
+- **An EPUB is served as an EPUB.** `.epub` had no row in the media-type table,
+  so a generated book was served and uploaded as `application/octet-stream`
+  where the book's own manifest declares `application/epub+zip`. The four feed
+  and EPUB media types now live in that table with every other one.
+
 - **An EPUB chapter is well-formed XHTML.** Chapter bodies were spliced in as
   typst-html serialized them, which leaves a void element unclosed, into a
   document declared `application/xhtml+xml`: any bundle page carrying an image
