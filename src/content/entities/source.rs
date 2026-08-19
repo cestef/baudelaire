@@ -94,7 +94,12 @@ impl Source for DataSource {
         let source = cx.project.source(&path)?;
         let text = source.text();
         let declarations = Declared::document(text).map_err(|e| e.named(&path))?;
-        Provenance::entities(declarations, "data", &self.path.display().to_string(), text)
+        Provenance::entities(
+            declarations,
+            SourceConfig::DATA,
+            &self.path.display().to_string(),
+            text,
+        )
     }
 }
 
@@ -104,27 +109,18 @@ impl Source for InlineSource {
     fn load(&self, cx: &SourceCtx<'_>) -> Result<Vec<Entity>> {
         Provenance::entities(
             self.entities.clone(),
-            "inline",
+            SourceConfig::INLINE,
             Config::FILE,
             &cx.config.source,
         )
     }
 }
 
-/// What a KDL roster's declarations become, for the two sources that read one;
-/// every entity keeps the text it was read from, so a fault found long after
-/// the file was closed still underlines the node that wrote it.
-trait Roster {
-    fn entities(
-        declared: Vec<Declared>,
-        source: &'static str,
-        at: &str,
-        text: &str,
-    ) -> Result<Vec<Entity>>;
-}
-
-impl Roster for Provenance {
-    fn entities(
+impl Provenance {
+    /// What a KDL roster's declarations become, for the two sources that read
+    /// one; every entity keeps the text it was read from, so a fault found long
+    /// after the file was closed still underlines the node that wrote it.
+    pub(super) fn entities(
         declared: Vec<Declared>,
         source: &'static str,
         at: &str,

@@ -98,12 +98,19 @@ pub enum SourceConfig {
 }
 
 impl SourceConfig {
+    /// The keys of the `sources { }` block, named once for the row that parses
+    /// each and the reader that collects it back: [`SourcesConfig::under`]
+    /// joins the two by this string.
+    pub(crate) const PAGES: &'static str = "pages";
+    pub(crate) const DATA: &'static str = "data";
+    pub(crate) const INLINE: &'static str = "inline";
+
     /// How this source is spelled in config.
     pub fn name(&self) -> &'static str {
         match self {
-            Self::Pages(_) => "pages",
-            Self::Data(_) => "data",
-            Self::Inline(_) => "inline",
+            Self::Pages(_) => Self::PAGES,
+            Self::Data(_) => Self::DATA,
+            Self::Inline(_) => Self::INLINE,
         }
     }
 }
@@ -163,10 +170,10 @@ impl From<&SourceConfig> for crate::config::Value {
 impl Section for SourcesConfig {
     const RULES: Block<Self> = Block(&[
         (
-            "pages",
+            SourceConfig::PAGES,
             Path,
             "A directory of profile pages: each page's frontmatter is one entity's fields.",
-            |c| c.under("pages"),
+            |c| c.under(SourceConfig::PAGES),
             |c, n, t| {
                 c.0.push(SourceConfig::Pages(PagesSource {
                     dir: PathBuf::from(n.string(t, 0)?),
@@ -175,10 +182,10 @@ impl Section for SourcesConfig {
             },
         ),
         (
-            "data",
+            SourceConfig::DATA,
             Path,
             "A KDL roster file, written exactly as an `inline` block is.",
-            |c| c.under("data"),
+            |c| c.under(SourceConfig::DATA),
             |c, n, t| {
                 c.0.push(SourceConfig::Data(DataSource {
                     path: PathBuf::from(n.string(t, 0)?),
@@ -187,10 +194,10 @@ impl Section for SourcesConfig {
             },
         ),
         (
-            "inline",
+            SourceConfig::INLINE,
             Tables,
             "Entities written here, one block per id, each holding its fields.",
-            |c| c.under("inline"),
+            |c| c.under(SourceConfig::INLINE),
             |c, n, t| {
                 c.0.push(SourceConfig::Inline(InlineSource {
                     entities: Declared::block(n, t)?,

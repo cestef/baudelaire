@@ -50,7 +50,7 @@ impl Provenance {
     /// The source that declared it, spelled as its config key.
     pub fn source(&self) -> &'static str {
         match self {
-            Self::Page { .. } => "pages",
+            Self::Page { .. } => crate::config::SourceConfig::PAGES,
             Self::Roster { source, .. } => source,
         }
     }
