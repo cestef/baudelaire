@@ -23,7 +23,7 @@ pub struct S3 {
     config: S3Config,
     /// Site-wide rather than per-destination, so it cannot disagree with what
     /// `_headers` states.
-    caching: CacheControl,
+    cache: CacheControl,
     assets: Fingerprinted,
 }
 
@@ -35,10 +35,10 @@ pub struct Fingerprinted {
 }
 
 impl S3 {
-    pub fn new(config: S3Config, caching: CacheControl, assets: Fingerprinted) -> Self {
+    pub fn new(config: S3Config, cache: CacheControl, assets: Fingerprinted) -> Self {
         Self {
             config,
-            caching,
+            cache,
             assets,
         }
     }
@@ -57,7 +57,7 @@ impl Backend<Dist> for S3 {
         let secret_key = opts.secret(SECRET_KEY_ENV, "AWS secret access key")?;
         let bucket = Bucket::new(
             &self.config,
-            self.caching.clone(),
+            self.cache.clone(),
             self.assets.clone(),
             access_key,
             secret_key,

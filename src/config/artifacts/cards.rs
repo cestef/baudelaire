@@ -1,4 +1,4 @@
-//! `generate { cards { } }`: generated social cards.
+//! `artifacts { cards { } }`: generated social cards.
 
 use crate::config::Basename;
 use crate::config::dispatch::Kind::{Number, Text};

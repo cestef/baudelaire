@@ -8,7 +8,7 @@
 //
 // Nothing uses this file until you ask for it, in `config.kdl`:
 //
-//   generate { pdf { pages { template "print.typ" } } }
+//   artifacts { pdf { pages { template "print.typ" } } }
 //
 // `baudelaire init --with pdf` writes that line for you.
 

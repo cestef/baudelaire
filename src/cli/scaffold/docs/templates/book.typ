@@ -7,7 +7,7 @@
 //
 // Nothing uses this file until you ask for it, in `config.kdl`:
 //
-//   generate { pdf { bundle { template "book.typ"; site #true } } }
+//   artifacts { bundles { site { template "book.typ"; site #true } } }
 //
 // The result is `public/site.pdf`. Naming collections instead binds one
 // document per collection, at `public/<collection>.pdf`.

@@ -1,5 +1,5 @@
-//! `generate { pdf { } }`: a PDF per page. A document bound from *many* pages
-//! is `generate { bundles { } }`.
+//! `artifacts { pdf { } }`: a PDF per page. A document bound from *many* pages
+//! is `artifacts { bundles { } }`.
 
 use crate::config::Basename;
 use crate::config::dispatch::Kind::{Block as Nested, Text};

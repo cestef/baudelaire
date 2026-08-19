@@ -1,4 +1,5 @@
-//! `cache { }`: the incremental build manifest. Not [`super::caching`].
+//! `cache { }`: the incremental build manifest. Not `headers { cache }`,
+//! which is what a browser is told.
 
 use std::path::PathBuf;
 

@@ -6,7 +6,7 @@
 //
 // Nothing uses this file until you ask for it, in `config.kdl`:
 //
-//   generate { pdf { bundle { template "book.typ"; collections "chapters" } } }
+//   artifacts { bundles { book { template "book.typ"; collections "chapters" } } }
 //
 // The result is `public/chapters.pdf`. `site #true` binds the whole site
 // instead, as `public/site.pdf`.

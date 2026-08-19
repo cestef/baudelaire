@@ -1,4 +1,4 @@
-//! `generate { bundles { } }`: many pages bound into one document.
+//! `artifacts { bundles { } }`: many pages bound into one document.
 
 use kdl::KdlNode;
 

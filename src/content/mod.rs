@@ -219,7 +219,7 @@ impl Claim {
             .filter(|(old, _)| !Config::wildcard(old))
             .map(|(old, _)| Self {
                 output: config.destination(old),
-                origin: markup!("`redirect {{ \"{}\" }}` in the config", old),
+                origin: markup!("`redirects {{ rules {{ \"{}\" }} }}` in the config", old),
             })
     }
 
