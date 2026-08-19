@@ -148,6 +148,11 @@ chores are visible in the git history and change nothing for a site.
   and then overridden by the config. A name none of them knows is now an error
   at the call rather than a silently dropped setting.
 
+- **The over-budget report is headed like every other aggregate.** It read
+  `3 pages over budget` where its siblings read `found 3 broken internal
+  links`; all four now share one headline, so the count and the plural are
+  spelled in one place. Its diagnostic code is unchanged.
+
 - **The frontmatter cache survives the site moving.** It stored its page and
   dependency keys as the absolute paths the content walk produced, where the
   compile cache stored them relative to the project root, so `mv site site2`

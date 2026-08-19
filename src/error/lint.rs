@@ -8,6 +8,7 @@ use std::path::Path;
 use miette::{Diagnostic, LabeledSpan, NamedSource, Severity, SourceCode, SourceSpan};
 use serde::{Deserialize, Serialize};
 
+use super::aggregate::{Aggregate, Finding, Kind};
 use crate::render::Site;
 use crate::ui::{Bytes, Code, Text};
 
@@ -218,61 +219,29 @@ impl Diagnostic for Flaw {
 
 /// An error under `lint { strict }`, otherwise the identical report as a
 /// warning.
-#[derive(Debug)]
-pub struct Flaws {
-    flaws: Vec<Flaw>,
-    severity: Severity,
+pub type Flaws = Aggregate<Flaw>;
+
+impl Finding for Flaw {
+    fn set_severity(&mut self, severity: Severity) {
+        self.severity = severity;
+    }
 }
 
 impl Flaws {
-    pub fn new(mut flaws: Vec<Flaw>) -> Self {
-        for flaw in &mut flaws {
-            flaw.severity = Severity::Error;
-        }
-        Self {
-            flaws,
-            severity: Severity::Error,
-        }
+    const KIND: Kind = Kind {
+        noun: ("lint finding", "lint findings"),
+        code: "baudelaire::lint::found",
+        strict: "fix each one, turn the rule off by name under `lint { }`, or \
+                 set `lint { strict #false }` to downgrade these to warnings",
+        lenient: Some("fix each one, or set `lint { strict }` to make them fail the build"),
+    };
+
+    pub fn new(flaws: Vec<Flaw>) -> Self {
+        Self::at(flaws, Severity::Error, &Self::KIND)
     }
 
     pub fn warning(flaws: Vec<Flaw>) -> Self {
-        Self {
-            flaws,
-            severity: Severity::Warning,
-        }
-    }
-}
-
-impl fmt::Display for Flaws {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let n = self.flaws.len();
-        write!(f, "found {n} lint finding{}", if n == 1 { "" } else { "s" })
-    }
-}
-
-impl std::error::Error for Flaws {}
-
-impl Diagnostic for Flaws {
-    fn code(&self) -> Option<Box<dyn fmt::Display + '_>> {
-        Some(Box::new("baudelaire::lint::found"))
-    }
-
-    fn severity(&self) -> Option<Severity> {
-        Some(self.severity)
-    }
-
-    fn help(&self) -> Option<Box<dyn fmt::Display + '_>> {
-        Some(Box::new(match self.severity {
-            Severity::Error => {
-                "fix each one, turn the rule off by name under `lint { }`, or \
-                 set `lint { strict #false }` to downgrade these to warnings"
-            }
-            _ => "fix each one, or set `lint { strict }` to make them fail the build",
-        }))
-    }
-
-    fn related(&self) -> Option<Box<dyn Iterator<Item = &dyn Diagnostic> + '_>> {
-        Some(Box::new(self.flaws.iter().map(|f| f as &dyn Diagnostic)))
+        Self::at(flaws, Severity::Warning, &Self::KIND)
     }
 }
 
@@ -388,57 +357,28 @@ impl Diagnostic for Overweight {
 
 /// An error by default, because a budget is a limit the author wrote down
 /// rather than an opinion this tool holds.
-#[derive(Debug)]
-pub struct Overweights {
-    over: Vec<Overweight>,
-    severity: Severity,
+pub type Overweights = Aggregate<Overweight>;
+
+impl Finding for Overweight {
+    fn set_severity(&mut self, severity: Severity) {
+        self.severity = severity;
+    }
 }
 
 impl Overweights {
-    pub fn new(mut over: Vec<Overweight>) -> Self {
-        for page in &mut over {
-            page.severity = Severity::Error;
-        }
-        Self {
-            over,
-            severity: Severity::Error,
-        }
+    const KIND: Kind = Kind {
+        noun: ("page over budget", "pages over budget"),
+        code: "baudelaire::lint::budget",
+        strict: "ship less, or raise the limit under `lint { budget { } }`",
+        lenient: None,
+    };
+
+    pub fn new(over: Vec<Overweight>) -> Self {
+        Self::at(over, Severity::Error, &Self::KIND)
     }
 
     /// For `lint { budget { strict #false } }`.
     pub fn warning(over: Vec<Overweight>) -> Self {
-        Self {
-            over,
-            severity: Severity::Warning,
-        }
-    }
-}
-
-impl fmt::Display for Overweights {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let n = self.over.len();
-        write!(f, "{n} page{} over budget", if n == 1 { "" } else { "s" })
-    }
-}
-
-impl std::error::Error for Overweights {}
-
-impl Diagnostic for Overweights {
-    fn code(&self) -> Option<Box<dyn fmt::Display + '_>> {
-        Some(Box::new("baudelaire::lint::budget"))
-    }
-
-    fn severity(&self) -> Option<Severity> {
-        Some(self.severity)
-    }
-
-    fn help(&self) -> Option<Box<dyn fmt::Display + '_>> {
-        Some(Box::new(
-            "ship less, or raise the limit under `lint { budget { } }`",
-        ))
-    }
-
-    fn related(&self) -> Option<Box<dyn Iterator<Item = &dyn Diagnostic> + '_>> {
-        Some(Box::new(self.over.iter().map(|o| o as &dyn Diagnostic)))
+        Self::at(over, Severity::Warning, &Self::KIND)
     }
 }

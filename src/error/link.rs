@@ -6,6 +6,7 @@ use std::path::Path;
 
 use miette::{Diagnostic, LabeledSpan, NamedSource, Severity, SourceCode, SourceSpan};
 
+use super::aggregate::{Aggregate, Finding, Kind};
 use crate::ui::{Code, Text};
 
 /// Why a link did not resolve.
@@ -111,69 +112,33 @@ impl Diagnostic for Broken {
 }
 
 /// An error under `strict_links`, otherwise the identical report as a warning.
-#[derive(Debug)]
-pub struct BrokenLinks {
-    links: Vec<Broken>,
-    severity: Severity,
+pub type BrokenLinks = Aggregate<Broken>;
+
+impl Finding for Broken {
+    fn set_severity(&mut self, severity: Severity) {
+        self.severity = severity;
+    }
 }
 
 impl BrokenLinks {
+    const KIND: Kind = Kind {
+        noun: ("broken internal link", "broken internal links"),
+        code: "baudelaire::links::broken",
+        strict: "every `.typ` link must resolve to an existing page; \
+                 pass `--no-strict-links` to downgrade these to warnings",
+        lenient: Some(
+            "fix each target, or leave `--strict-links` on to make these \
+             fail the build",
+        ),
+    };
+
     pub fn new(links: Vec<Broken>) -> Self {
-        Self {
-            links,
-            severity: Severity::Error,
-        }
+        Self::at(links, Severity::Error, &Self::KIND)
     }
 
     /// Children included.
-    pub fn warning(mut links: Vec<Broken>) -> Self {
-        for link in &mut links {
-            link.severity = Severity::Warning;
-        }
-        Self {
-            links,
-            severity: Severity::Warning,
-        }
-    }
-}
-
-impl fmt::Display for BrokenLinks {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let n = self.links.len();
-        write!(
-            f,
-            "found {n} broken internal link{}",
-            if n == 1 { "" } else { "s" }
-        )
-    }
-}
-
-impl std::error::Error for BrokenLinks {}
-
-impl Diagnostic for BrokenLinks {
-    fn code(&self) -> Option<Box<dyn fmt::Display + '_>> {
-        Some(Box::new("baudelaire::links::broken"))
-    }
-
-    fn severity(&self) -> Option<Severity> {
-        Some(self.severity)
-    }
-
-    fn help(&self) -> Option<Box<dyn fmt::Display + '_>> {
-        Some(Box::new(match self.severity {
-            Severity::Error => {
-                "every `.typ` link must resolve to an existing page; \
-                 pass `--no-strict-links` to downgrade these to warnings"
-            }
-            _ => {
-                "fix each target, or leave `--strict-links` on to make these \
-                 fail the build"
-            }
-        }))
-    }
-
-    fn related(&self) -> Option<Box<dyn Iterator<Item = &dyn Diagnostic> + '_>> {
-        Some(Box::new(self.links.iter().map(|l| l as &dyn Diagnostic)))
+    pub fn warning(links: Vec<Broken>) -> Self {
+        Self::at(links, Severity::Warning, &Self::KIND)
     }
 }
 
@@ -207,46 +172,23 @@ impl Diagnostic for Dead {
 }
 
 /// Outbound links that answered with an error status, from `check --external`.
-#[derive(Debug)]
-pub struct DeadLinks(Vec<Dead>);
+pub type DeadLinks = Aggregate<Dead>;
+
+impl Finding for Dead {}
+
+impl DeadLinks {
+    const KIND: Kind = Kind {
+        noun: ("dead outbound link", "dead outbound links"),
+        code: "baudelaire::links::dead",
+        strict: "update or remove each target; a permanent redirect is fine, \
+                 a 404 is not",
+        lenient: None,
+    };
+}
 
 impl From<Vec<Dead>> for DeadLinks {
     fn from(links: Vec<Dead>) -> Self {
-        Self(links)
-    }
-}
-
-impl fmt::Display for DeadLinks {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let n = self.0.len();
-        write!(
-            f,
-            "found {n} dead outbound link{}",
-            if n == 1 { "" } else { "s" }
-        )
-    }
-}
-
-impl std::error::Error for DeadLinks {}
-
-impl Diagnostic for DeadLinks {
-    fn code(&self) -> Option<Box<dyn fmt::Display + '_>> {
-        Some(Box::new("baudelaire::links::dead"))
-    }
-
-    fn severity(&self) -> Option<Severity> {
-        Some(Severity::Error)
-    }
-
-    fn help(&self) -> Option<Box<dyn fmt::Display + '_>> {
-        Some(Box::new(
-            "update or remove each target; a permanent redirect is fine, \
-             a 404 is not",
-        ))
-    }
-
-    fn related(&self) -> Option<Box<dyn Iterator<Item = &dyn Diagnostic> + '_>> {
-        Some(Box::new(self.0.iter().map(|l| l as &dyn Diagnostic)))
+        Self::at(links, Severity::Error, &Self::KIND)
     }
 }
 

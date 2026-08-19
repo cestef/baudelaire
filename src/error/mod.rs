@@ -8,6 +8,7 @@ use typst::syntax::VirtualizeError;
 
 use crate::ui::Code;
 
+pub mod aggregate;
 pub mod annotated;
 #[cfg(feature = "announce")]
 pub mod announce;
