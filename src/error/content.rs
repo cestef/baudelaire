@@ -190,7 +190,10 @@ pub enum ContentError {
         span: Option<SourceSpan>,
     },
 
-    #[error("{} and {} both write {}", Code(.first), Code(.second), Code(.target))]
+    /// `first` and `second` are written at the call site, not read off a file,
+    /// so they are already marked up (see [`crate::ui::markup!`]) and
+    /// interpolated as-is rather than escaped.
+    #[error("{first} and {second} both write {}", Code(.target))]
     #[diagnostic(
         code(baudelaire::content::collision),
         help(

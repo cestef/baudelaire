@@ -65,7 +65,7 @@ impl<'a> Command<'a> {
         }
         let output = match command.output() {
             Ok(output) => output,
-            Err(why) => return vec![format!("could not run `{line}`: {why}").into()],
+            Err(why) => return vec![format!("could not run {line}: {why}").into()],
         };
         if output.status.success() {
             return Vec::new();
@@ -136,8 +136,8 @@ impl std::fmt::Display for Silent<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Self(line, status) = self;
         match status.code() {
-            Some(code) => write!(f, "`{line}` exited with status {code}"),
-            None => write!(f, "`{line}` was killed by a signal"),
+            Some(code) => write!(f, "{line} exited with status {code}"),
+            None => write!(f, "{line} was killed by a signal"),
         }
     }
 }

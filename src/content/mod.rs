@@ -164,6 +164,8 @@ pub struct Plan {
 /// One claim on an output file, and where it came from.
 struct Claim {
     output: std::path::PathBuf,
+    /// Where the claim was written, already marked up: the collision
+    /// diagnostic interpolates it as-is.
     origin: String,
 }
 
@@ -211,7 +213,7 @@ impl Claim {
     fn of<'a>(page: &'a Page, config: &'a Config) -> impl Iterator<Item = Self> + 'a {
         let own = Self {
             output: page.output.clone(),
-            origin: page.source.display().to_string(),
+            origin: markup!("`{}`", page.source.display()),
         };
         let stubs = page
             .frontmatter
