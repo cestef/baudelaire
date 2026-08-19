@@ -345,39 +345,62 @@ impl Cache {
         {
             return Err(Miss::Roots);
         }
-        if !entry
-            .links
+        if let Some(probe) = Self::PROBES
             .iter()
-            .all(|(path, permalink)| self.links.get(path) == permalink.as_ref())
+            .find(|probe| !(probe.agrees)(entry, self))
         {
-            return Err(Miss::Links);
-        }
-        if !entry
-            .urls
-            .iter()
-            .all(|(url, served)| self.urls.contains(url) == *served)
-        {
-            return Err(Miss::Urls);
-        }
-        if !entry
-            .srcsets
-            .iter()
-            .all(|(source, digest)| self.srcsets.get(source) == digest.as_ref())
-        {
-            return Err(Miss::Srcsets);
-        }
-        if !entry
-            .assets
-            .iter()
-            .all(|(request, served)| self.assets.get(request) == served.as_ref())
-        {
-            return Err(Miss::Assets);
+            return Err(probe.miss);
         }
         let entry = entry.clone();
         let html = self.objects.read(&entry.blob).ok_or(Miss::Blob)?;
         let outputs = entry.outputs.clone();
         self.next.pages.insert(key, entry);
         Ok((html, outputs))
+    }
+
+    /// One render-side probe: what a page recorded while it rendered, and how
+    /// this build answers the same question.
+    ///
+    /// Adding a probe is one row here beside its two fields, and
+    /// [`hit`](Cache::hit) walks the rows, so a probe that is recorded but
+    /// never revalidated cannot exist. That is the shape of the bug this
+    /// collapses: six near-identical checks, one of which could be forgotten.
+    const PROBES: &'static [Probe] = &[
+        Probe {
+            agrees: |entry, cache| Self::still(&entry.links, &cache.links),
+            miss: Miss::Links,
+        },
+        Probe {
+            agrees: |entry, cache| {
+                entry
+                    .urls
+                    .iter()
+                    .all(|(url, served)| cache.urls.contains(url) == *served)
+            },
+            miss: Miss::Urls,
+        },
+        Probe {
+            agrees: |entry, cache| Self::still(&entry.srcsets, &cache.srcsets),
+            miss: Miss::Srcsets,
+        },
+        Probe {
+            agrees: |entry, cache| Self::still(&entry.assets, &cache.assets),
+            miss: Miss::Assets,
+        },
+    ];
+
+    /// Whether every probe a page recorded still answers the way it did.
+    ///
+    /// A recorded `None` is a negative probe and agrees only with a key this
+    /// build still has nothing at: that is what makes something later appearing
+    /// there invalidate the page.
+    fn still<K: Ord, V: PartialEq>(
+        recorded: &BTreeMap<K, Option<V>>,
+        current: &BTreeMap<K, V>,
+    ) -> bool {
+        recorded
+            .iter()
+            .all(|(key, value)| current.get(key) == value.as_ref())
     }
 
     /// Whether every file a compile read still hashes to what it hashed then.
@@ -621,6 +644,13 @@ mod tests {
 
         assert_eq!(key, Path::new("content/posts/a.typ"));
     }
+}
+
+/// One row of [`Cache::PROBES`]: the question, and the miss it reports.
+struct Probe {
+    /// Whether what the page recorded still matches what this build holds.
+    agrees: fn(&Entry, &Cache) -> bool,
+    miss: Miss,
 }
 
 /// Why a page could not be served from the cache: the answer to "why did this
