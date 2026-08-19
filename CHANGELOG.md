@@ -148,6 +148,12 @@ chores are visible in the git history and change nothing for a site.
   and then overridden by the config. A name none of them knows is now an error
   at the call rather than a silently dropped setting.
 
+- **The frontmatter cache survives the site moving.** It stored its page and
+  dependency keys as the absolute paths the content walk produced, where the
+  compile cache stored them relative to the project root, so `mv site site2`
+  kept one warm and cold-started the other and every page was evaluated again
+  for frontmatter it already had. Both caches now key a path the same way.
+
 - **An unknown `@baudelaire/*` import reads as one sentence.** The suggestion
   and the module list were built with this crate's own markup, which the
   message does not travel through: the reader got literal backticks and a line

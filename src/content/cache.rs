@@ -13,7 +13,7 @@ use crate::config::Config;
 use crate::content::page::Data;
 use crate::content::{Frontmatter, Origin};
 use crate::error::{Artifact, Result, SerializeError};
-use crate::graph::{Analyzer, FileDigests, Hash, Renderer, Root, Roots};
+use crate::graph::{Analyzer, FileDigests, Hash, Portable, Renderer, Root, Roots};
 use crate::world::Project;
 
 /// The on-disk discovery manifest, beside the compile cache's `manifest.json`.
@@ -71,6 +71,9 @@ struct Manifest {
 /// evaluation for pages whose source and dependencies are unchanged.
 pub struct DiscoveryCache<'a> {
     dir: PathBuf,
+    /// The project root every manifest key is written relative to, so a warm
+    /// manifest survives the site moving.
+    root: PathBuf,
     enabled: bool,
     salt: Hash,
     prev: Manifest,
@@ -100,6 +103,7 @@ impl<'a> DiscoveryCache<'a> {
             .unwrap_or_default();
         Self {
             dir,
+            root: config.root.clone(),
             enabled: config.cache.incremental,
             salt,
             prev,
@@ -145,13 +149,14 @@ impl<'a> DiscoveryCache<'a> {
                 reads.insert(Project::clock());
             }
             let meta = self.roots().digests(&reads);
+            let keys = Portable(&self.root);
             let deps = deps
                 .files()
                 .iter()
-                .map(|p| (p.clone(), self.digests.of(p)))
+                .map(|p| (keys.key(p), self.digests.of(p)))
                 .collect();
             self.next.lock().pages.insert(
-                path.to_owned(),
+                keys.key(path),
                 Entry {
                     source: hash,
                     deps,
@@ -299,11 +304,16 @@ impl<'a> DiscoveryCache<'a> {
     /// dependency hash unchanged, carried into the next manifest so it survives
     /// to the following build.
     fn reuse(&self, path: &Path, hash: Hash) -> Option<Entry> {
-        let entry = self.prev.pages.get(path)?;
+        let keys = Portable(&self.root);
+        let entry = self.prev.pages.get(&keys.key(path))?;
         if entry.source != hash {
             return None;
         }
-        if !entry.deps.iter().all(|(p, h)| self.digests.of(p) == *h) {
+        if !entry
+            .deps
+            .iter()
+            .all(|(p, h)| self.digests.of(&keys.resolve(p)) == *h)
+        {
             return None;
         }
         let roots = self.roots();
@@ -314,10 +324,7 @@ impl<'a> DiscoveryCache<'a> {
         {
             return None;
         }
-        self.next
-            .lock()
-            .pages
-            .insert(path.to_owned(), entry.clone());
+        self.next.lock().pages.insert(keys.key(path), entry.clone());
         Some(entry.clone())
     }
 

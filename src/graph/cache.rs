@@ -22,7 +22,7 @@ use crate::error::warning::ManifestUnreadable;
 use crate::error::{Artifact, Result, SerializeError};
 use crate::graph::access::{Root, Roots};
 use crate::graph::objects::Objects;
-use crate::graph::{Deps, FileDigests, Hash, Reads, Renderer};
+use crate::graph::{Deps, FileDigests, Hash, Portable, Reads, Renderer};
 use crate::render::{
     AssetDeps, Finding, Fragments, ImageRef, Inline, LinkDeps, Outbound, RenderMaps, SrcSetDeps,
     Syndicated, Target, UrlDeps, Weight,
@@ -266,7 +266,7 @@ impl Cache {
             links: maps
                 .links
                 .entries()
-                .map(|(source, permalink)| (Self::portable(&root, source), permalink.to_owned()))
+                .map(|(source, permalink)| (Portable(&root).key(source), permalink.to_owned()))
                 .collect(),
             srcsets: maps.srcsets.digests(),
             assets: maps.assets.served().clone(),
@@ -383,7 +383,7 @@ impl Cache {
     /// Whether every file a compile read still hashes to what it hashed then.
     fn intact(&self, deps: &BTreeMap<PathBuf, Option<Hash>>) -> bool {
         deps.iter()
-            .all(|(path, hash)| self.digests.of(&self.resolve(path)) == *hash)
+            .all(|(path, hash)| self.digests.of(&Portable(&self.root).resolve(path)) == *hash)
     }
 
     /// The files a compile read, hashed and keyed the portable way the manifest
@@ -391,7 +391,7 @@ impl Cache {
     fn digested(&self, deps: &Deps) -> BTreeMap<PathBuf, Option<Hash>> {
         deps.files()
             .iter()
-            .map(|p| (Self::portable(&self.root, p), self.digests.of(p)))
+            .map(|p| (Portable(&self.root).key(p), self.digests.of(p)))
             .collect()
     }
 
@@ -449,7 +449,7 @@ impl Cache {
         let deps = self.digested(deps);
         let links = links
             .iter()
-            .map(|(path, permalink)| (Self::portable(&self.root, path), permalink.clone()))
+            .map(|(path, permalink)| (Portable(&self.root).key(path), permalink.clone()))
             .collect();
         let blob = Hash::of_bytes(html.as_bytes());
         self.next.pages.insert(
@@ -524,45 +524,17 @@ impl Cache {
         self.next.pages.values().map(|entry| entry.blob).collect()
     }
 
-    /// The manifest key for a page: portable (see [`Cache::portable`]), with
+    /// The manifest key for a page: portable (see [`Portable::key`]), with
     /// generated listings under a reserved prefix, since their fabricated
     /// source path could otherwise collide with a real page's.
     fn key(&self, page: &Page) -> PathBuf {
-        let path = Self::portable(&self.root, &page.source);
+        let path = Portable(&self.root).key(&page.source);
         match page.data {
             Data::Generated { .. } => Path::new(GENERATED).join(path),
             #[cfg(feature = "markdown")]
             Data::Lowered { .. } => path,
             Data::Export | Data::Empty => path,
         }
-    }
-
-    /// A path as the manifest stores it: relative to the project root when it
-    /// lies under it (so a warm cache survives the site moving), absolute
-    /// otherwise — the typst package cache is machine-global anyway. Never
-    /// relative to the process's working directory, and never dependent on
-    /// whether the file exists yet: one path has exactly one key.
-    ///
-    /// Both halves matter for the negative link dependency ([`Entry::links`]):
-    /// a probe at a page not written yet must key exactly like the page that
-    /// later appears there, or the recorded `None` keeps reading as "nothing
-    /// here" and the linking page stays a hit with a broken link.
-    fn portable(root: &Path, path: &Path) -> PathBuf {
-        let resolved = crate::fs::resolved(path);
-        let absolute = if resolved.is_absolute() {
-            resolved
-        } else {
-            root.join(resolved)
-        };
-        absolute
-            .strip_prefix(root)
-            .unwrap_or(&absolute)
-            .to_path_buf()
-    }
-
-    /// The inverse of [`Cache::portable`]: a stored key back to a real path.
-    fn resolve(&self, path: &Path) -> PathBuf {
-        self.root.join(path)
     }
 }
 
@@ -636,41 +608,6 @@ mod tests {
 
         assert_ne!(real, listing);
         assert!(listing.starts_with(GENERATED), "{listing:?}");
-    }
-
-    /// The key spelling is a contract: root-relative under the root, absolute
-    /// outside it, and the same before and after a file appears there.
-    #[test]
-    #[cfg(unix)]
-    fn portable_keys_do_not_depend_on_whether_the_file_exists() {
-        let tmp = tempfile::tempdir().unwrap();
-        let outside = tempfile::tempdir().unwrap();
-        let cache = cache(tmp.path());
-        let root = crate::fs::canonical(tmp.path());
-
-        std::fs::write(root.join("layout.typ"), "").unwrap();
-        let inside = Cache::portable(&root, &root.join("layout.typ"));
-        assert_eq!(inside, Path::new("layout.typ"));
-        assert_eq!(cache.resolve(&inside), root.join("layout.typ"));
-
-        let external = crate::fs::canonical(outside.path()).join("theme.typ");
-        std::fs::write(&external, "").unwrap();
-        let key = Cache::portable(&root, &external);
-        assert_eq!(key, external);
-        assert_eq!(cache.resolve(&key), external);
-
-        std::fs::create_dir_all(root.join("vault/posts")).unwrap();
-        std::fs::create_dir_all(root.join("content")).unwrap();
-        std::os::unix::fs::symlink(root.join("vault/posts"), root.join("content/posts")).unwrap();
-        let missing = root.join("content/posts/b.typ");
-        let before = Cache::portable(&root, &missing);
-        std::fs::write(root.join("vault/posts/b.typ"), "").unwrap();
-        assert_eq!(
-            before,
-            Cache::portable(&root, &missing),
-            "a path must key the same before and after the file appears"
-        );
-        assert_eq!(before, Path::new("vault/posts/b.typ"));
     }
 
     /// A warm cache still matches after the site moves on disk.
