@@ -148,6 +148,13 @@ chores are visible in the git history and change nothing for a site.
   and then overridden by the config. A name none of them knows is now an error
   at the call rather than a silently dropped setting.
 
+- **A file typst could not read says what was wrong with it.** Every failure
+  the compiler's file store reported was flattened into one "failed to read"
+  diagnostic whose hint keyed off an error kind that no longer meant anything,
+  so a directory where a file was expected, a source that is not UTF-8 and an
+  unreachable package all read the same. Each now has its own message, code and
+  help.
+
 - **A slim build no longer advertises `clean --announce`.** The flag was
   ungated where the rest of `announce` is gated as whole modules, so a binary
   with no announce support listed a target in `--help` for state it can never

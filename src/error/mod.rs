@@ -85,6 +85,10 @@ pub enum BaudelaireErrorKind {
     #[diagnostic(transparent)]
     Fs(#[from] crate::error::FsError),
 
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    TypstFile(#[from] crate::error::typ::TypstFileError),
+
     #[error("typst compilation failed")]
     #[diagnostic(code(baudelaire::typst::compile))]
     TypstCompile(#[related] Vec<TypstSourceDiagnostic>),

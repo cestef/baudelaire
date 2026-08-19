@@ -9,7 +9,7 @@ use typst::{
 };
 
 use crate::content::{Rebased, SourceMap};
-use crate::ui::Text;
+use crate::ui::{Code, Text};
 
 /// A typst diagnostic bridged to miette, with span resolution via the world
 /// that produced it.
@@ -177,5 +177,90 @@ impl miette::Diagnostic for TypstSourceDiagnostic {
             .filter_map(|frame| self.labeled(frame.span, Some(&frame.v.to_string())));
         let labels: Vec<_> = main.chain(hints).chain(trace).collect();
         (!labels.is_empty()).then(|| Box::new(labels.into_iter()) as _)
+    }
+}
+
+/// A project file typst's own store could not hand back, in the shape the store
+/// reported it rather than as a generic read failure.
+///
+/// Every [`FileError`](typst::diag::FileError) shape is named, so a typst bump
+/// that adds one fails to compile here rather than falling into a bucket.
+#[derive(Debug, thiserror::Error, miette::Diagnostic)]
+pub enum TypstFileError {
+    #[error("{} does not exist", Code(.path))]
+    #[diagnostic(
+        code(baudelaire::typst::file::missing),
+        help("check the spelling, and that whatever writes it runs before the page that reads it")
+    )]
+    Missing { path: String },
+
+    #[error("{} could not be opened", Code(.path))]
+    #[diagnostic(
+        code(baudelaire::typst::file::denied),
+        help("permission denied: check the file's ownership and mode")
+    )]
+    Denied { path: String },
+
+    #[error("{} is a directory, and a file was expected", Code(.path))]
+    #[diagnostic(code(baudelaire::typst::file::directory))]
+    Directory { path: String },
+
+    #[error("{} is not a typst source file", Code(.path))]
+    #[diagnostic(
+        code(baudelaire::typst::file::not_source),
+        help("a module is read from a `.typ` file")
+    )]
+    NotSource { path: String },
+
+    #[error("{} is not valid UTF-8", Code(.path))]
+    #[diagnostic(
+        code(baudelaire::typst::file::encoding),
+        help("typst reads a source file as UTF-8; re-save it in that encoding")
+    )]
+    Encoding { path: String },
+
+    #[error("{} could not be resolved on this platform: {}", Code(.path), Text(.detail))]
+    #[diagnostic(code(baudelaire::typst::file::realize))]
+    Realize { path: String, detail: String },
+
+    #[error("the package {} is part of could not be loaded: {}", Code(.path), Text(.detail))]
+    #[diagnostic(
+        code(baudelaire::typst::file::package),
+        help("check `typst {{ package {{ }} }}` and that the registry is reachable")
+    )]
+    Package { path: String, detail: String },
+
+    #[error("{} could not be read: {}", Code(.path), Text(.detail))]
+    #[diagnostic(code(baudelaire::typst::file::other))]
+    Other { path: String, detail: String },
+}
+
+impl TypstFileError {
+    /// The failure typst reported for `path`, as this crate's own diagnostic.
+    pub fn of(path: &std::path::Path, error: &typst::diag::FileError) -> Self {
+        use typst::diag::FileError;
+
+        let path = path.display().to_string();
+        match error {
+            FileError::NotFound(_) => Self::Missing { path },
+            FileError::AccessDenied => Self::Denied { path },
+            FileError::IsDirectory => Self::Directory { path },
+            FileError::NotSource => Self::NotSource { path },
+            FileError::InvalidUtf8 => Self::Encoding { path },
+            FileError::Realize(e) => Self::Realize {
+                path,
+                detail: e.to_string(),
+            },
+            FileError::Package(e) => Self::Package {
+                path,
+                detail: e.to_string(),
+            },
+            FileError::Other(detail) => Self::Other {
+                path,
+                detail: detail
+                    .as_ref()
+                    .map_or_else(|| "no further detail".to_owned(), ToString::to_string),
+            },
+        }
     }
 }

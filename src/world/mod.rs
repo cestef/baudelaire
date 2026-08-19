@@ -5,7 +5,7 @@ use time::OffsetDateTime;
 use typst::{
     Feature, Features, Library, LibraryExt, World,
     comemo::Track,
-    diag::{FileError, FileResult},
+    diag::FileResult,
     engine::{Route, Sink, Traced},
     foundations::{Bytes, Datetime, Dict, IntoValue, Module, Str, Value},
     syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot},
@@ -205,15 +205,10 @@ impl Project {
     /// store: discovery and compilation read one parse.
     pub fn source(&self, path: &Path) -> Result<Source> {
         let id = FileId::new(self.virtualize(path)?);
-        self.files.read().source(id).map_err(|e| {
-            let kind = match &e {
-                FileError::NotFound(_) => std::io::ErrorKind::NotFound,
-                FileError::AccessDenied => std::io::ErrorKind::PermissionDenied,
-                _ => std::io::ErrorKind::Other,
-            };
-            crate::error::FsError::new(crate::error::Op::Read, path, std::io::Error::new(kind, e))
-                .into()
-        })
+        self.files
+            .read()
+            .source(id)
+            .map_err(|e| crate::error::typ::TypstFileError::of(path, &e).into())
     }
 
     /// Evaluate a source as a typst module, through the compiler's own
