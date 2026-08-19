@@ -610,6 +610,16 @@ impl Keys<'_> {
         format!("{suggestion}{}{names}", markup!("valid {}: ", noun))
     }
 
+    /// The same help for a destination that does not read this crate's markup:
+    /// a typst message, which comes back escaped, so a code span there is a
+    /// pair of literal backticks and the line break lands mid-sentence.
+    pub(crate) fn plainly(&self, unknown: &str, noun: &str) -> String {
+        let suggestion = self
+            .nearest(unknown)
+            .map_or_else(String::new, |near| format!("did you mean {near}? "));
+        format!("{suggestion}valid {noun}: {}", self.0.iter().format(", "))
+    }
+
     /// The valid key within edit distance 2 of `unknown` (a typo), if any.
     pub(crate) fn nearest(&self, unknown: &str) -> Option<&str> {
         self.0
@@ -662,5 +672,12 @@ mod tests {
             Keys(&["pretty", "indent"]).help("pruty", "keys"),
             "did you mean `pretty`?\nvalid keys: `pretty`, `indent`"
         );
+    }
+
+    #[test]
+    fn the_plain_help_carries_no_markup_and_stays_on_one_line() {
+        let plain = Keys(&["pretty", "indent"]).plainly("pruty", "keys");
+        assert_eq!(plain, "did you mean pretty? valid keys: pretty, indent");
+        assert!(!plain.contains(['`', '\n']), "{plain}");
     }
 }

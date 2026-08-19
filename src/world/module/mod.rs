@@ -221,7 +221,7 @@ impl Modules {
         let names: Vec<&str> = self.entrypoints.keys().copied().collect();
         EcoString::from(format!(
             "unknown baudelaire module `{name}`, {}",
-            Keys::of(&names).help(name, "modules")
+            Keys::of(&names).plainly(name, "modules")
         ))
     }
 

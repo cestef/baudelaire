@@ -246,12 +246,14 @@ fn an_unknown_module_suggests_the_nearest() {
     let site = site("import \"@baudelaire/htlm:0.1.0\": h\n[x]");
     let err = diagnostics(&site);
     assert!(err.contains("unknown baudelaire module `htlm`"), "{err}");
-    assert!(err.contains("did you mean `html`?"), "{err}");
+    // The suggestion and the list travel through typst, which renders no
+    // baudelaire markup, so both arrive plain and on one line.
+    assert!(err.contains("did you mean html?"), "{err}");
     // The list names what the running flavor actually serves.
     let valid = if cfg!(feature = "markdown") {
-        "valid modules: `html`, `markdown`, `pages`, `sections`, `site`"
+        "valid modules: html, markdown, pages, sections, site"
     } else {
-        "valid modules: `html`, `pages`, `sections`, `site`"
+        "valid modules: html, pages, sections, site"
     };
     assert!(err.contains(valid), "{err}");
 }

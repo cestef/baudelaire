@@ -148,6 +148,11 @@ chores are visible in the git history and change nothing for a site.
   and then overridden by the config. A name none of them knows is now an error
   at the call rather than a silently dropped setting.
 
+- **An unknown `@baudelaire/*` import reads as one sentence.** The suggestion
+  and the module list were built with this crate's own markup, which the
+  message does not travel through: the reader got literal backticks and a line
+  break in the middle of a one-line typst error. Both are now plain.
+
 - **A file-collision error no longer shows its own markup.** The two claimants
   were rendered inside a code span that escaped the backticks they already
   carried, so `redirect { "/old/" }` in the config came out with the escapes
