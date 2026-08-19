@@ -263,6 +263,7 @@ mod tests {
             reload: Box::new(|| Ok(Config::default())),
             tracked: Vec::new(),
             rewatch: false,
+            engine: None,
         };
         dev.on_event(Err(vec![notify::Error::generic("boom")]), &live, &filter);
         assert_eq!(ui.warnings(), 1);
@@ -283,6 +284,7 @@ mod tests {
             reload: Box::new(|| Ok(Config::default())),
             tracked: Vec::new(),
             rewatch: false,
+            engine: None,
         };
         dev.on_event(Ok(Vec::new()), &live, &filter);
         assert_eq!(ui.warnings(), 0);

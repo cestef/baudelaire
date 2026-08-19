@@ -127,11 +127,19 @@ impl Engine {
     /// as the previous build left it, staging tree removed, which `deploy`
     /// would otherwise upload as a duplicate copy of the assets.
     pub fn build(&self, ui: &Ui) -> Result<Stats> {
+        self.project.refresh();
         let built = self.run(ui);
         if built.is_err() {
             let _ = std::fs::remove_dir_all(self.config.asset_staging());
         }
         built
+    }
+
+    /// Whether this engine may build again: its world holds build metadata
+    /// fixed at construction, and a page that read stale metadata would be
+    /// compiled against a value the site no longer states.
+    pub fn current(&self) -> bool {
+        self.project.current(&self.config, self.mode)
     }
 
     /// A build, phase by phase; this is the only place their order is spelled.

@@ -7,7 +7,43 @@ mod common;
 
 use std::fs;
 
-use common::{CONFIG, Site};
+use baudelaire::engine::{Engine, Mode};
+use common::{CONFIG, Site, silent};
+
+/// The dev server keeps one engine across rebuilds, so the world it compiles in
+/// outlives a build. Every file it loaded is marked stale before each build; a
+/// world that answered from the copy it first read would serve the page before
+/// the edit.
+#[test]
+fn a_second_build_on_one_engine_reads_what_changed() {
+    let site = Site::with(CONFIG);
+    site.write(
+        "templates/post.typ",
+        "#let post(page, body) = [chrome: #body]",
+    );
+    site.write(
+        "content/posts/a.typ",
+        "#let frontmatter = (title: \"A\", template: \"post.typ\")\nbefore",
+    );
+
+    let engine = Engine::new(site.config(), Mode::Serve).expect("engine");
+    engine.build(&silent()).expect("first build");
+    assert!(site.read("public/posts/a/index.html").contains("before"));
+
+    site.write(
+        "content/posts/a.typ",
+        "#let frontmatter = (title: \"A\", template: \"post.typ\")\nafter",
+    );
+    site.write(
+        "templates/post.typ",
+        "#let post(page, body) = [rebuilt: #body]",
+    );
+    engine.build(&silent()).expect("second build");
+
+    let html = site.read("public/posts/a/index.html");
+    assert!(html.contains("after"), "the page's own edit: {html}");
+    assert!(html.contains("rebuilt"), "its template's edit: {html}");
+}
 
 #[test]
 fn corrupt_manifest_warns_and_rebuilds() {

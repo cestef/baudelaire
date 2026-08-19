@@ -159,6 +159,29 @@ impl Project {
         self.fonts.digest()
     }
 
+    /// Mark every loaded file stale, so the next build reads what changed off
+    /// disk again.
+    ///
+    /// A world outlives one build only under the dev server. Resetting the
+    /// store rather than building a new one is what keeps typst's own
+    /// incremental state: a source slot is edited in place, so a compile after
+    /// an edit reuses the memoized work of everything the edit did not touch.
+    pub fn refresh(&self) {
+        self.files.write().reset();
+    }
+
+    /// Whether the build metadata this world baked into `sys.inputs` still
+    /// matches the machine.
+    ///
+    /// A commit, a dirtied tree or a day rolling over changes what a page
+    /// reading it must be compiled against, and the value is fixed when the
+    /// library is built, so a world that has fallen behind cannot be reused.
+    pub fn current(&self, config: &Config, mode: Mode) -> bool {
+        let now = OffsetDateTime::now_utc();
+        let fresh = BuildContext::detect(&self.root, now, config, mode);
+        codegen::Value::from(&fresh) == codegen::Value::from(&self.context)
+    }
+
     /// The generated tables (`@baudelaire/sections`, `@baudelaire/pages`) are
     /// on disk; called once per build, by the pass that writes them.
     ///

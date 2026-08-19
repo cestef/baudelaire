@@ -37,6 +37,9 @@ pub(super) struct Dev<'a> {
     pub(super) tracked: Vec<PathBuf>,
     /// Whether that set changed, so the watch loop re-registers with it.
     pub(super) rewatch: bool,
+    /// The engine the last rebuild ran on, kept so the next one reuses the
+    /// world it built: see [`Dev::rebuild`].
+    pub(super) engine: Option<Engine>,
 }
 
 impl<'a> Dev<'a> {
@@ -58,6 +61,7 @@ impl<'a> Dev<'a> {
             reload: Box::new(reload),
             tracked: Vec::new(),
             rewatch: false,
+            engine: None,
         }
         .run()
     }
@@ -120,11 +124,29 @@ impl<'a> Dev<'a> {
         Ok(())
     }
 
-    /// Build the site once, on a fresh [`Engine`]: its
-    /// [`crate::world::Project`] memoizes file contents with no invalidation
-    /// hook, so a reused one would serve the bytes it first read.
-    fn rebuild(&self) -> Result<crate::engine::Stats> {
-        Engine::new(self.config.clone(), Mode::Serve)?.build(self.ui)
+    /// Build the site once, on the engine the last rebuild used.
+    ///
+    /// The engine marks every file it loaded stale before each build, so a
+    /// rebuild re-reads what changed and keeps typst's incremental state for
+    /// everything it did not: the templates, the packages and the generated
+    /// modules are parsed once per session rather than once per keystroke.
+    ///
+    /// A fresh one is built where the old one cannot answer for this build: a
+    /// reloaded `config.kdl`, or build metadata the world fixed at
+    /// construction and the machine has since moved past.
+    fn rebuild(&mut self) -> Result<crate::engine::Stats> {
+        let engine = match self.engine.take() {
+            Some(engine) if engine.current() => engine,
+            _ => Engine::new(self.config.clone(), Mode::Serve)?,
+        };
+        let built = engine.build(self.ui);
+        self.engine = Some(engine);
+        built
+    }
+
+    /// Drop the engine, so the next rebuild starts a world from this config.
+    fn restart(&mut self) {
+        self.engine = None;
     }
 
     /// The watched roots, for the startup banner: the defaults, the config
@@ -222,7 +244,10 @@ impl<'a> Dev<'a> {
         let config_changed = changed.iter().any(|p| filter.is_config(p));
         if config_changed {
             match (self.reload)() {
-                Ok(config) => self.config = config,
+                Ok(config) => {
+                    self.config = config;
+                    self.restart();
+                }
                 Err(e) => {
                     self.ui.warn(ConfigReload { errors: vec![e] });
                     return false;

@@ -14,6 +14,15 @@ chores are visible in the git history and change nothing for a site.
 
 ### Performance
 
+- **A dev-server rebuild keeps the world it built last time.** Every rebuild
+  constructed a fresh Typst world, so each one re-read and re-parsed the
+  templates, the packages and the generated modules that had not changed. The
+  session now keeps one engine and marks its loaded files stale before each
+  build, which is what lets Typst edit a source in place and keep its own
+  incremental state; the world is rebuilt only when `config.kdl` reloads or the
+  build metadata it baked into `sys.inputs` (a commit, a dirtied tree, a new
+  day) has moved on. Around 15% off each rebuild of the docs site.
+
 - **A deploy digests and uploads in parallel.** Every local file was read and
   hashed one at a time, and every object uploaded and deleted over one request
   in flight, so a site of a few thousand files spent the whole deploy waiting on
