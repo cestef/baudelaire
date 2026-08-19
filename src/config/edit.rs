@@ -118,11 +118,11 @@ mod tests {
 
     #[test]
     fn a_key_nothing_has_set_yet_opens_the_blocks_it_needs() {
-        let out = Edit::new("generate.cards.width", "800")
+        let out = Edit::new("artifacts.cards.width", "800")
             .expect("a key")
             .applied(BASE)
             .expect("valid");
-        assert!(out.contains("generate"), "{out}");
+        assert!(out.contains("artifacts"), "{out}");
         assert!(out.contains("width 800"), "a number, not a string: {out}");
     }
 

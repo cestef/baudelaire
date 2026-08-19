@@ -14,6 +14,11 @@ chores are visible in the git history and change nothing for a site.
 
 ### Changed
 
+- **A page's artifacts leave the `generate` block.** `cards`, `pdf` and
+  `bundles` are drawn by a paged second compile of the pages themselves, not
+  written beside them like a sitemap or a feed, and they now say so: they live
+  under `artifacts { }`. `generate { }` keeps the site's own files.
+
 - **One block owns what a host is told about the built files.** `caching { }`
   and `generate { headers }` were one policy stated in two places, one of them a
   letter away from the unrelated build cache. Both are now `headers { }`: the
@@ -253,6 +258,17 @@ chores are visible in the git history and change nothing for a site.
   as static content. `client` joins the nine blocks a site owns outright.
 
 ### Upgrading
+
+- `generate { cards }`, `generate { pdf }` and `generate { bundles }` move to
+  `artifacts { }` with their keys unchanged:
+
+  ```kdl
+  artifacts {
+    cards { template "card.typ" }
+    pdf { pages { template "print.typ" } }
+    bundles { guide { collections "guide"; template "book.typ" } }
+  }
+  ```
 
 - `caching { }` is gone, and so is `generate { headers }`. A `caching { }` block
   becomes `headers { cache { } }`, keeping `immutable` and `default` as they

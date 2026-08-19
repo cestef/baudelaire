@@ -21,7 +21,7 @@ fn site(config: &str) -> Site {
         site "T"
         url "https://example.com"
         paths {{ content "content"; dist "public"; templates "templates" }}
-        generate {{ {config} }}
+        artifacts {{ {config} }}
         "#
     ));
     site.write(
@@ -234,7 +234,7 @@ fn a_theme_supplies_the_card_template() {
         url "https://example.com"
         theme "themes/plume"
         paths { content "content"; dist "public"; templates "templates" }
-        generate { cards { template "card.typ"; width 800; height 418 } }
+        artifacts { cards { template "card.typ"; width 800; height 418 } }
         "#,
     );
     site.write("themes/plume/theme.kdl", "");

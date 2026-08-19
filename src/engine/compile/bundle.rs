@@ -43,7 +43,7 @@ impl<'a> Bundle<'a> {
     /// write is dropped here, having been reported once by the feature gate.
     pub(in crate::engine) fn planned(config: &'a Config, pages: &'a [Page]) -> Vec<Self> {
         let mut out = Vec::new();
-        for (key, cfg) in &config.generate.bundles {
+        for (key, cfg) in &config.artifacts.bundles {
             for selection in Selection::planned(key, cfg, config, pages) {
                 for format in cfg.active() {
                     out.push(Self {

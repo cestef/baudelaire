@@ -57,8 +57,8 @@ what Markdown ecosystems ship as plugins: math, figures with numbering,
 footnotes, bibliographies and cross references are Typst's, not baudelaire's.
 
 Because a page compiles rather than expands, one source reaches more than one
-target. `generate { pdf }` typesets the same page as a document, and
-`generate { cards }` draws its social card with a Typst template, both from the
+target. `artifacts { pdf }` typesets the same page as a document, and
+`artifacts { cards }` draws its social card with a Typst template, both from the
 page you already wrote.
 
 == What ships in the box

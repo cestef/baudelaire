@@ -19,7 +19,7 @@ fn site(config: &str) -> Site {
         site "T"
         url "https://example.com"
         paths {{ content "content"; dist "public"; templates "templates" }}
-        generate {{ {config} }}
+        artifacts {{ {config} }}
         "#
     ));
     site.write(
@@ -362,7 +362,7 @@ fn the_scaffolded_print_template_builds() {
         }
         let mut config = t.read("config.kdl");
         config
-            .push_str("generate {\n  bundles { site { template \"book.typ\"; site #true } }\n}\n");
+            .push_str("artifacts {\n  bundles { site { template \"book.typ\"; site #true } }\n}\n");
         t.write("config.kdl", &config);
         let out = t.run(&["build"]);
         assert!(

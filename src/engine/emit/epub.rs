@@ -72,7 +72,7 @@ impl Processor for Epub {
 
     fn enabled(&self, config: &Config) -> bool {
         config
-            .generate
+            .artifacts
             .bundles
             .iter()
             .any(|(_, bundle)| bundle.active().contains(&BundleFormat::Epub))

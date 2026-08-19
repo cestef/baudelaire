@@ -9,7 +9,7 @@ template. No headless browser, no service: the typesetter is already in the
 binary.
 
 ```kdl
-generate {
+artifacts {
   cards {
     template "card.typ"
     width 1200

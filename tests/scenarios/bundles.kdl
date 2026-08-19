@@ -6,7 +6,7 @@ defaults {
     "config.kdl" #"""
       site "T"
       paths { content "content"; dist "public"; assets "assets" }
-      generate { bundles { guide { collections "guide"; formats "epub" } } }
+      artifacts { bundles { guide { collections "guide"; formats "epub" } } }
       """#
     "content/guide/a.typ" #"""
       #let frontmatter = (title: "First", order: 1)
@@ -42,7 +42,7 @@ scenario "a bundle naming no target reports itself inert" {
     "config.kdl" #"""
       site "T"
       paths { content "content"; dist "public"; assets "assets" }
-      generate { bundles { guide { formats "epub" } } }
+      artifacts { bundles { guide { formats "epub" } } }
       """#
   }
   expect {
@@ -61,7 +61,7 @@ scenario "one selection is written in every format it names" {
     "config.kdl" #"""
       site "T"
       paths { content "content"; dist "public"; templates "templates" }
-      generate { bundles { guide { collections "guide"; formats "pdf" "epub" } } }
+      artifacts { bundles { guide { collections "guide"; formats "pdf" "epub" } } }
       """#
     "templates/book.typ" #"""
       #let book(doc, pages) = {

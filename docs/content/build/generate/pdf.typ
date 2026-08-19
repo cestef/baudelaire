@@ -8,7 +8,7 @@ The same source, the other target. Your pages are already Typst, so a PDF is the
 compiler laying the document out on paper instead of into a DOM.
 
 ```kdl
-generate {
+artifacts {
   pdf {
     pages { template "print.typ" }
   }
@@ -73,7 +73,7 @@ The other half of the block binds pages together: a collection end to end, or
 the whole site, as a single PDF.
 
 ```kdl
-generate {
+artifacts {
   bundles {
     guide { collections "guide"; template "book.typ" }
     everything { site #true; formats "pdf" "epub" }

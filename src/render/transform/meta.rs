@@ -81,7 +81,7 @@ impl Card<'_> {
     fn generated_card(&self) -> Option<String> {
         self.page
             .wants_card(self.config)
-            .then(|| self.config.generate.cards.url(&self.page.permalink))
+            .then(|| self.config.artifacts.cards.url(&self.page.permalink))
     }
 
     /// Every tag this page carries, in emission order: the plain document meta,
@@ -384,7 +384,7 @@ impl Card<'_> {
         if !self.page.wants_pdf(self.config) {
             return;
         }
-        let href = self.config.generate.pdf.pages.url(&self.page.permalink);
+        let href = self.config.artifacts.pdf.pages.url(&self.page.permalink);
         tags.push(
             HtmlElement::new(tag::link)
                 .with_attr(attr::rel, "alternate")

@@ -351,23 +351,23 @@ impl<'a> Prepare<'a> {
                 push(template, markup!("`{}`", page.source.display().to_string()));
             }
         }
-        let cards = &self.config.generate.cards;
+        let cards = &self.config.artifacts.cards;
         if cards.active() {
-            push(&cards.template, "`generate { cards }`".to_owned());
+            push(&cards.template, "`artifacts { cards }`".to_owned());
         }
         let config = &self.config;
-        let pdf = &config.generate.pdf;
+        let pdf = &config.artifacts.pdf;
         if pdf.pages.active() {
             push(
                 &pdf.pages.template,
-                "`generate { pdf { pages } }`".to_owned(),
+                "`artifacts { pdf { pages } }`".to_owned(),
             );
         }
-        for (id, bundle) in &config.generate.bundles {
+        for (id, bundle) in &config.artifacts.bundles {
             if bundle.active().contains(&crate::config::BundleFormat::Pdf) {
                 push(
                     &bundle.template,
-                    markup!("`generate {{ bundles {{ {} }} }}`", Code(id)),
+                    markup!("`artifacts {{ bundles {{ {} }} }}`", Code(id)),
                 );
             }
         }

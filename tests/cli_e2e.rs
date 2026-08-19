@@ -680,7 +680,7 @@ fn config_check_fails_on_a_key_no_build_would_accept() {
     let sb = Site::with("site \"T\"\npaths {\n  content \"content\"\n  dist \"public\"\n}\n");
     sb.write(
         "wrong.kdl",
-        "site \"T\"\ngenerate {\n  cards {\n    widht 100\n  }\n}\n",
+        "site \"T\"\nartifacts {\n  cards {\n    widht 100\n  }\n}\n",
     );
     let out = sb.run(&["config", "check", "--isolated", "wrong.kdl"]);
     assert!(!out.status.success());

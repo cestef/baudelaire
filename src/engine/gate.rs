@@ -110,23 +110,23 @@ const GATES: &[Gate] = &[
     Gate {
         cargo: "cards",
         compiled: cfg!(feature = "cards"),
-        setting: "generate { cards }",
-        asked: |config| config.generate.cards.enabled,
+        setting: "artifacts { cards }",
+        asked: |config| config.artifacts.cards.enabled,
         effect: "no social card is rendered",
         rewrites: false,
     },
     Gate {
         cargo: "pdf",
         compiled: cfg!(feature = "pdf"),
-        setting: "generate { pdf }",
-        asked: |config| config.generate.pdf.enabled(),
+        setting: "artifacts { pdf }",
+        asked: |config| config.artifacts.pdf.enabled(),
         effect: "no PDF is written beside a page, and nothing links to one",
         rewrites: false,
     },
     Gate {
         cargo: "pdf",
         compiled: cfg!(feature = "pdf"),
-        setting: "generate { bundles { formats \"pdf\" } }",
+        setting: "artifacts { bundles { formats \"pdf\" } }",
         asked: |config| Gate::bundles(config, BundleFormat::Pdf),
         effect: "no PDF is written for that bundle",
         rewrites: false,
@@ -134,7 +134,7 @@ const GATES: &[Gate] = &[
     Gate {
         cargo: "epub",
         compiled: cfg!(feature = "epub"),
-        setting: "generate { bundles { formats \"epub\" } }",
+        setting: "artifacts { bundles { formats \"epub\" } }",
         asked: |config| Gate::bundles(config, BundleFormat::Epub),
         effect: "no EPUB is written for that bundle",
         rewrites: false,
@@ -177,10 +177,10 @@ pub(super) struct Inert {
 
 const INERT: &[Inert] = &[
     Inert {
-        setting: "generate { bundles }",
-        asked: |config| !config.generate.bundles.is_empty(),
+        setting: "artifacts { bundles }",
+        asked: |config| !config.artifacts.bundles.is_empty(),
         needs: "a `collections` list or `site` on each bundle",
-        met: |config| config.generate.bundles.iter().all(|(_, b)| b.enabled()),
+        met: |config| config.artifacts.bundles.iter().all(|(_, b)| b.enabled()),
         effect: "that bundle binds no pages, so no document is written",
         help: "name the collections to bind (`collections \"guide\"`), or set `site #true` for the whole site",
     },
@@ -329,7 +329,7 @@ impl Gate {
     /// the row still fires for the `pdf` a bundle takes by writing nothing.
     fn bundles(config: &Config, format: BundleFormat) -> bool {
         config
-            .generate
+            .artifacts
             .bundles
             .iter()
             .any(|(_, bundle)| bundle.enabled() && bundle.formats().contains(&format))
@@ -436,7 +436,7 @@ mod tests {
     /// the stored list rather than the defaulted one never fires.
     #[test]
     fn a_bundle_asks_for_the_format_it_defaults_to() {
-        let cfg = config("generate {\n  bundles {\n    guide { collections \"guide\" }\n  }\n}");
+        let cfg = config("artifacts {\n  bundles {\n    guide { collections \"guide\" }\n  }\n}");
         assert!(
             Gate::bundles(&cfg, crate::config::BundleFormat::Pdf),
             "a bundle with no `formats` still asks for a PDF"
@@ -444,12 +444,12 @@ mod tests {
         assert!(!Gate::bundles(&cfg, crate::config::BundleFormat::Epub));
 
         let epub = config(
-            "generate {\n  bundles {\n    guide { collections \"guide\"; formats \"epub\" }\n  }\n}",
+            "artifacts {\n  bundles {\n    guide { collections \"guide\"; formats \"epub\" }\n  }\n}",
         );
         assert!(Gate::bundles(&epub, crate::config::BundleFormat::Epub));
         assert!(!Gate::bundles(&epub, crate::config::BundleFormat::Pdf));
 
-        let unbound = config("generate {\n  bundles {\n    guide { }\n  }\n}");
+        let unbound = config("artifacts {\n  bundles {\n    guide { }\n  }\n}");
         assert!(
             !Gate::bundles(&unbound, crate::config::BundleFormat::Pdf),
             "a bundle binding nothing asks for nothing"

@@ -1,22 +1,16 @@
 //! `generate { }`: the files a build emits beside the pages.
 
-pub mod bundle;
-pub mod cards;
 pub mod feed;
 pub mod llms;
 pub mod manifest;
-pub mod pdf;
 pub mod robots;
 pub mod search;
 
 use crate::config::dispatch::Kind::Block as Nested;
-use crate::config::dispatch::Kind::{Flag, Items};
+use crate::config::dispatch::Kind::Flag;
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
-use crate::config::{
-    BundleConfig, CardsConfig, FeedConfig, LlmsConfig, ManifestConfig, PdfConfig, RobotsConfig,
-    SearchConfig, Value,
-};
+use crate::config::{FeedConfig, LlmsConfig, ManifestConfig, RobotsConfig, SearchConfig};
 
 /// Each field is opt-in: either a flag or a block whose presence turns it on.
 #[derive(Debug, Clone, Hash, Default)]
@@ -32,11 +26,6 @@ pub struct GenerateConfig {
     pub manifest: ManifestConfig,
     pub feed: FeedConfig,
     pub search: SearchConfig,
-    pub cards: CardsConfig,
-    pub pdf: PdfConfig,
-    /// Documents bound from many pages, keyed by the filename stem every format
-    /// of that bundle is written under.
-    pub bundles: Vec<(String, BundleConfig)>,
 }
 
 impl Section for GenerateConfig {
@@ -95,30 +84,6 @@ impl Section for GenerateConfig {
             "Write a client-side search index.",
             |c| c.search.values(),
             |c, n, t| c.search.fill(n, t),
-        ),
-        (
-            "cards",
-            Nested(CardsConfig::rows),
-            "Draw a social card per page. Its presence turns it on; `#false` turns it off again.",
-            |c| c.cards.values(),
-            |c, n, t| c.cards.fill(n, t),
-        ),
-        (
-            "pdf",
-            Nested(PdfConfig::rows),
-            "Typeset PDFs beside the pages.",
-            |c| c.pdf.values(),
-            |c, n, t| c.pdf.fill(n, t),
-        ),
-        (
-            "bundles",
-            Items(BundleConfig::rows),
-            "One block per bound document, each named by the id its files are written under.",
-            |c| Value::each(&c.bundles, Section::values),
-            |c, n, t| {
-                c.bundles = n.unique(t, "bundle", BundleConfig::item)?;
-                Ok(())
-            },
         ),
     ]);
 }

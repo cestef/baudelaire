@@ -76,8 +76,8 @@ pub(super) const EXTRAS: &[Extra] = &[
     },
     Extra {
         name: "pdf",
-        fragment: "\n// A PDF of every page, from `templates/print.typ`.\ngenerate {\n  pdf { pages { template \"print.typ\" } }\n}\n",
-        present: |config| config.generate.pdf.enabled(),
+        fragment: "\n// A PDF of every page, from `templates/print.typ`.\nartifacts {\n  pdf { pages { template \"print.typ\" } }\n}\n",
+        present: |config| config.artifacts.pdf.enabled(),
     },
 ];
 

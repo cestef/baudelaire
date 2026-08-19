@@ -107,7 +107,11 @@ page that answers it in full is on the right.
 
   [`generate`],
   [What gets written beside the pages.],
-  [#link("../build/generate/search.typ")[search], #link("../build/generate/feeds.typ")[feeds], #link("../build/generate/cards.typ")[cards], #link("../build/generate/pdf.typ")[PDFs], #link("../ship/hosts/static-hosts.typ")[static hosts]],
+  [#link("../build/generate/search.typ")[search], #link("../build/generate/feeds.typ")[feeds], #link("../ship/hosts/static-hosts.typ")[static hosts]],
+
+  [`artifacts`],
+  [What a page is drawn as beyond its HTML.],
+  [#link("../build/generate/cards.typ")[cards], #link("../build/generate/pdf.typ")[PDFs]],
 
   [`navigation`],
   [How a visitor moves between built pages.],
@@ -197,7 +201,7 @@ of this kind takes `#false` on its own line:
 profiles {
   fast {
     lint #false
-    generate {
+    artifacts {
       cards #false
       pdf { pages #false }
     }
@@ -207,7 +211,7 @@ profiles {
 
 `#true` is accepted too, and means what presence already meant.
 
-One block is not switchable this way: `generate { pdf { bundle } }` is on
+One block is not switchable this way: `artifacts { bundles }` is on
 whenever it names a target, so naming none is already how it is off.
 
 Some blocks have a setting decided before you write anything, so they carry a

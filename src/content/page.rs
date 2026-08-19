@@ -313,7 +313,7 @@ impl Page {
     /// Whether this page gets a generated social card, the one answer the
     /// renderer, the `og:image` tag and the prune all read.
     pub fn wants_card(&self, config: &crate::config::Config) -> bool {
-        config.generate.cards.active()
+        config.artifacts.cards.active()
             && self.frontmatter.image.is_none()
             && !self.frontmatter.excludes(crate::content::Generated::Card)
             && !matches!(self.data, Data::Generated { .. })
@@ -322,7 +322,7 @@ impl Page {
     /// Whether this page gets a PDF beside its HTML, the one answer the
     /// exporter, the `<link rel="alternate">` and the prune all read.
     pub fn wants_pdf(&self, config: &crate::config::Config) -> bool {
-        config.generate.pdf.pages.active()
+        config.artifacts.pdf.pages.active()
             && !self.frontmatter.excludes(crate::content::Generated::Pdf)
             && !matches!(self.data, Data::Generated { .. })
     }

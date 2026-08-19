@@ -33,13 +33,13 @@ impl Sidecar for Card {
     }
 
     fn path(&self, config: &Config, page: &Page) -> PathBuf {
-        config.file(&config.generate.cards.url(&page.permalink))
+        config.file(&config.artifacts.cards.url(&page.permalink))
     }
 
     /// A card takes the page's data flat, ignoring the layout bindings [`Cx`]
     /// also carries.
     fn source(&self, cx: &Cx<'_>, page: &Page, rooted: &RootedPath) -> Result<String> {
-        let template = &cx.config.generate.cards.template;
+        let template = &cx.config.artifacts.cards.template;
         Ok(Self::module(cx, page, rooted, &cx.prepare.dir(template)))
     }
 
@@ -82,14 +82,14 @@ impl Card {
     fn module(cx: &Cx<'_>, page: &Page, rooted: &RootedPath, dir: &str) -> String {
         let config = cx.config;
         Template {
-            import: format!("{dir}/{}", config.generate.cards.template),
-            func: std::path::Path::new(&config.generate.cards.template)
+            import: format!("{dir}/{}", config.artifacts.cards.template),
+            func: std::path::Path::new(&config.artifacts.cards.template)
                 .file_stem()
                 .and_then(|s| s.to_str())
                 .unwrap_or("card")
                 .to_owned(),
-            width: config.generate.cards.width,
-            height: config.generate.cards.height,
+            width: config.artifacts.cards.width,
+            height: config.artifacts.cards.height,
             data: Typst(&Self::data(cx, page)).to_string(),
             frontmatter: matches!(page.data, Data::Export)
                 .then(|| format!("/{}", rooted.vpath().get_without_slash())),

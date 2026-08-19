@@ -353,7 +353,7 @@ The four starter shapes:
   [`standalone`], [`navigation { standalone { } }`, a single-file export.],
   [`speculation`], [`navigation { speculation { } }`, browser prefetch hints.],
   [`search`], [`generate { search { ui } }`, a #link("../build/generate/search.typ")[client-side index] and its palette.],
-  [`pdf`], [`generate { pdf { pages { .. } } }`, a #link("../build/generate/pdf.typ")[PDF per page] from `print.typ`.],
+  [`pdf`], [`artifacts { pdf { pages { .. } } }`, a #link("../build/generate/pdf.typ")[PDF per page] from `print.typ`.],
 )
 
 Existing files are never overwritten: `init` in a populated directory skips what

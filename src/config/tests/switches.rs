@@ -20,9 +20,9 @@ const SWITCHES: &[(&str, Reads)] = &[
     ("generate {\n  manifest @\n}", |c| {
         c.generate.manifest.enabled
     }),
-    ("generate {\n  cards @\n}", |c| c.generate.cards.enabled),
-    ("generate {\n  pdf {\n    pages @\n  }\n}", |c| {
-        c.generate.pdf.pages.enabled
+    ("artifacts {\n  cards @\n}", |c| c.artifacts.cards.enabled),
+    ("artifacts {\n  pdf {\n    pages @\n  }\n}", |c| {
+        c.artifacts.pdf.pages.enabled
     }),
     ("links {\n  external @\n}", |c| c.links.external.enabled),
     ("assets {\n  minify @\n}", |c| c.assets.minify.css()),
@@ -88,11 +88,11 @@ fn a_profile_takes_back_what_the_base_turned_on() {
     let cfg = parse(
         r"
         lint { strict #true }
-        generate { cards { width 800 } }
+        artifacts { cards { width 800 } }
         profiles {
           dev {
             lint #false
-            generate { cards #false }
+            artifacts { cards #false }
           }
         }
     ",
@@ -101,8 +101,8 @@ fn a_profile_takes_back_what_the_base_turned_on() {
     let dev = cfg.with_profile("dev").expect("profile exists");
     assert!(!dev.lint.enabled);
     assert!(dev.lint.strict, "and its siblings are still inherited");
-    assert!(!dev.generate.cards.enabled);
-    assert_eq!(dev.generate.cards.width, 800);
+    assert!(!dev.artifacts.cards.enabled);
+    assert_eq!(dev.artifacts.cards.width, 800);
 }
 
 /// `headers { cache }` is the one switch that fills a policy in when it is
@@ -150,14 +150,14 @@ fn err_a_switch_reads_a_boolean_and_nothing_else() {
     );
 }
 
-/// A section with no switch still refuses a value, `generate { pdf }` included:
+/// A section with no switch still refuses a value, `artifacts { pdf }` included:
 /// it groups the per-page block and has no flag of its own for one to set.
 #[test]
 fn err_a_section_without_a_switch_still_refuses_a_value() {
     for (config, node) in [
         ("paths #false", "paths"),
         ("serve #false", "serve"),
-        ("generate {\n  pdf #false\n}", "pdf"),
+        ("artifacts {\n  pdf #false\n}", "pdf"),
     ] {
         let rendered = err(config);
         assert!(

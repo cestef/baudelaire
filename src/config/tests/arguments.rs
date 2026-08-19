@@ -10,7 +10,7 @@ use super::{err, parse};
 fn err_a_value_on_a_section_line_is_refused() {
     for (config, node) in [
         ("paths \"junk\"", "paths"),
-        ("generate {\n  pdf \"junk\"\n}", "pdf"),
+        ("artifacts {\n  pdf \"junk\"\n}", "pdf"),
         (
             "content {\n  collections \"junk\" {\n    posts\n  }\n}",
             "collections",
@@ -45,8 +45,8 @@ fn err_a_value_on_a_section_line_is_refused() {
 #[test]
 fn err_a_blockless_bundle_line_is_still_checked() {
     for config in [
-        "generate {\n  bundles {\n    guide \"junk\"\n  }\n}",
-        "generate {\n  bundles {\n    guide extra=#true\n  }\n}",
+        "artifacts {\n  bundles {\n    guide \"junk\"\n  }\n}",
+        "artifacts {\n  bundles {\n    guide extra=#true\n  }\n}",
     ] {
         let rendered = err(config);
         assert!(rendered.contains("unexpected"), "{config}: {rendered}");

@@ -7,6 +7,7 @@
 //! type is re-exported here, so the rest of the crate names them flatly.
 
 pub mod announce;
+pub mod artifacts;
 pub mod assets;
 pub mod cache;
 pub mod content;
@@ -54,6 +55,10 @@ use crate::error::{ConfigError, Result, ThemeError};
 
 pub use announce::AnnounceConfig;
 pub use announce::standard::{StandardConfig, VerifyConfig};
+pub use artifacts::ArtifactConfig;
+pub use artifacts::bundle::{BundleConfig, BundleFormat};
+pub use artifacts::cards::CardsConfig;
+pub use artifacts::pdf::{PdfConfig, PdfPages};
 pub use assets::AssetConfig;
 pub use assets::images::ImagesConfig;
 pub use assets::images::optimize::{JpegConfig, OptimizeConfig, PngConfig, PngStrip};
@@ -77,12 +82,9 @@ pub use deploy::DeployConfig;
 pub use deploy::s3::S3Config;
 pub use deploy::ssh::SshConfig;
 pub use generate::GenerateConfig;
-pub use generate::bundle::{BundleConfig, BundleFormat};
-pub use generate::cards::CardsConfig;
 pub use generate::feed::{Content, FeedConfig, FeedKind, FeedNames};
 pub use generate::llms::LlmsConfig;
 pub use generate::manifest::{DisplayMode, IconConfig, IconPurpose, ManifestConfig};
-pub use generate::pdf::{PdfConfig, PdfPages};
 pub use generate::robots::RobotsConfig;
 pub use generate::search::{SearchConfig, SearchFields, SearchIndex, SearchUi};
 pub use headers::HeadersConfig;
@@ -168,8 +170,11 @@ pub struct Config {
     /// every destination that can state them.
     pub headers: HeadersConfig,
     /// Files the build generates beside the pages: sitemap, robots, llms,
-    /// feeds, search indexes, social cards.
+    /// feeds, search indexes.
     pub generate: GenerateConfig,
+    /// What a page is drawn as beyond its HTML: social cards, PDFs, and the
+    /// documents many pages are bound into.
+    pub artifacts: ArtifactConfig,
     /// How a visitor moves between the built pages: SPA runtime, single-file
     /// export, browser speculation hints.
     pub navigation: NavigationConfig,
@@ -768,7 +773,7 @@ impl Config {
     /// The capture is a second pass over the DOM, so a site that asked for none
     /// must not pay for it.
     pub fn binds_prose(&self) -> bool {
-        self.generate
+        self.artifacts
             .bundles
             .iter()
             .any(|(_, bundle)| bundle.active().contains(&BundleFormat::Epub))
@@ -837,6 +842,7 @@ impl std::hash::Hash for Config {
             security,
             headers,
             generate,
+            artifacts,
             navigation,
             prune,
             typst,
@@ -863,7 +869,8 @@ impl std::hash::Hash for Config {
         )
             .hash(state);
         (
-            assets, html, links, redirect, lint, security, headers, generate, navigation, prune,
+            assets, html, links, redirect, lint, security, headers, generate, artifacts,
+            navigation, prune,
         )
             .hash(state);
         (typst, client, cache, hooks, announce, deploy, profile).hash(state);
@@ -903,6 +910,7 @@ impl Default for Config {
             security: SecurityConfig::default(),
             headers: HeadersConfig::default(),
             generate: GenerateConfig::default(),
+            artifacts: ArtifactConfig::default(),
             navigation: NavigationConfig::default(),
             prune: PruneConfig::default(),
             typst: TypstConfig::default(),
@@ -1113,6 +1121,13 @@ impl Section for Config {
             "The files a build emits beside the pages.",
             |c| c.generate.values(),
             |c, n, t| c.generate.fill(n, t),
+        ),
+        (
+            "artifacts",
+            Nested(ArtifactConfig::rows),
+            "What a page is drawn as beyond its HTML, each from a paged second compile.",
+            |c| c.artifacts.values(),
+            |c, n, t| c.artifacts.fill(n, t),
         ),
         (
             "navigation",

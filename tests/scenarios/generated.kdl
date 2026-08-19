@@ -176,9 +176,9 @@ scenario "a page declines the files a build generates about it" {
       generate {
         sitemap #true
         search { }
-        cards { }
         feed { formats "atom"; terms #true }
       }
+      artifacts { cards { } }
       """#
     "templates/card.typ" #"""
       #let card(data) = rect(width: 100%, height: 100%)[#data.title]

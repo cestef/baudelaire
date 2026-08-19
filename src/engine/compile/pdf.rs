@@ -27,13 +27,13 @@ impl Sidecar for Pdf {
     }
 
     fn path(&self, config: &Config, page: &Page) -> PathBuf {
-        config.file(&config.generate.pdf.pages.url(&page.permalink))
+        config.file(&config.artifacts.pdf.pages.url(&page.permalink))
     }
 
     /// The page bound to the paged template, exactly as it is bound to its
     /// layout for the HTML compile.
     fn source(&self, cx: &Cx<'_>, page: &Page, rooted: &RootedPath) -> Result<String> {
-        let template = &cx.config.generate.pdf.pages.template;
+        let template = &cx.config.artifacts.pdf.pages.template;
         Ok(cx
             .prepare
             .bind(page, rooted, &cx.prepare.dir(template), template))
