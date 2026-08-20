@@ -7,10 +7,13 @@ no upstream licence.
 
 | Theme | For | Shape | Needs JS |
 |---|---|---|---|
-| [`albatros`](albatros) ([demo](https://baudelaire.cstef.dev/themes/albatros/)) | A blog | Centred column, system sans, light/dark, tags, reading time, language switcher | one module: the toggle |
+| [`albatros`](albatros) ([demo](https://baudelaire.cstef.dev/themes/albatros/)) | A blog | Centred column, system sans, light/dark, bylines, lead images, tags, reading time, related posts, language switcher | one module: the toggle, contents, copy buttons |
 | [`spleen`](spleen) ([demo](https://baudelaire.cstef.dev/themes/spleen/)) | A blog, minimal | Terminal. Monospace, prompt masthead, posts as a directory listing, dark first | none |
-| [`phares`](phares) ([demo](https://baudelaire.cstef.dev/themes/phares/)) | Documentation | Sidebar from your own tree, search palette, on-page contents, prev/next through the manual | one module: nav, contents, toggle |
+| [`phares`](phares) ([demo](https://baudelaire.cstef.dev/themes/phares/)) | Documentation | Sidebar from your own tree, search palette, on-page contents, breadcrumbs, prev/next through the manual, callouts, tabs, steps, cards | one module: nav, contents, tabs, toggle |
 | [`paysage`](paysage) ([demo](https://baudelaire.cstef.dev/themes/paysage/)) | A portfolio | Landing page, work grid, case studies with cover images | one module: the toggle |
+
+All four ship a `templates/not-found.typ`; bind it from `content/404.typ`, which
+publishes as the flat `404.html` a static host serves for an unmatched URL.
 
 Not sure which: pick by what the site *is*. If you write posts, `albatros` (or
 `spleen` if you want no script at all). If you document something, `phares`. If
@@ -85,7 +88,7 @@ theme.kdl    config defaults
 typst.toml   package manifest, for publishing
 ```
 
-Two rules that only bite theme authors:
+Four rules that only bite theme authors:
 
 - **Import siblings relatively.** Inside a theme, `#import "../parts.typ"`
   resolves in both modes; a root-absolute `/parts.typ` resolves against the
@@ -94,3 +97,12 @@ Two rules that only bite theme authors:
 - **`svg()` is off limits.** Its paths are project-root absolute, and a theme
   does not know where it sits in your project. Build icons as inline `<svg>`
   elements instead, the way `parts.typ` does in each theme here.
+- **Read the colour scheme before the first paint.** A `type="module"` script is
+  deferred, so a reader whose stored choice differs from their system's sees one
+  page in the wrong colours on every navigation. Each theme here emits a classic
+  inline `<script>` as the first thing in the body (`boot` in `parts.typ`) that
+  does nothing but stamp `data-theme`.
+- **Do not write a feed `<link rel="alternate">`.** baudelaire puts one in the
+  head per configured format, with the base URL and the page's language on it. A
+  *visible* feed link goes through `feeds` and `feed-url` from
+  `@baudelaire/site`, so it names the file the build actually wrote.

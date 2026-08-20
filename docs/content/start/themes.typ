@@ -21,7 +21,8 @@ look is the part you can change in an afternoon.
   align: (left, left, left),
   table.header([Theme], [For], [Shape]),
   [#link("/themes/albatros/")[albatros]], [A blog],
-  [A centered column, tags, reading time, light and dark, a language switcher on
+  [A centered column. Bylines with avatars, lead images, tags, reading time, an
+    opt-in contents list, related posts, light and dark, a language switcher on
     a site with editions.],
 
   [#link("/themes/spleen/")[spleen]], [A blog, no JavaScript],
@@ -30,7 +31,8 @@ look is the part you can change in an afternoon.
 
   [#link("/themes/phares/")[phares]], [Documentation],
   [A sidebar built from your own `content/` tree, a search palette, the page's
-    headings down the right, prev/next through the manual.],
+    headings down the right, breadcrumbs, prev/next through the manual, and the
+    components a manual writes with: callouts, tabs, steps, cards, badges.],
 
   [#link("/themes/paysage/")[paysage]], [A portfolio],
   [A landing page, a work grid that builds itself from what you publish, one
@@ -38,6 +40,13 @@ look is the part you can change in an afternoon.
 )
 
 Each name links a live demo.
+
+All four ship a `not-found.typ`. Bind it from `content/404.typ`, which publishes
+as the flat `404.html` a static host serves for an unmatched URL:
+
+```typ
+#let frontmatter = (title: "Not found", template: "not-found.typ")
+```
 
 == Get one
 
