@@ -6,4 +6,4 @@
 )
 
 Nothing is published at that address. The work is all under one directory, and
-the grid below leads back to it.
+the links below lead back to it.

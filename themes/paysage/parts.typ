@@ -7,7 +7,7 @@
 // page's selection and the full index at `/work/` are the same component with
 // different inputs.
 
-#import "@baudelaire/html:0.1.0": classes, h
+#import "@baudelaire/html:0.1.0": h
 #import "@baudelaire/pages:0.1.0": pages
 #import "@baudelaire/sections:0.1.0": sections
 #import "@baudelaire/site:0.1.0": author, title as site-title
@@ -177,7 +177,7 @@
 // emits none of them; the stylesheet link sits at the top of the body, which
 // browsers accept and baudelaire lifts back into the head for a single-file
 // export.
-#let shell(page, main, wide: false) = {
+#let shell(page, main) = {
   let title = page.frontmatter.at("title", default: site-title)
   set document(title: title)
 
@@ -187,7 +187,7 @@
   h("link", rel: "alternate", type: "application/rss+xml", title: site-title, href: "/rss.xml")
 
   site-header(page)
-  h("main", class: classes("content", ("wide", wide)), id: "main", main)
+  h("main", class: "content", id: "main", main)
   site-footer(page)
   h("script", type: "module", src: "/assets/theme.js")
 }

@@ -214,16 +214,20 @@ img {
   }
 }
 
-/* Content shell ----------------------------------------------------------- */
+/* Content shell -----------------------------------------------------------
+   One width for the whole page, so the prose starts under the brand rather
+   than centred inside a column the header never drew. What reads at a measure
+   is capped where it sits, and the grid pages simply do not cap. */
 
 .content {
-  max-width: var(--measure);
+  max-width: var(--wide);
   margin-inline: auto;
   padding: 3.5rem 1.5rem 5rem;
 }
 
-.content.wide {
-  max-width: var(--wide);
+.content > .prose,
+.content > .project {
+  max-width: var(--measure);
 }
 
 /* Hero -------------------------------------------------------------------- */
@@ -416,7 +420,6 @@ a.chip:hover {
 
 .project {
   max-width: var(--measure);
-  margin-inline: auto;
 }
 
 .project-head h1 {
