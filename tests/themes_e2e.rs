@@ -278,3 +278,162 @@ fn every_theme_navigates_to_the_sections_it_finds() {
         );
     }
 }
+
+/// Every theme ships a not-found layout, and it publishes as a flat `404.html`
+/// rather than as `/404/`, which no static host serves for an unmatched URL.
+#[test]
+fn every_theme_renders_a_not_found_page() {
+    for theme in THEMES {
+        let site = wearing(theme, "");
+        site.write(
+            "content/404.typ",
+            "#let frontmatter = (title: \"Nothing here\", template: \"not-found.typ\")\n\nTry the index.\n",
+        );
+        site.stats();
+
+        let page = site.output("404.html");
+        assert!(page.contains("Nothing here"), "{theme}: title: {page}");
+        assert!(page.contains("Try the index."), "{theme}: body: {page}");
+        assert!(page.contains("href=\"/\""), "{theme}: a way back: {page}");
+    }
+}
+
+/// A blog theme draws its byline from `page.credits`, so an author declared once
+/// as an entity arrives with the link and the picture that entity carries.
+#[test]
+fn a_blog_theme_credits_an_author_from_the_registry() {
+    for theme in BLOGS {
+        let site = blog(theme);
+        site.write(
+            "config.kdl",
+            &format!(
+                "site \"T\"\nurl \"https://example.net\"\ntheme \"themes/{theme}\"\n\
+                 paths {{ content \"content\"; dist \"public\"; assets \"assets\"; templates \"templates\" }}\n\
+                 content {{\n  entities {{\n    people {{\n      shape \"person\"\n      \
+                 sources {{ inline {{ zoe {{ name \"Zoe Quill\"; url \"https://zoe.example\" }} }} }}\n\
+                 }}\n  }}\n  taxonomies {{\n    tags {{ listing {{ template \"list.typ\" }} }}\n    \
+                 authors {{ entities \"people\"; credit \"author\"; listing {{ template \"list.typ\" }} }}\n\
+                 }}\n}}\n"
+            ),
+        );
+        site.write(
+            "content/posts/first.typ",
+            "#let frontmatter = (\n  title: \"First\",\n  date: datetime(year: 2026, month: 7, day: 20),\n  authors: (\"zoe\",),\n)\n\nBody text.\n",
+        );
+        site.stats();
+
+        let post = site.output("posts/first/index.html");
+        assert!(post.contains("Zoe Quill"), "{theme}: the name: {post}");
+        assert!(
+            post.contains("https://zoe.example"),
+            "{theme}: the entity's link: {post}"
+        );
+    }
+}
+
+/// `image` is one field with three uses: the lead picture over the post, the
+/// thumbnail in a listing, and the social card.
+#[test]
+fn a_blog_theme_leads_with_the_page_image() {
+    for theme in BLOGS {
+        let site = blog(theme);
+        site.write(
+            "content/posts/first.typ",
+            "#let frontmatter = (\n  title: \"First\",\n  date: datetime(year: 2026, month: 7, day: 20),\n  image: \"/static/lead.png\",\n  alt: \"A lead.\",\n)\n\nBody text.\n",
+        );
+        site.stats();
+
+        let post = site.output("posts/first/index.html");
+        assert!(
+            post.contains("class=\"cover\"") && post.contains("/static/lead.png"),
+            "{theme}: the lead image: {post}"
+        );
+        assert!(post.contains("A lead."), "{theme}: its description: {post}");
+        assert!(
+            post.contains("og:image"),
+            "{theme}: the same field is the social card: {post}"
+        );
+    }
+}
+
+/// `albatros` gives a listing a picture column as soon as any row has one, so a
+/// row without one still starts its title where its neighbours do.
+#[test]
+fn the_blog_theme_gives_a_listing_one_picture_column() {
+    let site = blog("albatros");
+    site.write(
+        "content/posts/first.typ",
+        "#let frontmatter = (\n  title: \"First\",\n  date: datetime(year: 2026, month: 7, day: 20),\n  image: \"/static/lead.png\",\n)\n\nBody text.\n",
+    );
+    site.stats();
+
+    let index = site.output("posts/index.html");
+    assert!(
+        index.contains("class=\"listing illustrated\""),
+        "the list carries the column, not the row: {index}"
+    );
+    assert!(
+        index.contains("class=\"entry-thumb\""),
+        "thumbnail: {index}"
+    );
+}
+
+/// `phares` says where a page sits and when it last changed. A crumb links only
+/// where a page is published, so a manual's directories are text, not dead
+/// links.
+#[test]
+fn the_docs_theme_draws_breadcrumbs_and_a_last_updated_line() {
+    let site = wearing("phares", "");
+    site.write(
+        "content/guide/install.typ",
+        "#let frontmatter = (\n  title: \"Install\",\n  updated: datetime(year: 2026, month: 8, day: 12),\n)\n\nInstall it.\n",
+    );
+    site.stats();
+
+    let page = site.output("guide/install/index.html");
+    assert!(page.contains("class=\"crumbs\""), "breadcrumbs: {page}");
+    assert!(
+        page.contains("<span>Guide</span>"),
+        "an unpublished directory is text: {page}"
+    );
+    assert!(
+        page.contains("aria-current=\"page\">Install"),
+        "the page itself, by its title: {page}"
+    );
+    assert!(page.contains("2026-08-12"), "last updated: {page}");
+}
+
+/// The components `phares` exports, as a page writes them. Every pane of a tab
+/// set is in the markup: the strip is built by script, so a page without it
+/// hides nothing.
+#[test]
+fn the_docs_theme_exports_the_components_a_manual_writes_with() {
+    let site = wearing("phares", "");
+    site.write(
+        "content/guide/install.typ",
+        "#let frontmatter = (title: \"Install\")\n\
+         #import \"/themes/phares/lib.typ\": badge, callout, card, cards, pane, steps, tabs\n\n\
+         #callout(kind: \"warning\", title: \"Careful\")[It rewrites.]\n\n\
+         #badge(\"0.2+\")\n\n\
+         #steps[\n  + One.\n  + Two.\n]\n\n\
+         #cards(card(\"Writing\", href: \"/guide/writing/\")[Frontmatter.])\n\n\
+         #tabs(pane(\"cargo\")[Install it.], pane(\"brew\")[Or this.])\n",
+    );
+    site.stats();
+
+    let page = site.output("guide/install/index.html");
+    assert!(
+        page.contains("callout callout-warning") && page.contains("Careful"),
+        "callout: {page}"
+    );
+    assert!(page.contains("class=\"badge badge-note\""), "badge: {page}");
+    assert!(page.contains("class=\"steps\""), "steps: {page}");
+    assert!(
+        page.contains("class=\"doc-card\"") && page.contains("/guide/writing/"),
+        "cards: {page}"
+    );
+    assert!(
+        page.contains("data-tab=\"cargo\"") && page.contains("Or this."),
+        "every pane is in the markup: {page}"
+    );
+}
