@@ -803,10 +803,16 @@ pre {
   border-color: var(--accent);
 }
 
-/* A pointer is what reveals the button; without one it is always there. */
+/* A pointer is what reveals the button; without one it is always there, and the
+   block needs room for it: it cannot appear only when it would not be in the
+   way. */
 @media (hover: none) {
   .copy {
     opacity: 1;
+  }
+
+  .codeblock pre {
+    padding-inline-end: 4rem;
   }
 }
 
