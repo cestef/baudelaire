@@ -124,14 +124,25 @@ img {
   padding: 1.5rem 1.5rem 0;
 }
 
+/* Off the top of the viewport rather than off to the side, and moved by a
+   transform: taking it out of the flow and putting it back reflows the header
+   under the reader the moment they tab into the page. */
 .skip {
   position: absolute;
-  left: -9999px;
+  z-index: 20;
+  top: 0.5rem;
+  left: 0.5rem;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--raised);
+  color: var(--fg);
+  text-decoration: none;
+  transform: translateY(-250%);
 }
 
 .skip:focus {
-  position: static;
-  left: auto;
+  transform: none;
 }
 
 .brand {
