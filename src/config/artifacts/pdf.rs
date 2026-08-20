@@ -7,7 +7,7 @@ use crate::config::dispatch::{Block, Section, Switch};
 use crate::config::node::NodeExt;
 
 /// What the typesetter writes on paper, page by page:
-/// `generate { pdf { .. } }`.
+/// `artifacts { pdf { .. } }`.
 #[derive(Debug, Clone, Hash, Default)]
 pub struct PdfConfig {
     pub pages: PdfPages,
@@ -21,7 +21,7 @@ impl PdfConfig {
 }
 
 /// One PDF per page, enabled by the presence of a
-/// `generate { pdf { pages { .. } } }` block.
+/// `artifacts { pdf { pages { .. } } }` block.
 ///
 /// Like a card it needs its own template, because a layout that emits
 /// `html.elem` produces nothing on the paged target.
