@@ -3,6 +3,10 @@
   order: 0,
   summary: "A small imaginary tool, documented here so a docs theme has a manual to be.",
 )
+// The preview builds the theme from a directory in this repository, so its
+// package entrypoint is a project path. A site that installed the published
+// theme writes `#import "@preview/phares:0.1.0": ..` instead.
+#import "/themes/phares/lib.typ": card, cards
 
 Wren does not exist. This manual does, because a documentation theme with no
 documentation in it proves nothing: the sidebar has to have a tree to draw, the
@@ -11,10 +15,16 @@ have headings to follow.
 
 = Where to start
 
-Read #link("/guide/install/")[Install], then
-#link("/guide/writing/")[Writing], then keep pressing *Next* at the bottom of
-the page: one collection covers the whole tree, so the pager runs the length of
-the manual rather than stopping at the end of a directory.
+#cards(
+  card("Install", href: "/guide/install/")[Three ways to get the binary, and what to do when none of them worked.],
+  card("Writing", href: "/guide/writing/")[Files, frontmatter, and what the sidebar makes of them.],
+  card("Command line", href: "/reference/cli/")[Every verb, every flag.],
+  card("Configuration", href: "/reference/config/")[The keys, and what they default to.],
+)
+
+Or keep pressing *Next* at the bottom of the page: one collection covers the
+whole tree, so the pager runs the length of the manual rather than stopping at
+the end of a directory.
 
 = What the theme is doing
 

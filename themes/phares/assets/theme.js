@@ -140,3 +140,59 @@ if (navigator.clipboard) {
     wrap.append(block, button);
   }
 }
+
+/* Tab sets ------------------------------------------------------------------
+   The layout emits every pane visible and this builds the strip, so a page
+   without script shows all of them rather than hiding content behind a control
+   that never arrived. */
+
+for (const [index, group] of document.querySelectorAll("[data-tabs]").entries()) {
+  const panes = [...group.querySelectorAll(":scope > .tab")];
+  if (panes.length < 2) continue;
+
+  const strip = document.createElement("div");
+  strip.className = "tab-strip";
+  strip.role = "tablist";
+
+  const buttons = panes.map((pane, i) => {
+    pane.id = `tab-${index}-${i}`;
+    pane.role = "tabpanel";
+    pane.tabIndex = 0;
+    pane.hidden = i > 0;
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "tab-button";
+    button.role = "tab";
+    button.id = `${pane.id}-label`;
+    button.textContent = pane.dataset.tab;
+    button.setAttribute("aria-controls", pane.id);
+    button.setAttribute("aria-selected", String(i === 0));
+    button.tabIndex = i === 0 ? 0 : -1;
+    pane.setAttribute("aria-labelledby", button.id);
+    strip.append(button);
+    return button;
+  });
+
+  const select = (chosen) => {
+    buttons.forEach((button, i) => {
+      button.setAttribute("aria-selected", String(i === chosen));
+      button.tabIndex = i === chosen ? 0 : -1;
+      panes[i].hidden = i !== chosen;
+    });
+    buttons[chosen].focus();
+  };
+
+  buttons.forEach((button, i) => {
+    button.addEventListener("click", () => select(i));
+    button.addEventListener("keydown", (event) => {
+      const step = { ArrowRight: 1, ArrowLeft: -1 }[event.key];
+      if (!step) return;
+      event.preventDefault();
+      select((i + step + buttons.length) % buttons.length);
+    });
+  });
+
+  group.prepend(strip);
+  group.dataset.ready = "";
+}

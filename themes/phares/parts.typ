@@ -7,6 +7,7 @@
 // appears in the nav by existing and a deleted one cannot leave a dead link.
 
 #import "@baudelaire/html:0.1.0": classes, h
+#import "@baudelaire/pages:0.1.0": pages
 #import "@baudelaire/sections:0.1.0": sections
 #import "@baudelaire/site:0.1.0": author, title as site-title
 
@@ -160,6 +161,50 @@
     theme-toggle(page)
   })
 })
+
+// Where the page sits, from its own URL: one crumb per segment, the last one
+// the page's title rather than its slug. A crumb links only where a page is
+// actually published, which for a manual's directories is usually nowhere, so
+// the middle of the trail is text and cannot be a dead link.
+#let breadcrumbs(page) = {
+  let segments = page.url.split("/").filter(part => part != "")
+  if segments.len() > 1 {
+    let published = pages(page.lang).map(entry => entry.url)
+    let prefix = "/"
+    let last = segments.len() - 1
+    h("nav", class: "crumbs", aria-label: label(page, "breadcrumb", "Breadcrumb"), h(
+      "ol",
+      {
+        h("li", h("a", href: "/", label(page, "home", "Home")))
+        for (index, segment) in segments.enumerate() {
+          prefix = prefix + segment + "/"
+          let text = if index == last {
+            page.frontmatter.at("title", default: titlecase(segment))
+          } else { section-title(page, segment) }
+          h("li", if index < last and prefix in published {
+            h("a", href: prefix, text)
+          } else {
+            h("span", aria-current: if index == last { "page" }, text)
+          })
+        }
+      },
+    ))
+  }
+}
+
+// When the page last changed materially, from `updated:` in its frontmatter.
+// Written as the ISO day rather than in words: baudelaire localizes `date`, not
+// this one, and a manual would rather be language-neutral than wrong.
+#let updated(page) = {
+  let day = page.frontmatter.at("updated", default: none)
+  if day != none {
+    let iso = day.display("[year]-[month]-[day]")
+    h("p", class: "updated", {
+      label(page, "updated", "Last updated") + " "
+      h("time", datetime: iso, iso)
+    })
+  }
+}
 
 #let chips(page, terms) = if terms.len() > 0 {
   h("nav", class: "chips", aria-label: label(page, "tags", "Tags"), for term in terms {

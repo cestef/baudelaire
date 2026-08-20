@@ -10,9 +10,12 @@ theme "themes/phares"
 
 ## What you get
 
-- `page.typ` — one documentation page: title, optional lead, body, tag chips,
-  prev/next.
+- `page.typ` — one documentation page: breadcrumbs, title, optional lead, body,
+  tag chips, a last-updated line, prev/next.
 - `list.typ` — the taxonomy indexes (`/tags/` and each term).
+- `not-found.typ` — the page a host serves for an unmatched URL, with the
+  sidebar still beside it. Bind it from `content/404.typ`, which publishes as a
+  flat `404.html`.
 - One `docs` collection over everything in a subdirectory, so the manual is one
   document and prev/next crosses directory boundaries. Pages keep their natural
   URLs: `content/guide/install.typ` publishes at `/guide/install/`. Pages
@@ -51,18 +54,75 @@ A directory's own name is titlecased for its sidebar heading (`getting-started`
 languages { en { strings { getting-started "Start here" } } }
 ```
 
-## Callouts
+## Writing with it
 
-The package exports one, for the asides a manual needs:
+The package exports the pieces a manual is made of. Import what a page needs:
 
 ```typ
-#import "@preview/phares:0.1.0": callout
+#import "@preview/phares:0.1.0": badge, callout, card, cards, pane, steps, tabs
+```
 
+### Callouts
+
+```typ
 #callout(kind: "warning", title: "Careful")[This rewrites the index.]
 ```
 
 `kind` is `note` (default), `tip`, `warning`, or `danger`. An unknown kind still
 renders and takes the default colours, so you can invent one and style it.
+
+### Tabs
+
+```typ
+#tabs(
+  pane("cargo")[```sh cargo install wren --locked```],
+  pane("brew")[```sh brew install wren```],
+)
+```
+
+The script builds the strip. Without it every pane is simply visible, one after
+another: nothing is hidden behind a control that did not arrive.
+
+### Steps
+
+```typ
+#steps[
+  + Put the binary on your `PATH`.
+  + Run `wren init`.
+]
+```
+
+The numbering is the list's own, so a step holds anything a list item can: a
+code block, a callout, a nested list.
+
+### Cards
+
+```typ
+#cards(
+  card("Install", href: "/guide/install/")[Three ways to get the binary.],
+  card("Writing", href: "/guide/writing/")[Files and frontmatter.],
+)
+```
+
+### Badges
+
+```typ
+== Ranges #badge("0.2+")
+```
+
+`kind` shares the callout palette, so a warning badge and a warning callout are
+the same colour.
+
+## Breadcrumbs and dates
+
+Breadcrumbs come from the page's own URL, with the site's string table naming
+each directory. A crumb links only where a page is actually published, so the
+middle of the trail is plain text on a manual whose directories have no index
+page of their own, and never a dead link.
+
+`updated: datetime(..)` in frontmatter prints a last-updated line under the
+page. It is written as the ISO day: baudelaire localizes `date`, not this one,
+and a manual would rather be language-neutral than wrong.
 
 ## What the script does
 
@@ -95,8 +155,8 @@ languages {
 ```
 
 Keys used: `skip`, `search`, `theme`, `navigation`, `documentation`, `contents`,
-`tags`, `pagination`, `previous`, `next`, `built`, `copy`, `copied`, plus any
-directory id you want renamed.
+`tags`, `pagination`, `previous`, `next`, `built`, `copy`, `copied`,
+`breadcrumb`, `home`, `updated`, plus any directory id you want renamed.
 
 ## Overriding it
 

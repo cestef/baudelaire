@@ -517,6 +517,45 @@ details:not(.nav-group) > summary {
   font-size: 0.9rem;
 }
 
+/* Breadcrumbs and the last-updated line -------------------------------------
+   Both sit outside the prose: one above the title, one under the last of it. */
+
+.crumbs {
+  margin-bottom: 0.6rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.crumbs ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.crumbs li + li::before {
+  content: "/";
+  margin-inline-end: 0.4rem;
+  color: var(--rule);
+}
+
+.crumbs a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.crumbs a:hover {
+  color: var(--accent);
+}
+
+.updated {
+  margin-top: 2.5rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 /* Callouts, from `#import "@preview/phares:0.1.0": callout`. */
 
 .callout {
@@ -547,6 +586,167 @@ details:not(.nav-group) > summary {
 
 .callout-danger {
   border-inline-start-color: #dc2626;
+}
+
+/* A one-word label beside a heading or in a table, sharing the callout
+   palette so a warning badge and a warning callout are the same colour. */
+
+.badge {
+  display: inline-block;
+  padding: 0.05em 0.5em;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--raised);
+  color: var(--muted);
+  font-size: 0.75em;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  vertical-align: 0.15em;
+  white-space: nowrap;
+}
+
+.badge-tip {
+  border-color: #16a34a;
+  color: #16a34a;
+}
+
+.badge-warning {
+  border-color: #d97706;
+  color: #d97706;
+}
+
+.badge-danger {
+  border-color: #dc2626;
+  color: #dc2626;
+}
+
+/* A numbered procedure. The numbers are the list's own, drawn on a rail so the
+   eye can follow a long one down the page. */
+
+.steps ol {
+  list-style: none;
+  margin: 1.5rem 0;
+  padding-inline-start: 2.25rem;
+  border-inline-start: 1px solid var(--rule);
+  counter-reset: step;
+}
+
+.steps li {
+  position: relative;
+  margin-block: 0 1.5rem;
+  counter-increment: step;
+}
+
+.steps li::before {
+  content: counter(step);
+  position: absolute;
+  inset-inline-start: -3.05rem;
+  top: 0.05rem;
+  display: grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+
+.steps li > :last-child {
+  margin-bottom: 0;
+}
+
+/* A grid of links, for a section's own index page. */
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(15rem, 100%), 1fr));
+  gap: 0.85rem;
+  margin-block: 1.5rem;
+}
+
+.doc-card {
+  display: grid;
+  align-content: start;
+  gap: 0.3rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--rule);
+  border-radius: 0.6rem;
+  background: var(--raised);
+  color: inherit;
+  text-decoration: none;
+}
+
+a.doc-card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow);
+}
+
+.doc-card-title {
+  font-weight: 650;
+}
+
+a.doc-card:hover .doc-card-title {
+  color: var(--accent);
+}
+
+.doc-card-body {
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.doc-card-body > :last-child {
+  margin-bottom: 0;
+}
+
+/* Alternatives a reader picks between. Without script every pane is visible,
+   one after another, so nothing is hidden behind a control that is not there;
+   the strip below only exists once `theme.js` has built it. */
+
+.tabs {
+  margin-block: 1.5rem;
+}
+
+.tab-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.tab-button {
+  padding: 0.4rem 0.8rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.tab-button:hover {
+  color: var(--fg);
+}
+
+.tab-button[aria-selected="true"] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.tabs[data-ready] .tab {
+  padding-top: 0.85rem;
+}
+
+.tabs[data-ready] .tab[hidden] {
+  display: none;
+}
+
+.tab > :last-child {
+  margin-bottom: 0;
 }
 
 /* Code -------------------------------------------------------------------- */
