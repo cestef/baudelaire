@@ -131,6 +131,17 @@
   },
 )
 
+// The stored colour scheme, stamped on the root before the browser paints.
+// Deliberately not in `theme.js`: a module script is deferred, so a reader whose
+// stored choice differs from their system's would see one page in the wrong
+// colours on every navigation. This is a classic script and the first thing in
+// the body, which is the only placement a theme can reach that runs that early.
+#let boot = h(
+  "script",
+  "try{var t=localStorage.getItem('phares-theme');"
+    + "if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}",
+)
+
 #let site-header(page) = h("header", class: "site-header", {
   h("a", class: "skip", href: "#main", label(page, "skip", "Skip to content"))
   h(
@@ -194,6 +205,7 @@
   set document(title: title)
 
 
+  boot
   h("link", rel: "stylesheet", href: "/assets/style.css")
 
   site-header(page)

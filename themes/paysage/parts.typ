@@ -59,6 +59,17 @@
   },
 )
 
+// The stored colour scheme, stamped on the root before the browser paints.
+// Deliberately not in `theme.js`: a module script is deferred, so a reader whose
+// stored choice differs from their system's would see one page in the wrong
+// colours on every navigation. This is a classic script and the first thing in
+// the body, which is the only placement a theme can reach that runs that early.
+#let boot = h(
+  "script",
+  "try{var t=localStorage.getItem('paysage-theme');"
+    + "if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}",
+)
+
 // The nav, derived from the build's own view of the site rather than from a
 // menu in config: a new top-level directory or a new page beside the landing
 // one shows up on its own, and anything removed cannot leave a dead link.
@@ -171,6 +182,7 @@
   set document(title: title)
 
 
+  boot
   h("link", rel: "stylesheet", href: "/assets/style.css")
   h("link", rel: "alternate", type: "application/rss+xml", title: site-title, href: "/rss.xml")
 

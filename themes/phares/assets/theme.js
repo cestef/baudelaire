@@ -9,22 +9,22 @@ const THEME_KEY = "phares-theme";
 const GROUPS_KEY = "phares-collapsed";
 const root = document.documentElement;
 
-/* Colour scheme ----------------------------------------------------------- */
+/* Colour scheme ------------------------------------------------------------
+   Reading the stored choice is `boot` in `parts.typ`, which runs before the
+   first paint; this module only writes it. */
 
-const stored = localStorage.getItem(THEME_KEY);
-if (stored === "light" || stored === "dark") {
-  root.dataset.theme = stored;
-}
-
-const scheme = () =>
-  root.dataset.theme ??
-  (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+const isDark = () =>
+  root.dataset.theme
+    ? root.dataset.theme === "dark"
+    : matchMedia("(prefers-color-scheme: dark)").matches;
 
 for (const button of document.querySelectorAll("[data-theme-toggle]")) {
+  const sync = () => button.setAttribute("aria-pressed", String(isDark()));
+  sync();
   button.addEventListener("click", () => {
-    const next = scheme() === "dark" ? "light" : "dark";
-    root.dataset.theme = next;
-    localStorage.setItem(THEME_KEY, next);
+    root.dataset.theme = isDark() ? "light" : "dark";
+    localStorage.setItem(THEME_KEY, root.dataset.theme);
+    sync();
   });
 }
 
