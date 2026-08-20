@@ -116,6 +116,69 @@ fn site_identity_is_bound() {
     assert!(html.contains("T|https://example.com|en|none|0"), "{html}");
 }
 
+/// `feeds` names the files the feed pass actually wrote, per language and under
+/// the configured name, so a template linking one cannot point at a file that
+/// does not exist.
+#[test]
+fn site_feeds_name_what_the_build_writes() {
+    let site = Site::with(
+        "site \"T\"\nurl \"https://example.com\"\nlang \"en\"\n\
+         languages {\n  en { name \"English\" }\n  fr { name \"Français\" }\n}\n\
+         generate {\n  feed {\n    formats \"rss\" \"atom\"\n    names { rss \"index.xml\" }\n  }\n}\n",
+    );
+    site.write(
+        "templates/page.typ",
+        r#"
+        #import "@baudelaire/site:0.1.0": feed-url, feeds
+        #let page(data, body) = [
+          #for feed in feeds [#feed.format=#feed-url(feed, data.lang);]
+        ]
+        "#,
+    );
+    site.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"Home\", template: \"page.typ\",)\nHi.\n",
+    );
+    site.write(
+        "content/index.fr.typ",
+        "#let frontmatter = (title: \"Accueil\", template: \"page.typ\",)\nSalut.\n",
+    );
+    site.stats();
+
+    let english = site.output("index.html");
+    assert!(
+        english.contains("rss=/index.xml") && english.contains("atom=/atom.xml"),
+        "the configured name, at the root: {english}"
+    );
+    let french = site.output("fr/index.html");
+    assert!(
+        french.contains("rss=/fr/index.xml"),
+        "the feed of this page's own language: {french}"
+    );
+    assert!(site.exists("public/fr/index.xml"), "and it was written");
+}
+
+/// A build that writes no feed binds an empty list, so a footer drawing them
+/// draws nothing rather than a dead link.
+#[test]
+fn site_feeds_are_empty_without_a_feed() {
+    let site = Site::with("site \"T\"\nurl \"https://example.com\"\n");
+    site.write(
+        "templates/page.typ",
+        r#"
+        #import "@baudelaire/site:0.1.0": feeds
+        #let page(data, body) = [count=#feeds.len()]
+        "#,
+    );
+    site.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"Home\", template: \"page.typ\",)\nHi.\n",
+    );
+    site.stats();
+
+    assert!(site.output("index.html").contains("count=0"));
+}
+
 /// `@baudelaire/pages` hands a template the site's own catalogue, in the same
 /// row shape a generated listing's `entries` carry, listings excluded.
 #[test]

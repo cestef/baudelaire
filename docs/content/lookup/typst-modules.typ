@@ -19,7 +19,7 @@ disk. Nothing is downloaded: typst asks for the package, baudelaire answers it.
   align: (left, left, left),
   table.header([Module], [Exports], [Gives you]),
   [`@baudelaire/html`], [`h`, `classes`, `svg`, `nolint`], [Element construction, SVG inlining, and keeping the #link("../build/linting.typ")[lint] off a region.],
-  [`@baudelaire/site`], [`version`, `title`, `url`, `lang`, `author`, `languages`], [Site identity as typed bindings.],
+  [`@baudelaire/site`], [`version`, `title`, `url`, `lang`, `author`, `languages`, `feeds`], [Site identity as typed bindings.],
   [`@baudelaire/sections`], [`sections(lang)`], [The site's content tree.],
   [`@baudelaire/pages`], [`pages(lang)`], [Every authored page as a row.],
   [`@baudelaire/markdown`], [`md`], [Markdown rendered inside a Typst page.],
@@ -192,7 +192,7 @@ Site identity as plain bindings, rather than a chain of guarded `.at` reads into
 `sys.inputs`:
 
 ```typ
-#import "@baudelaire/site:0.1.0": version, title, url, lang, author, description, languages
+#import "@baudelaire/site:0.1.0": version, title, url, lang, author, description, languages, feeds
 ```
 
 #table(
@@ -206,7 +206,25 @@ Site identity as plain bindings, rather than a chain of guarded `.at` reads into
   [`author`], [str or none], [`author` from the config.],
   [`description`], [str or none], [`description` from the config, in the default language.],
   [`languages`], [array], [`(code, name)` dicts, default first. Empty unless #link("../write/i18n.typ")[i18n] is on.],
+  [`feeds`], [array], [One `(format, mime, urls)` dict per format `generate { feed { formats } }` asks for. Empty when the build writes none.],
+  [`feed-url`], [function], [`feed-url(feed, code)`: that feed's URL in one language, or `none` for a language the site does not build.],
 )
+
+A feed's name and its place both move with config, so link one through `feeds`
+rather than writing `/rss.xml` by hand:
+
+```typ
+#import "@baudelaire/site:0.1.0": feed-url, feeds
+
+#for feed in feeds {
+  let url = feed-url(feed, page.lang)
+  if url != none { h("a", href: url, upper(feed.format)) }
+}
+```
+
+The autodiscovery `<link rel="alternate">` tags are baudelaire's own work in the
+head, so this is for the links a *reader* clicks; writing one in a template is a
+duplicate, and one that does not know the base URL.
 
 Every name is always bound, and unset config reads as `none`, so a theme can ask
 for `author` on a site that never set one. A name that does not exist fails at

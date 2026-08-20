@@ -85,6 +85,21 @@ struct SiteInfo {
     /// Declared languages as `(code, display name)`, default first; empty on a
     /// single-language site.
     languages: Vec<(String, Option<String>)>,
+    /// The syndication feeds this build writes, empty when it writes none.
+    feeds: Vec<FeedInfo>,
+}
+
+/// One syndication feed the build publishes, so a template links what was
+/// actually written rather than a conventional name it guessed at.
+#[derive(Debug, Clone)]
+struct FeedInfo {
+    /// The format's config name: `rss`, `atom`, `json`.
+    format: &'static str,
+    /// The media type a `<link rel="alternate">` announces it under.
+    mime: &'static str,
+    /// Its root-relative URL per language code, since each language gets its
+    /// own feed under its own scope.
+    urls: Vec<(String, String)>,
 }
 
 impl BuildContext {
@@ -126,6 +141,7 @@ impl BuildContext {
                 } else {
                     Vec::new()
                 },
+                feeds: SiteInfo::feeds(config),
             },
             client: codegen::Value::dict(config.client.iter().cloned()),
         }
@@ -224,6 +240,44 @@ impl From<&GitInfo> for codegen::Value {
 
 /// Every key is present, `none` when unset, so `#import ..: author` reads
 /// `none` on an authorless site rather than failing.
+impl SiteInfo {
+    /// The feeds `generate { feed { formats } }` asks for, each with the URL it
+    /// lands at in every built language. Read off the same `file` and `scope`
+    /// the emitter writes by, so a link here cannot name a file no pass wrote.
+    fn feeds(config: &Config) -> Vec<FeedInfo> {
+        let feed = &config.generate.feed;
+        feed.formats
+            .iter()
+            .map(|kind| FeedInfo {
+                format: crate::config::Named::name(*kind),
+                mime: kind.mime(),
+                urls: config
+                    .langs()
+                    .iter()
+                    .map(|lang| {
+                        let scope = config.scope(lang, "");
+                        let dir = crate::config::Permalink::join(&[&scope]);
+                        ((*lang).to_owned(), format!("{dir}{}", feed.file(*kind)))
+                    })
+                    .collect(),
+            })
+            .collect()
+    }
+}
+
+impl From<&FeedInfo> for codegen::Value {
+    fn from(feed: &FeedInfo) -> Self {
+        Self::dict([
+            ("format", Self::str(feed.format)),
+            ("mime", Self::str(feed.mime)),
+            (
+                "urls",
+                Self::dict(feed.urls.iter().map(|(lang, url)| (lang, Self::str(url)))),
+            ),
+        ])
+    }
+}
+
 impl From<&SiteInfo> for codegen::Value {
     fn from(site: &SiteInfo) -> Self {
         let langs = site.languages.iter().map(|(code, name)| {
@@ -239,6 +293,7 @@ impl From<&SiteInfo> for codegen::Value {
             ("author", Self::opt(site.author.clone())),
             ("description", Self::opt(site.description.clone())),
             ("languages", Self::array(langs)),
+            ("feeds", Self::array(site.feeds.iter().map(Self::from))),
         ])
     }
 }
