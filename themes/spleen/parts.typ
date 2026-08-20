@@ -7,7 +7,7 @@
 
 #import "@baudelaire/html:0.1.0": classes, h
 #import "@baudelaire/sections:0.1.0": sections
-#import "@baudelaire/site:0.1.0": author, languages, title as site-title
+#import "@baudelaire/site:0.1.0": author, feed-url, feeds, languages, title as site-title
 
 // A UI label, from the site's own string table when it has one, so a
 // non-English site translates the theme through config rather than by editing
@@ -62,15 +62,24 @@
   lang-switch(page)
 })
 
+// The feeds the build actually wrote, in this page's language. Read from the
+// site module rather than spelled here: which formats exist, what they are
+// called, and where a translated site puts them are all config, and a link
+// written by hand can name a file no pass produced.
+#let feed-links(page) = {
+  let links = feeds.map(feed => (feed, feed-url(feed, page.lang))).filter(pair => pair.at(1) != none)
+  if links.len() > 0 {
+    h("span", class: "feeds", for (feed, url) in links {
+      h("a", href: url, feed.format)
+    })
+  }
+}
+
 #let site-footer(page) = h("footer", class: "footer", {
   h("span", class: "rule", "─" * 3)
   h("div", class: "footer-line", {
     if author not in (none, "") { h("span", author) }
-    h("span", class: "feeds", {
-      h("a", href: "/rss.xml", "rss")
-      h("a", href: "/atom.xml", "atom")
-      h("a", href: "/sitemap.xml", "sitemap")
-    })
+    feed-links(page)
   })
 })
 
@@ -153,8 +162,10 @@
   set document(title: title)
 
 
+  // No feed `<link rel="alternate">` here: baudelaire writes one per configured
+  // format in the head already, with the base URL and this page's language on
+  // it, and a second one written by hand can only be a wrong duplicate.
   h("link", rel: "stylesheet", href: "/assets/style.css")
-  h("link", rel: "alternate", type: "application/rss+xml", title: site-title, href: "/rss.xml")
 
   site-header(page)
   h("main", class: "screen", id: "main", main)

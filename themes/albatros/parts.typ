@@ -8,7 +8,7 @@
 
 #import "@baudelaire/html:0.1.0": classes, h
 #import "@baudelaire/sections:0.1.0": sections
-#import "@baudelaire/site:0.1.0": author, languages, title as site-title
+#import "@baudelaire/site:0.1.0": author, feed-url, feeds, languages, title as site-title
 
 // An icon, as real DOM rather than an `<img>`, so it inherits `currentColor`
 // and follows the theme toggle. A theme cannot use `svg()`: those paths are
@@ -124,12 +124,26 @@
   })
 })
 
+// `rss` -> `RSS`, `atom` -> `Atom`: the names these formats are written under,
+// which are not one rule.
+#let feed-name(format) = (rss: "RSS", atom: "Atom", json: "JSON").at(format, default: upper(format))
+
+// The feeds the build actually wrote, in this page's language. Read from the
+// site module rather than spelled here: which formats exist, what they are
+// called, and where a translated site puts them are all config, and a link
+// written by hand can name a file no pass produced.
+#let feed-links(page) = {
+  let links = feeds.map(feed => (feed, feed-url(feed, page.lang))).filter(pair => pair.at(1) != none)
+  if links.len() > 0 {
+    h("span", class: "feeds", for (feed, url) in links {
+      h("a", href: url, feed-name(feed.format))
+    })
+  }
+}
+
 #let site-footer(page) = h("footer", class: "site-footer", {
   h("span", if author not in (none, "") { author } else { site-title })
-  h("span", class: "feeds", {
-    h("a", href: "/rss.xml", "RSS")
-    h("a", href: "/atom.xml", "Atom")
-  })
+  feed-links(page)
 })
 
 // A date, in both forms baudelaire hands over: the machine one for `datetime`,
@@ -283,8 +297,10 @@
 
 
   boot
+  // No feed `<link rel="alternate">` here: baudelaire writes one per configured
+  // format in the head already, with the base URL and this page's language on
+  // it, and a second one written by hand can only be a wrong duplicate.
   h("link", rel: "stylesheet", href: "/assets/style.css")
-  h("link", rel: "alternate", type: "application/rss+xml", title: site-title, href: "/rss.xml")
 
   site-header(page)
   h(
