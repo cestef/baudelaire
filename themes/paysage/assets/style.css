@@ -632,6 +632,21 @@ thead th {
   text-transform: uppercase;
 }
 
+/* Not found --------------------------------------------------------------- */
+
+.notfound-code {
+  margin: 0;
+  color: var(--rule);
+  font-size: clamp(4rem, 3rem + 8vw, 8rem);
+  font-weight: 650;
+  line-height: 1;
+  letter-spacing: -0.05em;
+}
+
+.notfound .hero-links {
+  margin-top: 2rem;
+}
+
 /* Pager and footer -------------------------------------------------------- */
 
 .pager {

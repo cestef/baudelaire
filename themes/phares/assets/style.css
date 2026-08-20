@@ -793,6 +793,25 @@ tbody tr:last-child td {
   font-weight: 600;
 }
 
+/* Not found --------------------------------------------------------------- */
+
+.notfound-code {
+  margin: 0;
+  color: var(--rule);
+  font-size: clamp(4rem, 3rem + 8vw, 7rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+/* The palette trigger is the way back from here, so it reads as an action
+   rather than as the header's quiet affordance. */
+.notfound .search-trigger {
+  margin-top: 2rem;
+  width: auto;
+  padding-inline: 1rem;
+}
+
 /* Narrow screens ----------------------------------------------------------
    The contents column goes when the prose would drop below a readable measure,
    not at a round number: 1280px is the commonest desktop width there is, and a

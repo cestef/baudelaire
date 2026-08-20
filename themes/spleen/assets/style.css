@@ -358,6 +358,22 @@ tbody tr:last-child td {
   font-size: 0.85rem;
 }
 
+/* Not found --------------------------------------------------------------- */
+
+h1.error {
+  font-weight: 400;
+  margin-block: 0 1.15rem;
+}
+
+.error .code {
+  color: var(--accent-alt);
+  font-weight: 700;
+}
+
+.notfound .listing {
+  margin-bottom: 1.15rem;
+}
+
 /* Pager and footer -------------------------------------------------------- */
 
 .pager {
