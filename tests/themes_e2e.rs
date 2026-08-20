@@ -457,3 +457,30 @@ fn the_blog_theme_draws_contents_only_when_a_post_asks() {
     let silent = site.output("posts/second/index.html");
     assert!(!silent.contains("data-toc"), "and nowhere else: {silent}");
 }
+
+/// `albatros` ranks the posts nearest one by shared tags, inside its own
+/// collection. A post with no tags gets nothing rather than the newest three.
+#[test]
+fn the_blog_theme_relates_posts_by_shared_tags() {
+    let site = blog("albatros");
+    site.write(
+        "content/posts/third.typ",
+        "#let frontmatter = (\n  title: \"Third\",\n  date: datetime(year: 2026, month: 7, day: 30),\n  tags: (\"elm\",),\n)\n\nUnrelated.\n",
+    );
+    site.stats();
+
+    // `first` and `second` share `rust`; `third` shares nothing with either.
+    let post = site.output("posts/first/index.html");
+    assert!(post.contains("class=\"related\""), "the block: {post}");
+    assert!(post.contains("/posts/second/"), "the neighbour: {post}");
+    assert!(
+        !post.contains("/posts/third/"),
+        "and nothing that shares no tag: {post}"
+    );
+
+    let untagged = site.output("posts/third/index.html");
+    assert!(
+        untagged.contains("/posts/first/") || untagged.contains("/posts/second/"),
+        "the pager still links siblings: {untagged}"
+    );
+}

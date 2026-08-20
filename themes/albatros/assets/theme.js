@@ -30,7 +30,12 @@ for (const button of document.querySelectorAll("[data-theme-toggle]")) {
    The element is only in the markup on a page that asked for it. */
 
 const toc = document.querySelector("[data-toc]");
-const headings = [...document.querySelectorAll(".post h2[id], .post h3[id]")];
+// The post's own headings, and only those: the anchors pass slugs every heading
+// in the page, the theme's own included, so the related-posts heading would
+// otherwise turn up in the post's contents.
+const headings = [...document.querySelectorAll(".post h2[id], .post h3[id]")].filter(
+  (heading) => !heading.closest(".related, .recent, .toc"),
+);
 
 if (toc && headings.length > 1) {
   const list = toc.querySelector(".toc-list");

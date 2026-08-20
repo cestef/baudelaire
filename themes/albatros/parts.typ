@@ -7,6 +7,7 @@
 // never an edit to a file here.
 
 #import "@baudelaire/html:0.1.0": classes, h
+#import "@baudelaire/pages:0.1.0": pages
 #import "@baudelaire/sections:0.1.0": sections
 #import "@baudelaire/site:0.1.0": author, feed-url, feeds, languages, title as site-title
 
@@ -275,6 +276,27 @@
   class: classes("listing", ("illustrated", entries.any(e => e.image != none))),
   for entry in entries { entry-row(page, entry) },
 )
+
+// The posts nearest this one, ranked by how many tags they share with it. Only
+// within the page's own collection, so a post never suggests an about page, and
+// only where there is something to rank: an untagged post gets nothing rather
+// than the newest three.
+#let related(page, limit: 3) = {
+  let terms = page.taxonomies.at("tags", default: ())
+  if terms.len() == 0 { return }
+  let scored = pages(page.lang)
+    .filter(entry => entry.url != page.url and entry.collection == page.collection)
+    .map(entry => (entry, entry.taxonomies.at("tags", default: ()).filter(t => t in terms).len()))
+    .filter(pair => pair.at(1) > 0)
+  if scored.len() == 0 { return }
+  // Sorting is stable, so posts sharing as many tags stay in the catalogue's
+  // own order, which for a blog is newest first.
+  let ranked = scored.sorted(key: pair => -pair.at(1))
+  h("section", class: "related", {
+    h("h2", label(page, "related", "Related posts"))
+    entry-list(page, ranked.slice(0, calc.min(limit, ranked.len())).map(pair => pair.at(0)))
+  })
+}
 
 // Prev/next across the collection. On a reverse-dated blog `prev` is the newer
 // post, which is why the labels are neutral.

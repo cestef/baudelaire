@@ -11,7 +11,8 @@ theme "themes/albatros"
 ## What you get
 
 - `page.typ` — a post or page: title, byline (author · localized date · reading
-  time), lead image, body, tag chips, prev/next pager.
+  time), lead image, an optional contents list, body, tag chips, related posts,
+  prev/next pager.
 - `home.typ` — a page's own words followed by the newest posts, read from the
   `@baudelaire/pages` catalogue. Bind it with `template: "home.typ"`.
 - `list.typ` — every generated index: the paginated collection index, `/tags/`,
@@ -31,6 +32,7 @@ Nothing mandatory beyond `title`. It uses, when present:
 | `tags` | chips under the post, term pages under `/tags/` |
 | `summary` | one line under the entry in a listing |
 | `image`, `alt` | the lead image over the post, the thumbnail in a listing, and the social card |
+| `toc` | `true` draws the post's own contents above it, from its `h2`/`h3` |
 | `author`, or a taxonomy with `credit "author"` | the byline, with the link and picture an entity carries |
 | `collection` | on a `home.typ` page: which collection to list (default `posts`) |
 | `recent` | on a `home.typ` page: how many to list (default 5) |
@@ -63,8 +65,14 @@ languages {
 
 Keys used: `skip`, `primary`, `theme`, `languages`, `reading`, `tags`,
 `pagination`, `previous`, `next`, `newer`, `older`, `recent`, `archive`, `home`,
-`copy`, `copied`. Dates are localized by baudelaire itself, from the page's
-language.
+`related`, `contents`, `copy`, `copied`. Dates are localized by baudelaire
+itself, from the page's language.
+
+## Related posts
+
+A post ends with the posts nearest it: same collection, ranked by how many tags
+they share, three at most. A post with no tags gets none, rather than the newest
+three under another name.
 
 ## Bylines
 

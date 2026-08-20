@@ -8,5 +8,5 @@
 
 #import "parts.typ": (
   authors, byline, chips, contents, cover, entry-list, entry-row, icon, label, lang-switch, moon, pager,
-  posted, reading-badge, shell, sun, theme-toggle, top-nav,
+  posted, reading-badge, related, shell, sun, theme-toggle, top-nav,
 )
