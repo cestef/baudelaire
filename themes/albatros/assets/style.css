@@ -749,6 +749,55 @@ td {
   line-height: 1.35;
 }
 
+/* Contents ----------------------------------------------------------------
+   A `<details>`, so a reader can fold it away and a page without script still
+   shows a heading rather than an empty box. `hidden` until the script has
+   something to put in it. */
+
+.toc {
+  margin-block: 0 2rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--rule);
+  border-radius: 0.6rem;
+  background: var(--raised);
+}
+
+.toc[hidden] {
+  display: none;
+}
+
+.toc-title {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.toc-list {
+  list-style: none;
+  margin: 0.6rem 0 0;
+  padding: 0;
+}
+
+.toc-list a {
+  display: block;
+  padding: 0.1rem 0;
+  color: var(--muted);
+  text-decoration: none;
+  line-height: 1.45;
+}
+
+.toc-list a:hover {
+  color: var(--accent);
+}
+
+.toc-h3 a {
+  padding-inline-start: 1rem;
+  font-size: 0.94em;
+}
+
 /* Not found --------------------------------------------------------------- */
 
 .notfound-code {

@@ -3,6 +3,8 @@
   date: datetime(year: 2026, month: 7, day: 12),
   tags: ("typst", "templates"),
   authors: ("cstef",),
+  // The theme draws a contents list on a post that asks for one.
+  toc: true,
   summary: "Why the content and the layout being one language is the whole point.",
   // The lead image, and the one the social card names: one field, both uses.
   image: "/assets/cover-typst.svg",

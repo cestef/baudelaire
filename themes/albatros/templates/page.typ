@@ -4,7 +4,7 @@
 // by `template "page.typ"` in a collection or in a page's frontmatter.
 
 #import "@baudelaire/html:0.1.0": h
-#import "../parts.typ": byline, chips, cover, pager, shell
+#import "../parts.typ": byline, chips, contents, cover, pager, shell
 
 #let page(page, body) = shell(page, h("article", class: "post", {
   h("h1", page.frontmatter.title)
@@ -14,6 +14,8 @@
   // The lead image, from `image:` in frontmatter, which is also the one the
   // social card names.
   cover(page)
+  // Only on a page that asked for it, in frontmatter.
+  contents(page)
   body
   chips(page, page.taxonomies.at("tags", default: ()))
   pager(page)

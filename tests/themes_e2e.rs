@@ -437,3 +437,23 @@ fn the_docs_theme_exports_the_components_a_manual_writes_with() {
         "every pane is in the markup: {page}"
     );
 }
+
+/// The contents list is opt-in, and its markup is empty: the headings are in
+/// the compiled body, which the layout never sees, so the theme's script fills
+/// it in the browser.
+#[test]
+fn the_blog_theme_draws_contents_only_when_a_post_asks() {
+    let site = blog("albatros");
+    site.write(
+        "content/posts/first.typ",
+        "#let frontmatter = (\n  title: \"First\",\n  date: datetime(year: 2026, month: 7, day: 20),\n  toc: true,\n)\n\n= One\n\nText.\n\n= Two\n\nMore.\n",
+    );
+    site.stats();
+
+    let asked = site.output("posts/first/index.html");
+    assert!(asked.contains("data-toc"), "the placeholder: {asked}");
+    assert!(asked.contains("class=\"toc-list\""), "its list: {asked}");
+
+    let silent = site.output("posts/second/index.html");
+    assert!(!silent.contains("data-toc"), "and nowhere else: {silent}");
+}

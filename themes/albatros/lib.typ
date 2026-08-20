@@ -7,6 +7,6 @@
 // `templates/` by filename, which is what makes them overridable file by file.
 
 #import "parts.typ": (
-  authors, byline, chips, cover, entry-list, entry-row, icon, label, lang-switch, moon, pager,
+  authors, byline, chips, contents, cover, entry-list, entry-row, icon, label, lang-switch, moon, pager,
   posted, reading-badge, shell, sun, theme-toggle, top-nav,
 )

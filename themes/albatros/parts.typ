@@ -203,6 +203,21 @@
   }
 }
 
+// The post's own contents, above the prose. Deliberately empty markup: the
+// headings live in the compiled body, which the layout never sees, so the
+// theme's script fills this from the rendered page. A post with fewer than two
+// headings gets none at all, which the script decides.
+//
+// Opt in per page with `toc: true`, or for a whole collection by copying
+// `page.typ` out of the theme; a blog is mostly short posts, and a contents
+// list over two headings is furniture.
+#let contents(page) = if page.frontmatter.at("toc", default: false) {
+  h("details", class: "toc", open: true, data-toc: true, hidden: true, {
+    h("summary", class: "toc-title", label(page, "contents", "Contents"))
+    h("ol", class: "toc-list")
+  })
+}
+
 #let chips(page, terms) = if terms.len() > 0 {
   h("nav", class: "chips", aria-label: label(page, "tags", "Tags"), for term in terms {
     h("a", class: "chip", href: "/tags/" + term + "/", "#" + term)
