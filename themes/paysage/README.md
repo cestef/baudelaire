@@ -16,6 +16,8 @@ theme "themes/paysage"
   duration, stack), a cover image, the write-up, and a link to the next project.
 - `page.typ` — an ordinary page: about, contact, colophon.
 - `list.typ` — the `/work/` index and the `stack` term pages, as the same grid.
+- `not-found.typ` — the page a host serves for an unmatched URL. Bind it from
+  `content/404.typ`, which publishes as a flat `404.html`.
 - A `work` collection over `content/work/`, newest first, a `stack` taxonomy,
   RSS, and a sitemap.
 
@@ -94,7 +96,8 @@ languages {
 ```
 
 Keys used: `skip`, `primary`, `theme`, `selected`, `all-work`, `next-project`,
-`date`, `role`, `client`, `duration`, `stack`, `pagination`, `newer`, `older`.
+`date`, `role`, `client`, `duration`, `stack`, `pagination`, `newer`, `older`,
+`home`.
 
 ## Overriding it
 

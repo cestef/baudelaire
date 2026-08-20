@@ -287,7 +287,16 @@
   h("link", rel: "alternate", type: "application/rss+xml", title: site-title, href: "/rss.xml")
 
   site-header(page)
-  h("main", class: "content", id: "main", main)
+  h(
+    "main",
+    class: "content",
+    id: "main",
+    // The words `theme.js` needs but cannot look up: it runs in the browser,
+    // where the site's string table is not.
+    data-copy: label(page, "copy", "Copy"),
+    data-copied: label(page, "copied", "Copied"),
+    main,
+  )
   site-footer(page)
   h("script", type: "module", src: "/assets/theme.js")
 }

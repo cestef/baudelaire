@@ -22,3 +22,39 @@ for (const button of document.querySelectorAll("[data-theme-toggle]")) {
     sync();
   });
 }
+
+/* Copy a code block ---------------------------------------------------------
+   Added here rather than in the layout because the blocks are in the page's own
+   body, which the template never sees. Absent without `navigator.clipboard`,
+   which is what a page served over plain HTTP has: a button that cannot copy is
+   worse than none. */
+
+if (navigator.clipboard) {
+  // The words, from the site's string table: the shell puts them on `<main>`,
+  // which is the nearest element a template can reach (typst-html owns `<html>`).
+  const strings = document.getElementById("main")?.dataset ?? {};
+  const label = strings.copy ?? "Copy";
+  const done = strings.copied ?? "Copied";
+
+  for (const block of document.querySelectorAll("pre")) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "copy";
+    button.textContent = label;
+    button.addEventListener("click", async () => {
+      await navigator.clipboard.writeText(block.querySelector("code")?.innerText ?? block.innerText);
+      button.textContent = done;
+      button.classList.add("copied");
+      setTimeout(() => {
+        button.textContent = label;
+        button.classList.remove("copied");
+      }, 1600);
+    });
+    // A wrapper, so the button can sit in the block's corner without the
+    // absolute positioning scrolling away with the code.
+    const wrap = document.createElement("div");
+    wrap.className = "codeblock";
+    block.replaceWith(wrap);
+    wrap.append(block, button);
+  }
+}

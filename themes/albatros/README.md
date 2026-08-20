@@ -62,8 +62,9 @@ languages {
 ```
 
 Keys used: `skip`, `primary`, `theme`, `languages`, `reading`, `tags`,
-`pagination`, `previous`, `next`, `newer`, `older`, `recent`, `archive`, `home`.
-Dates are localized by baudelaire itself, from the page's language.
+`pagination`, `previous`, `next`, `newer`, `older`, `recent`, `archive`, `home`,
+`copy`, `copied`. Dates are localized by baudelaire itself, from the page's
+language.
 
 ## Bylines
 

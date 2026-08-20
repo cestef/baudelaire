@@ -211,7 +211,16 @@
   site-header(page)
   h("div", class: "layout", {
     sidebar(page)
-    h("main", class: "content", id: "main", main)
+    h(
+      "main",
+      class: "content",
+      id: "main",
+      // The words `theme.js` needs but cannot look up: it runs in the browser,
+      // where the site's string table is not.
+      data-copy: label(page, "copy", "Copy"),
+      data-copied: label(page, "copied", "Copied"),
+      main,
+    )
     if toc { contents(page) }
   })
   page-footer(page)

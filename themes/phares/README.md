@@ -95,8 +95,8 @@ languages {
 ```
 
 Keys used: `skip`, `search`, `theme`, `navigation`, `documentation`, `contents`,
-`tags`, `pagination`, `previous`, `next`, `built`, plus any directory id you
-want renamed.
+`tags`, `pagination`, `previous`, `next`, `built`, `copy`, `copied`, plus any
+directory id you want renamed.
 
 ## Overriding it
 

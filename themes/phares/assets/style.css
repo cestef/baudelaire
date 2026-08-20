@@ -560,6 +560,56 @@ pre {
   line-height: 1.55;
 }
 
+/* The wrapper `theme.js` puts around a code block, so the copy button can sit
+   in its corner without scrolling away with the code. */
+.codeblock {
+  position: relative;
+  margin-block: 0 1.15rem;
+}
+
+.codeblock pre {
+  margin: 0;
+}
+
+.copy {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid var(--rule);
+  border-radius: 0.4rem;
+  background: var(--bg);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.codeblock:hover .copy,
+.copy:focus-visible,
+.copy.copied {
+  opacity: 1;
+}
+
+.copy:hover {
+  color: var(--fg);
+  border-color: var(--accent);
+}
+
+.copy.copied {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* A pointer is what reveals the button; without one it is always there. */
+@media (hover: none) {
+  .copy {
+    opacity: 1;
+  }
+}
+
 code {
   font-family: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, monospace;
   /* Monospace reads larger at a given size, so match the x-height instead of
