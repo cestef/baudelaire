@@ -582,9 +582,14 @@ code {
 
 /* Tables ------------------------------------------------------------------ */
 
+/* A table wider than the column scrolls rather than crushing its cells. The
+   block box caps at the column while its contents keep their natural width,
+   which is what makes the overflow scrollable without a wrapper element the
+   theme has no way to add. */
 table {
   display: block;
-  width: 100%;
+  width: max-content;
+  max-width: 100%;
   overflow-x: auto;
   border-collapse: collapse;
   margin-block: 1.5rem;
