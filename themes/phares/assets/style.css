@@ -7,9 +7,9 @@
    colour. */
 
 :root {
-  --sidebar: 17rem;
-  --toc: 15rem;
-  --measure: 46rem;
+  --sidebar: 15.5rem;
+  --toc: 13.5rem;
+  --measure: 44rem;
   --header: 3.5rem;
 
   --fg: #1b1f27;
@@ -261,6 +261,13 @@ a {
 
 .nav-group {
   margin-bottom: 1.25rem;
+}
+
+/* A group inside a group is a subsection of the manual, and has to read as one:
+   stepped in, and closer to its parent than to the next top-level group. */
+.nav-body .nav-group {
+  margin-block: 0.5rem;
+  padding-inline-start: 0.7rem;
 }
 
 .nav-title {
@@ -770,9 +777,12 @@ tbody tr:last-child td {
   font-weight: 600;
 }
 
-/* Narrow screens ---------------------------------------------------------- */
+/* Narrow screens ----------------------------------------------------------
+   The contents column goes when the prose would drop below a readable measure,
+   not at a round number: 1280px is the commonest desktop width there is, and a
+   manual that hides its own contents there hides them from most readers. */
 
-@media (max-width: 80rem) {
+@media (max-width: 70rem) {
   .layout {
     grid-template-columns: var(--sidebar) minmax(0, 1fr);
   }
