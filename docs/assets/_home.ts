@@ -100,8 +100,27 @@ function branch(nodes: Entry[]): HTMLUListElement {
   return list;
 }
 
-// The `generate { }` explorer: ticking a box reveals that option's config line
-// and adds the files it writes to the output tree.
+/** The sample page every `{page}` path is drawn against. */
+const PAGE = "blog/hello";
+
+// Insert `path` into `nodes`, creating the directories it names, so an option
+// declares where the build puts its file and the nesting follows.
+function plant(nodes: Entry[], path: string, generated?: boolean): void {
+  const [head, ...rest] = path.split("/");
+  if (!rest.length) {
+    if (!nodes.some((node) => node.name === head))
+      nodes.push({ name: head, generated });
+    return;
+  }
+  const existing = nodes.find((node) => node.name === head + "/");
+  const dir = existing ?? { name: head + "/", children: [], generated };
+  if (!existing) nodes.push(dir);
+  dir.children ??= [];
+  plant(dir.children, rest.join("/"), generated);
+}
+
+// The artifact explorer: ticking a box reveals that option's config line and
+// adds the files it writes to the output tree.
 export function initEmit(): void {
   const root = document.querySelector("[data-emit]");
   if (!root) return;
@@ -128,28 +147,23 @@ export function initEmit(): void {
       );
       if (line) line.hidden = !on(control);
     }
+    // A block with nothing ticked would read as an empty block that does
+    // nothing, so its braces go with its last line.
+    for (const brace of root.querySelectorAll<HTMLElement>("[data-emit-brace]"))
+      brace.hidden = !checked.some(
+        (control) => control.dataset.emitBlock === brace.dataset.emitBrace,
+      );
 
-    // A page directory holds its index plus whatever per-page artifacts are on.
-    const perPage = checked.flatMap((control) => list(control, "pageFiles"));
-    const page = (name: string): Entry => ({
-      name,
-      children: [
-        { name: "index.html" },
-        ...perPage.map((file) => ({ name: file, generated: true })),
-      ],
-    });
-    const rootFiles = checked
-      .flatMap((control) => list(control, "files"))
-      .sort();
+    const nodes: Entry[] = [
+      { name: "index.html" },
+      { name: "assets/", children: [{ name: "style.b4f1a0.css" }] },
+    ];
+    plant(nodes, `${PAGE}/index.html`);
+    for (const control of checked)
+      for (const file of list(control, "files"))
+        plant(nodes, file.replace("{page}", PAGE), true);
 
-    tree.replaceChildren(
-      branch([
-        { name: "index.html" },
-        { name: "assets/", children: [{ name: "style.b4f1a0.css" }] },
-        { name: "blog/", children: [page("hello/")] },
-        ...rootFiles.map((name) => ({ name, generated: true })),
-      ]),
-    );
+    tree.replaceChildren(branch(nodes));
   };
 
   // A `role="switch"` button owns its state, so flip it here; the browser

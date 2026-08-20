@@ -259,67 +259,84 @@
   }
 ]
 
-// The `generate { }` block, as a thing you operate: one switch per artifact,
-// laid out on the same grid as `cards`, over the config and the output tree the
-// checked set adds up to.
+// The emitted artifacts, as a thing you operate: one switch each, laid out on
+// the same grid as `cards`, over the config and the output tree the checked set
+// adds up to. They are split across two config blocks and an option names its
+// own: `generate { }` writes the site's own files, `artifacts { }` draws a page
+// as something other than HTML.
 //
 // Each option carries the one config line it adds and the files that line
 // writes, so the KDL and the tree come from this list rather than from two
-// copies of it. `_home.js` reads the data attributes; with no script the
-// switches ship disabled and the config shows the set they already display.
-#let emit-explorer(options, block: "generate") = h(
-  "div",
-  class: "emit",
-  data-emit: true,
-)[
-  #h("div", class: "toggles", for opt in options {
-    let on = opt.at("on", default: false)
-    // A `button` rather than a checkbox: the whole card is the control, it
-    // needs no label to align against, and `role="switch"` says what it does.
-    // Dead controls are worse than none, so it ships disabled and `_home.js`
-    // enables it.
-    h("button",
-      type: "button",
-      class: "toggle",
-      role: "switch",
-      aria-checked: if on { "true" } else { "false" },
-      disabled: true,
-      data-emit-option: opt.id,
-      data-files: opt.at("files", default: ()).join(","),
-      data-page-files: opt.at("page-files", default: ()).join(","),
-      {
-        h("span", class: "toggle-mark", aria-hidden: "true", lucide("check", size: 12))
-        h("span", class: "toggle-title", opt.label)
-        h("span", class: "toggle-note", opt.note)
-      })
-  })
-  #h("div", class: "panes")[
-    // Every option's line is highlighted at build time and shipped; toggling one
-    // shows or hides its line rather than rewriting the block, so the KDL here is
-    // always typst's own highlighting and never a string built in the browser.
-    #h("div", class: "pane")[
-      #h("p", class: "pane-label", "config.kdl")
-      // Each line is its own fence so it can be shown or hidden on its own, so
-      // none of them is a config a checker could read: `@ignore` says so.
-      #let line(text) = raw("//! @ignore\n" + text, lang: "kdl")
-      #h("pre", class: "emit-kdl", {
-        h("span", class: "emit-line", line(block + " {"))
-        for opt in options {
-          h("span",
+// copies of it. A path may name `{page}`, which `_home.ts` resolves to the
+// sample page it draws. With no script the switches ship disabled and the
+// config shows the set they already display.
+#let emit-explorer(options) = {
+  let block-of(opt) = opt.at("block", default: "generate")
+  let on-of(opt) = opt.at("on", default: false)
+  let blocks = ()
+  for opt in options {
+    if block-of(opt) not in blocks {
+      blocks.push(block-of(opt))
+    }
+  }
+
+  h("div", class: "emit", data-emit: true)[
+    #h("div", class: "toggles", for opt in options {
+      // A `button` rather than a checkbox: the whole card is the control, it
+      // needs no label to align against, and `role="switch"` says what it does.
+      // Dead controls are worse than none, so it ships disabled and `_home.ts`
+      // enables it.
+      h("button",
+        type: "button",
+        class: "toggle",
+        role: "switch",
+        aria-checked: if on-of(opt) { "true" } else { "false" },
+        disabled: true,
+        data-emit-option: opt.id,
+        data-emit-block: block-of(opt),
+        data-files: opt.at("files", default: ()).join(","),
+        {
+          h("span", class: "toggle-mark", aria-hidden: "true", lucide("check", size: 12))
+          h("span", class: "toggle-title", opt.label)
+          h("span", class: "toggle-note", opt.note)
+        })
+    })
+    #h("div", class: "panes")[
+      // Every option's line is highlighted at build time and shipped; toggling one
+      // shows or hides its line rather than rewriting the block, so the KDL here is
+      // always typst's own highlighting and never a string built in the browser.
+      #h("div", class: "pane")[
+        #h("p", class: "pane-label", "config.kdl")
+        // Each line is its own fence so it can be shown or hidden on its own, so
+        // none of them is a config a checker could read: `@ignore` says so.
+        #let line(text) = raw("//! @ignore\n" + text, lang: "kdl")
+        #h("pre", class: "emit-kdl", for name in blocks {
+          let members = options.filter(opt => block-of(opt) == name)
+          // A block whose every option is off would read as an empty block that
+          // does nothing, so its braces hide with its last line.
+          let brace(text) = h("span",
             class: "emit-line",
-            hidden: not opt.at("on", default: false),
-            data-emit-line: opt.id,
-            line("  " + opt.kdl))
-        }
-        h("span", class: "emit-line", line("}"))
-      })
-    ]
-    #h("div", class: "pane", hidden: true, data-emit-tree-pane: true)[
-      #h("p", class: "pane-label", "public/")
-      #h("div", class: "tree", data-emit-tree: true)
+            hidden: not members.any(on-of),
+            data-emit-brace: name,
+            line(text))
+          brace(name + " {")
+          for opt in members {
+            h("span",
+              class: "emit-line",
+              hidden: not on-of(opt),
+              data-emit-line: opt.id,
+              line("  " + opt.kdl))
+          }
+          brace("}")
+        })
+      ]
+      #h("div", class: "pane", hidden: true, data-emit-tree-pane: true)[
+        #h("p", class: "pane-label", "public/")
+        #h("div", class: "tree", data-emit-tree: true)
+      ]
     ]
   ]
-]
+}
 
 #let tag-row(tags) = h("div", class: "tag-row", aria-label: "Tags", for tag in tags {
   link-to("/tags/" + tag + "/", "#" + tag)

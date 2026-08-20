@@ -83,7 +83,7 @@ load a CSV and build a table from it, so the moment you want one you start
 stacking a template engine and plugins on top. What that trade costs, next to
 Hugo, Zola, Eleventy and Astro, is on #link("start/compare.typ")[compared].
 
-== One block, every artifact
+== Two blocks, every artifact
 
 #emit-explorer((
   (
@@ -113,21 +113,24 @@ Hugo, Zola, Eleventy and Astro, is on #link("start/compare.typ")[compared].
     id: "cards",
     label: "Social cards",
     note: "A second, paged compile of each page, drawn by your template.",
+    block: "artifacts",
     kdl: "cards { template \"card.typ\" }",
-    page-files: ("card.png",),
+    files: ("cards/{page}.png",),
   ),
   (
     id: "pdf",
     label: "A PDF per page",
     note: "Same source, same compiler, different target.",
-    kdl: "pdf #true",
-    page-files: ("index.pdf",),
+    block: "artifacts",
+    kdl: "pdf { pages }",
+    files: ("{page}.pdf",),
   ),
 ))
 
 Turn one on and the config writes itself, along with what it puts in `dist/`.
-Each artifact is built from the pages you already wrote, none of it is on until
-the config says so, and each has its own page under
+`generate` writes the site's own files; `artifacts` draws a page as something
+other than HTML. Each is built from the pages you already wrote, none of it is
+on until the config says so, and each has its own page under
 #link("/build/")[Build].
 
 == Start here
