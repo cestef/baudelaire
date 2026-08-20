@@ -484,3 +484,38 @@ fn the_blog_theme_relates_posts_by_shared_tags() {
         "the pager still links siblings: {untagged}"
     );
 }
+
+/// `phares` links a page's own file, built from `page.source` and the prefix the
+/// site sets in `typst { inputs { edit } }`. No prefix, no link: a theme cannot
+/// guess where a manual's source lives.
+#[test]
+fn the_docs_theme_links_the_page_source_when_the_site_says_where() {
+    let told = wearing(
+        "phares",
+        "typst { inputs { edit \"https://forge.example/edit/main\" } }\n",
+    );
+    told.write(
+        "content/guide/install.typ",
+        "#let frontmatter = (title: \"Install\")\n\nInstall it.\n",
+    );
+    told.stats();
+
+    let page = told.output("guide/install/index.html");
+    assert!(
+        page.contains("https://forge.example/edit/main/content/guide/install.typ"),
+        "the prefix and the page's own file: {page}"
+    );
+
+    let silent = wearing("phares", "");
+    silent.write(
+        "content/guide/install.typ",
+        "#let frontmatter = (title: \"Install\")\n\nInstall it.\n",
+    );
+    silent.stats();
+    assert!(
+        !silent
+            .output("guide/install/index.html")
+            .contains("class=\"edit\""),
+        "and nothing at all without one"
+    );
+}

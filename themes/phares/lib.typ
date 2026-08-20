@@ -7,8 +7,8 @@
 // `templates/` by filename, which is what makes them overridable file by file.
 
 #import "parts.typ": (
-  breadcrumbs, chips, contents, icon, label, magnifier, menu, moon, pager, search-trigger, shell,
-  sidebar, sun, theme-toggle, updated,
+  breadcrumbs, chips, contents, edit-link, icon, label, magnifier, menu, moon, page-meta, pager,
+  search-trigger, shell, sidebar, sun, theme-toggle, updated,
 )
 
 #import "@baudelaire/html:0.1.0": h

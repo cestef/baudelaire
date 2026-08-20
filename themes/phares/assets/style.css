@@ -550,10 +550,28 @@ details:not(.nav-group) > summary {
   color: var(--accent);
 }
 
-.updated {
+/* The line under the prose: where to fix the page, and when it last moved. */
+.page-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1.5rem;
   margin-top: 2.5rem;
   color: var(--muted);
   font-size: 0.85rem;
+}
+
+.edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.edit:hover {
+  color: var(--accent);
 }
 
 /* Callouts, from `#import "@preview/phares:0.1.0": callout`. */

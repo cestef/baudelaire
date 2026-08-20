@@ -31,8 +31,9 @@ look is the part you can change in an afternoon.
 
   [#link("/themes/phares/")[phares]], [Documentation],
   [A sidebar built from your own `content/` tree, a search palette, the page's
-    headings down the right, breadcrumbs, prev/next through the manual, and the
-    components a manual writes with: callouts, tabs, steps, cards, badges.],
+    headings down the right, breadcrumbs, an edit link, prev/next through the
+    manual, and the components a manual writes with: callouts, tabs, steps,
+    cards, badges.],
 
   [#link("/themes/paysage/")[paysage]], [A portfolio],
   [A landing page, a work grid that builds itself from what you publish, one

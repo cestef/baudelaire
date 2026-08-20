@@ -16,3 +16,14 @@ paths {
   content "themes/demo/docs/content"
   dist "docs/public/themes/preview"
 }
+
+// Where this manual's pages live, for the theme's "Edit this page" link: it
+// appends `page.source`, which is project-root-absolute, and this preview's
+// project root is the repository. A `typst { inputs }` value rather than a
+// config key of the theme's own invention: a site's constants belong to the
+// site.
+typst {
+  inputs {
+    edit "https://github.com/cestef/baudelaire/edit/main"
+  }
+}

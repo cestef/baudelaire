@@ -9,7 +9,7 @@ no upstream licence.
 |---|---|---|---|
 | [`albatros`](albatros) ([demo](https://baudelaire.cstef.dev/themes/albatros/)) | A blog | Centred column, system sans, light/dark, bylines, lead images, tags, reading time, related posts, language switcher | one module: the toggle, contents, copy buttons |
 | [`spleen`](spleen) ([demo](https://baudelaire.cstef.dev/themes/spleen/)) | A blog, minimal | Terminal. Monospace, prompt masthead, posts as a directory listing, dark first | none |
-| [`phares`](phares) ([demo](https://baudelaire.cstef.dev/themes/phares/)) | Documentation | Sidebar from your own tree, search palette, on-page contents, breadcrumbs, prev/next through the manual, callouts, tabs, steps, cards | one module: nav, contents, tabs, toggle |
+| [`phares`](phares) ([demo](https://baudelaire.cstef.dev/themes/phares/)) | Documentation | Sidebar from your own tree, search palette, on-page contents, breadcrumbs, an edit link, prev/next through the manual, callouts, tabs, steps, cards | one module: nav, contents, tabs, toggle |
 | [`paysage`](paysage) ([demo](https://baudelaire.cstef.dev/themes/paysage/)) | A portfolio | Landing page, work grid, case studies with cover images | one module: the toggle |
 
 All four ship a `templates/not-found.typ`; bind it from `content/404.typ`, which

@@ -11,7 +11,7 @@ theme "themes/phares"
 ## What you get
 
 - `page.typ` — one documentation page: breadcrumbs, title, optional lead, body,
-  tag chips, a last-updated line, prev/next.
+  tag chips, an edit link and a last-updated line, prev/next.
 - `list.typ` — the taxonomy indexes (`/tags/` and each term).
 - `not-found.typ` — the page a host serves for an unmatched URL, with the
   sidebar still beside it. Bind it from `content/404.typ`, which publishes as a
@@ -113,7 +113,7 @@ code block, a callout, a nested list.
 `kind` shares the callout palette, so a warning badge and a warning callout are
 the same colour.
 
-## Breadcrumbs and dates
+## Breadcrumbs, dates, and an edit link
 
 Breadcrumbs come from the page's own URL, with the site's string table naming
 each directory. A crumb links only where a page is actually published, so the
@@ -123,6 +123,21 @@ page of their own, and never a dead link.
 `updated: datetime(..)` in frontmatter prints a last-updated line under the
 page. It is written as the ISO day: baudelaire localizes `date`, not this one,
 and a manual would rather be language-neutral than wrong.
+
+Beside it, a link to the page's own file. Say where the manual lives and the
+theme appends `page.source`, which is project-root-absolute:
+
+```kdl
+typst {
+  inputs {
+    edit "https://github.com/you/site/edit/main"
+  }
+}
+```
+
+It is a `typst { inputs }` constant rather than a config key of this theme's
+invention: a site's own constants belong to the site. Without one there is no
+link, and a generated page has no file to offer.
 
 ## What the script does
 
@@ -156,7 +171,8 @@ languages {
 
 Keys used: `skip`, `search`, `theme`, `navigation`, `documentation`, `contents`,
 `tags`, `pagination`, `previous`, `next`, `built`, `copy`, `copied`,
-`breadcrumb`, `home`, `updated`, plus any directory id you want renamed.
+`breadcrumb`, `home`, `updated`, `edit`, plus any directory id you want
+renamed.
 
 ## Overriding it
 

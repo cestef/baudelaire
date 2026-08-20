@@ -4,7 +4,7 @@
 // by `template "page.typ"` in a collection or in a page's frontmatter.
 
 #import "@baudelaire/html:0.1.0": h
-#import "../parts.typ": breadcrumbs, chips, pager, shell, updated
+#import "../parts.typ": breadcrumbs, chips, page-meta, pager, shell
 
 #let page(page, body) = shell(page, h("article", class: "doc", {
   // Where the page sits in the manual, for a reader who arrived from a search
@@ -15,6 +15,6 @@
   if lead != none { h("p", class: "lead", lead) }
   body
   chips(page, page.taxonomies.at("tags", default: ()))
-  updated(page)
+  page-meta(page)
   pager(page)
 }))

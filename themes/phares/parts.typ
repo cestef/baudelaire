@@ -40,6 +40,8 @@
 
 #let menu = icon("M4 7h16M4 12h16M4 17h16")
 
+#let pencil = icon("M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3Z", "M13.5 6.5l4 4")
+
 // A UI label, from the site's own string table when it has one, so a
 // non-English site translates the theme through config rather than by editing
 // it.
@@ -192,6 +194,20 @@
   }
 }
 
+// A link to the page's own file, for a reader who spotted a typo. The prefix is
+// `typst { inputs { edit ".." } }`, a constant the site sets rather than a
+// config key this theme invented; without one there is no link, and a generated
+// page has no file to offer.
+#let edit-link(page) = {
+  let base = sys.inputs.at("edit", default: none)
+  if base != none and page.source != none {
+    h("a", class: "edit", href: base + page.source, {
+      pencil
+      h("span", label(page, "edit", "Edit this page"))
+    })
+  }
+}
+
 // When the page last changed materially, from `updated:` in its frontmatter.
 // Written as the ISO day rather than in words: baudelaire localizes `date`, not
 // this one, and a manual would rather be language-neutral than wrong.
@@ -199,11 +215,18 @@
   let day = page.frontmatter.at("updated", default: none)
   if day != none {
     let iso = day.display("[year]-[month]-[day]")
-    h("p", class: "updated", {
+    h("span", class: "updated", {
       label(page, "updated", "Last updated") + " "
       h("time", datetime: iso, iso)
     })
   }
+}
+
+// The line under the prose: where to fix the page, and when it last moved.
+// Absent entirely when it would hold neither.
+#let page-meta(page) = {
+  let parts = (edit-link(page), updated(page)).filter(part => part != none)
+  if parts.len() > 0 { h("div", class: "page-meta", parts.join()) }
 }
 
 #let chips(page, terms) = if terms.len() > 0 {
