@@ -2,7 +2,10 @@
   title: "Maths, tables, and other things prose is bad at",
   date: datetime(year: 2026, month: 7, day: 21),
   tags: ("typst",),
+  authors: ("camille",),
   summary: "The parts of a page a Markdown site sends you to a plugin for.",
+  image: "/assets/cover-maths.svg",
+  alt: "Curves fanning out from a baseline."
 )
 
 A typesetting language brings its own answers to the things Markdown farms out

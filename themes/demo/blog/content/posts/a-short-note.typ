@@ -2,6 +2,7 @@
   title: "A short note",
   date: datetime(year: 2026, month: 7, day: 28),
   tags: ("notes",),
+  authors: ("cstef",),
   summary: "Short, so a listing has something other than long entries in it.",
 )
 

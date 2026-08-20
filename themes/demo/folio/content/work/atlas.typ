@@ -2,6 +2,8 @@
   title: "Atlas",
   date: datetime(year: 2025, month: 9, day: 12),
   summary: "Maps for a warehouse that will not hold still.",
+  image: "/assets/atlas.svg",
+  alt: "A warehouse floor drawn as blocks on a grid.",
   role: "Interface",
   client: "A logistics firm",
   duration: "Six weeks",

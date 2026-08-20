@@ -14,5 +14,9 @@ lang "en"
 
 paths {
   content "themes/demo/folio/content"
+  // The cover images the projects name. Declared because this config is loaded
+  // from the repository root, where the default `assets` would be the wrong
+  // directory entirely.
+  assets "themes/demo/folio/assets"
   dist "docs/public/themes/preview"
 }

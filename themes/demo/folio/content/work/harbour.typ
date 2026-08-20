@@ -2,6 +2,8 @@
   title: "Harbour",
   date: datetime(year: 2024, month: 11, day: 20),
   summary: "A deploy tool that asks one question and then stops talking.",
+  image: "/assets/harbour.svg",
+  alt: "Two cranes over a quayside.",
   role: "Build",
   duration: "Ongoing",
   stack: ("rust",),

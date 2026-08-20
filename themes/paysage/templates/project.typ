@@ -45,9 +45,16 @@
     })
   })
 
-  let cover = page.frontmatter.at("cover", default: none)
+  // The lead image, from `image:`, which is also the one the card in the grid
+  // and the social card both draw.
+  let cover = page.frontmatter.at("image", default: none)
   if cover != none {
-    h("figure", class: "cover", h("img", src: cover, alt: page.frontmatter.title))
+    h("figure", class: "cover", h(
+      "img",
+      src: cover,
+      alt: page.frontmatter.at("alt", default: ""),
+      loading: "eager",
+    ))
   }
 
   h("div", class: "prose", body)

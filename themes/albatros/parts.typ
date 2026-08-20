@@ -146,15 +146,46 @@
   }
 }
 
-#let byline(page) = {
-  let date = posted(page.date)
-  let reading = reading-badge(page)
-  if date != none or reading != none {
-    h("p", class: "byline", {
-      date
-      if date != none and reading != none { h("span", class: "sep", aria-hidden: "true", "·") }
-      reading
+// Who the page credits, from `page.credits.author`: the resolved byline, so an
+// author declared once as an entity is drawn here with the link and the picture
+// that entity carries, and a bare `author:` string still renders as a name.
+#let authors(page) = {
+  let credited = page.credits.at("author", default: ())
+  if credited.len() > 0 {
+    h("span", class: "authors", for person in credited {
+      h("span", class: "author", {
+        if person.image != none {
+          h("img", class: "avatar", src: person.image, alt: "", loading: "lazy", width: 20, height: 20)
+        }
+        if person.url != none {
+          h("a", class: "author-name", href: person.url, rel: "author", person.name)
+        } else {
+          h("span", class: "author-name", person.name)
+        }
+      })
     })
+  }
+}
+
+#let byline(page) = {
+  let parts = (authors(page), posted(page.date), reading-badge(page)).filter(p => p != none)
+  if parts.len() > 0 {
+    h("p", class: "byline", parts.join(h("span", class: "sep", aria-hidden: "true", "·")))
+  }
+}
+
+// The page's lead image, the same one `image:` gives the social card. `alt`
+// carries the description; without one the picture is decorative and says so,
+// rather than making a screen reader read a file name.
+#let cover(page) = {
+  let src = page.frontmatter.at("image", default: none)
+  if src != none {
+    h("figure", class: "cover", h(
+      "img",
+      src: src,
+      alt: page.frontmatter.at("alt", default: ""),
+      loading: "eager",
+    ))
   }
 }
 
@@ -168,29 +199,53 @@
 // listing's `page.frontmatter.entries` and the `@baudelaire/pages` catalogue
 // carry the same fields, so this one function renders an index, a term page,
 // and the home page's recent posts.
-#let entry-row(page, entry) = h("li", class: classes("entry", ("dated", entry.date != none)), {
-  h("a", class: "entry-title", href: entry.url, entry.label)
-  let terms = entry.taxonomies.at("tags", default: ())
-  if entry.date != none or entry.note != none or terms.len() > 0 {
-    h("p", class: "entry-meta", {
-      if entry.date != none {
-        h("time", class: "date", datetime: entry.date, entry.display)
-      }
-      if entry.note != none { h("span", class: "count", entry.note) }
-      if terms.len() > 0 {
-        h("span", class: "entry-tags", for term in terms {
-          h("a", class: "chip", href: "/tags/" + term + "/", "#" + term)
+#let entry-row(page, entry) = h(
+  "li",
+  class: classes("entry", ("dated", entry.date != none)),
+  {
+    // The thumbnail repeats the link the title already carries, so it is hidden
+    // from assistive technology and skipped by the keyboard rather than making
+    // every row two stops.
+    if entry.image != none {
+      h(
+        "a",
+        class: "entry-thumb",
+        href: entry.url,
+        tabindex: "-1",
+        aria-hidden: "true",
+        h("img", src: entry.image, alt: "", loading: "lazy"),
+      )
+    }
+    h("div", class: "entry-text", {
+      h("a", class: "entry-title", href: entry.url, entry.label)
+      let terms = entry.taxonomies.at("tags", default: ())
+      if entry.date != none or entry.note != none or terms.len() > 0 {
+        h("p", class: "entry-meta", {
+          if entry.date != none {
+            h("time", class: "date", datetime: entry.date, entry.display)
+          }
+          if entry.note != none { h("span", class: "count", entry.note) }
+          if terms.len() > 0 {
+            h("span", class: "entry-tags", for term in terms {
+              h("a", class: "chip", href: "/tags/" + term + "/", "#" + term)
+            })
+          }
         })
       }
+      let summary = entry.description
+      if summary != none { h("p", class: "entry-summary", summary) }
     })
-  }
-  let summary = entry.description
-  if summary != none { h("p", class: "entry-summary", summary) }
-})
+  },
+)
 
-#let entry-list(page, entries) = h("ul", class: "listing", for entry in entries {
-  entry-row(page, entry)
-})
+// The list decides whether there is a picture column, not each row: one row with
+// a thumbnail and one without would otherwise start their titles in different
+// places, which reads as two lists rather than one.
+#let entry-list(page, entries) = h(
+  "ul",
+  class: classes("listing", ("illustrated", entries.any(e => e.image != none))),
+  for entry in entries { entry-row(page, entry) },
+)
 
 // Prev/next across the collection. On a reverse-dated blog `prev` is the newer
 // post, which is why the labels are neutral.

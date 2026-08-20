@@ -2,6 +2,8 @@
   title: "Ledger",
   date: datetime(year: 2026, month: 4, day: 2),
   summary: "A double-entry bookkeeping engine a spreadsheet can read.",
+  image: "/assets/ledger.svg",
+  alt: "Ruled columns of figures.",
   role: "Design and build",
   client: "Self-directed",
   duration: "Four months",

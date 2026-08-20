@@ -81,12 +81,40 @@
   h("time", class: "date", datetime: date.iso, date.display)
 }
 
+// Who the page credits, from `page.credits.author`: names only, written the way
+// a file listing writes an owner. No pictures, in a theme that has none.
+#let authors(page) = {
+  let credited = page.credits.at("author", default: ())
+  if credited.len() > 0 {
+    h("span", class: "authors", credited.map(person => if person.url != none {
+      h("a", class: "author", href: person.url, rel: "author", person.name)
+    } else {
+      h("span", class: "author", person.name)
+    }).join(h("span", class: "dim", ", ")))
+  }
+}
+
+// The page's lead image, the same one `image:` gives the social card.
+#let cover(page) = {
+  let src = page.frontmatter.at("image", default: none)
+  if src != none {
+    h("figure", class: "cover", h(
+      "img",
+      src: src,
+      alt: page.frontmatter.at("alt", default: ""),
+      loading: "eager",
+    ))
+  }
+}
+
 #let meta-line(page) = {
   let date = posted(page.date)
   let minutes = page.reading.minutes
   let terms = page.taxonomies.at("tags", default: ())
-  if date != none or minutes > 0 or terms.len() > 0 {
+  let by = authors(page)
+  if date != none or minutes > 0 or terms.len() > 0 or by != none {
     h("p", class: "meta", {
+      if by != none { by }
       if date != none { date }
       if minutes > 0 {
         h("span", class: "words", str(minutes) + " " + label(page, "reading", "min read"))

@@ -14,9 +14,11 @@
 // named in a profile would supply templates and assets but none of its
 // `theme.kdl` defaults.
 //
-// Nothing below declares collections or taxonomies. Each theme's `theme.kdl`
-// supplies those, and a `content { collections }` here would replace that set
-// wholesale rather than adding to it.
+// Nothing below declares collections. Each theme's `theme.kdl` supplies those,
+// and a `content { collections }` here would replace that set wholesale rather
+// than adding to it. `taxonomies` *is* declared, for the author registry, which
+// is why the themes' own `tags` block is repeated below: the same rule applies
+// to it.
 
 site "baudelaire themes"
 author "cstef"
@@ -24,6 +26,10 @@ lang "en"
 
 paths {
   content "themes/demo/blog/content"
+  // The covers and the avatar the posts name. Declared because this config is
+  // loaded from the repository root, where the default `assets` would be the
+  // wrong directory entirely.
+  assets "themes/demo/blog/assets"
   // Overridden per theme by `--out`; named here so a bare build still lands
   // somewhere harmless rather than in the docs site's own root.
   dist "docs/public/themes/preview"
@@ -52,6 +58,46 @@ languages {
       languages "Langues"
       date "{day} {month} {year}"
       months "janvier" "février" "mars" "avril" "mai" "juin" "juillet" "août" "septembre" "octobre" "novembre" "décembre"
+    }
+  }
+}
+
+
+content {
+  entities {
+    // The people the posts credit. Written inline because there are two of
+    // them; a real site would point `sources` at `content/people` or at a data
+    // file. `shape "person"` is what makes `avatar` the picture a byline draws
+    // and `url` the link it wraps the name in.
+    people {
+      shape "person"
+      sources {
+        inline {
+          cstef {
+            name "cstef"
+            url "https://cstef.dev"
+            avatar "/assets/avatar.svg"
+          }
+          camille {
+            name "Camille Roux"
+            url "https://example.com/camille"
+          }
+        }
+      }
+    }
+  }
+
+  taxonomies {
+    // Repeated from each theme's `theme.kdl`: a `taxonomies` block replaces the
+    // theme's whole set rather than adding to it.
+    tags { listing { template "list.typ" } }
+
+    // The terms of this one are ids in `people`, and naming somebody here
+    // credits them with the page. `/authors/<id>/` is their archive.
+    authors {
+      entities "people"
+      credit "author"
+      listing { template "list.typ" }
     }
   }
 }

@@ -214,6 +214,32 @@ h3 {
   border: 1px solid var(--rule);
 }
 
+/* The lead image, boxed like everything else here. */
+.cover {
+  margin: 0 0 1.75rem;
+}
+
+.cover img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 2 / 1;
+  object-fit: cover;
+}
+
+.authors {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.author {
+  color: var(--accent-alt);
+  text-decoration: none;
+}
+
+.dim {
+  color: var(--dim);
+}
+
 blockquote {
   margin-inline: 0;
   padding-inline-start: 1rem;

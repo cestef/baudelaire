@@ -10,12 +10,14 @@ theme "themes/albatros"
 
 ## What you get
 
-- `page.typ` — a post or page: title, byline (localized date · reading time),
-  body, tag chips, prev/next pager.
+- `page.typ` — a post or page: title, byline (author · localized date · reading
+  time), lead image, body, tag chips, prev/next pager.
 - `home.typ` — a page's own words followed by the newest posts, read from the
   `@baudelaire/pages` catalogue. Bind it with `template: "home.typ"`.
 - `list.typ` — every generated index: the paginated collection index, `/tags/`,
   and each term page.
+- `not-found.typ` — the page a host serves for an unmatched URL. Bind it from
+  `content/404.typ`, which publishes as a flat `404.html`.
 - A `posts` collection at `/posts/{slug}/` with a paginated index, a `tags`
   taxonomy with term pages, RSS and Atom, a sitemap, and heading anchors.
 
@@ -28,6 +30,8 @@ Nothing mandatory beyond `title`. It uses, when present:
 | `date` | byline date, feed date, listing date |
 | `tags` | chips under the post, term pages under `/tags/` |
 | `summary` | one line under the entry in a listing |
+| `image`, `alt` | the lead image over the post, the thumbnail in a listing, and the social card |
+| `author`, or a taxonomy with `credit "author"` | the byline, with the link and picture an entity carries |
 | `collection` | on a `home.typ` page: which collection to list (default `posts`) |
 | `recent` | on a `home.typ` page: how many to list (default 5) |
 
@@ -58,8 +62,34 @@ languages {
 ```
 
 Keys used: `skip`, `primary`, `theme`, `languages`, `reading`, `tags`,
-`pagination`, `previous`, `next`, `newer`, `older`, `recent`, `archive`. Dates
-are localized by baudelaire itself, from the page's language.
+`pagination`, `previous`, `next`, `newer`, `older`, `recent`, `archive`, `home`.
+Dates are localized by baudelaire itself, from the page's language.
+
+## Bylines
+
+A `author: "Zoe Quill"` in frontmatter is enough for a name. For a name that
+links somewhere and carries a picture, declare the people once and point a
+taxonomy at them:
+
+```kdl
+content {
+  entities {
+    people {
+      shape "person"
+      sources { inline { zoe { name "Zoe Quill"; url "https://zoe.example"; avatar "/assets/zoe.png" } } }
+    }
+  }
+  taxonomies {
+    tags { listing { template "list.typ" } }
+    authors { entities "people"; credit "author"; listing { template "list.typ" } }
+  }
+}
+```
+
+A post writing `authors: ("zoe",)` is then credited to somebody the whole build
+knows: the byline here, the head tags, the feed entry, and `/authors/zoe/` as
+their archive. Note the repeated `tags` block: a `taxonomies` block of your own
+replaces the theme's whole set.
 
 ## The navigation
 

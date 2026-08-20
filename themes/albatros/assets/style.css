@@ -307,10 +307,55 @@ h3 > a:hover::after {
 .byline {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.5rem;
   margin-block: 0 2rem;
   color: var(--muted);
   font-size: 0.9rem;
+}
+
+.authors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.author {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.avatar {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 999px;
+  object-fit: cover;
+}
+
+.author-name {
+  color: var(--fg);
+}
+
+a.author-name {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a.author-name:hover {
+  text-decoration: underline;
+}
+
+/* The lead image, above the prose and out to the full column. */
+.cover {
+  margin: 0 0 2rem;
+}
+
+.cover img {
+  width: 100%;
+  aspect-ratio: 2 / 1;
+  object-fit: cover;
+  border-radius: 0.6rem;
 }
 
 p,
@@ -498,6 +543,31 @@ td {
   border-bottom: 1px solid var(--rule);
 }
 
+/* A listing with any picture in it gets the column for every row, so a row
+   without one still starts its title where its neighbours do. */
+.listing.illustrated .entry {
+  grid-template-columns: 7.5rem 1fr;
+  gap: 0 1.1rem;
+  align-items: start;
+}
+
+.listing.illustrated .entry > .entry-text {
+  grid-column: 2;
+}
+
+.entry-thumb img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+  border-radius: 0.45rem;
+}
+
+.entry-text {
+  display: grid;
+  gap: 0.2rem;
+}
+
 .entry:last-child {
   border-bottom: 0;
 }
@@ -676,6 +746,21 @@ td {
 
   .pager .next {
     text-align: left;
+  }
+
+  /* A thumbnail beside the words leaves neither enough room on a phone, so the
+     picture goes above them and runs the full width. */
+  .listing.illustrated .entry {
+    grid-template-columns: 1fr;
+    gap: 0.6rem;
+  }
+
+  .listing.illustrated .entry > .entry-text {
+    grid-column: auto;
+  }
+
+  .entry-thumb img {
+    aspect-ratio: 2 / 1;
   }
 }
 

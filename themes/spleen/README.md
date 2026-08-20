@@ -18,17 +18,21 @@ flash on load.
 
 ## What you get
 
-- `page.typ` — a post: title as a comment line, one meta row (date · reading
-  time · `[tags]`), body, prev/next.
+- `page.typ` — a post: title as a comment line, one meta row (author · date ·
+  reading time · `[tags]`), lead image, body, prev/next.
 - `list.typ` — every generated index. Dated listings get a fixed date column;
   the term index drops it rather than leaving a ragged gap.
+- `not-found.typ` — a shell answering a path that is not there, then `ls /`.
+  Bind it from `content/404.typ`, which publishes as a flat `404.html`.
 - A `posts` collection at `/posts/{slug}/` with a paginated index of 20, a
   `tags` taxonomy, RSS and Atom, a sitemap, and `robots.txt`.
 
 ## What it expects from a page
 
-Nothing mandatory beyond `title`. It uses `date`, `tags`, and `summary` when
-they are there.
+Nothing mandatory beyond `title`. It uses `date`, `tags`, `summary`, `image`
+(with `alt`) and `author` when they are there. `image` is the lead picture over
+the post and the one the social card names; `author`, or a taxonomy carrying
+`credit "author"`, is the name at the head of the meta row.
 
 Listing dates render in ISO form (`2026-07-20`), which is deliberate: a
 fixed-width column is the whole point of the layout. Post bylines use the

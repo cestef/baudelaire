@@ -26,7 +26,8 @@ theme "themes/paysage"
   title: "Ledger",
   date: datetime(year: 2026, month: 3, day: 1),
   summary: "A double-entry bookkeeping engine that a spreadsheet can read.",
-  cover: "/static/work/ledger.jpg",
+  image: "/static/work/ledger.jpg",
+  alt: "The ledger's reconciliation view.",
   role: "Design and build",
   client: "Self-directed",
   duration: "4 months",
@@ -40,7 +41,7 @@ theme "themes/paysage"
 | Frontmatter | Effect |
 |---|---|
 | `summary` | the line under the title, and under the card in the grid |
-| `cover` | the card image and the page's own cover |
+| `image`, `alt` | the card image, the page's own cover, and the social card |
 | `date` | ordering, the year on the card, the fact row |
 | `role`, `client`, `duration` | the fact row, each shown only if set |
 | `stack` | chips on the card and the page, term pages under `/stack/` |
@@ -67,9 +68,12 @@ catalogue, so an `about.typ` appears by existing.
 
 ## Images
 
-`cover` is a URL, not a Typst `image()`: it is used as an `<img src>` on the
+`image` is a URL, not a Typst `image()`: it is used as an `<img src>` on the
 card and on the page. Put the files under `static/` (copied verbatim) or
 `assets/` (processed, and then referenced by their built path).
+
+It is baudelaire's own `image` field rather than a `cover` of this theme's
+invention, so the same line also names the `og:image` a link preview shows.
 
 ## Translating it
 

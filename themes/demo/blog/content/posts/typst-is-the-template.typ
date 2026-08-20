@@ -2,7 +2,11 @@
   title: "Typst is the template",
   date: datetime(year: 2026, month: 7, day: 12),
   tags: ("typst", "templates"),
+  authors: ("cstef",),
   summary: "Why the content and the layout being one language is the whole point.",
+  // The lead image, and the one the social card names: one field, both uses.
+  image: "/assets/cover-typst.svg",
+  alt: "Blocks on a grid, one language filling the layout.",
 )
 
 Most site generators ask you to hold two languages at once: one for prose, one
