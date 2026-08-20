@@ -10,6 +10,80 @@ chores are visible in the git history and change nothing for a site.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/spec/v2.0.0.html
 
+## [Unreleased]
+
+### Added
+
+- **Every shipped theme has a not-found layout.** `templates/not-found.typ`, in
+  all four. Bind it from `content/404.typ`, which publishes as the flat
+  `404.html` a static host serves for an unmatched URL. It is named for its
+  export rather than for the file it becomes: a Typst identifier cannot start
+  with a digit, so `404.typ` could never be imported.
+
+- **A post says who wrote it and what it leads with.** `albatros` and `spleen`
+  draw their byline from `page.credits`, so an author declared once as an entity
+  arrives with the link and the picture that entity carries, and a bare
+  `author:` string still renders as a name. `image:` is the lead picture over
+  the post, the thumbnail in a listing, and the social card: one field, three
+  uses. `albatros` gives a listing its picture column as soon as any row has
+  one, so a row without a picture still starts its title where its neighbours
+  do.
+
+- **A code block carries a copy button** in `albatros` and `phares`. Absent
+  where the browser has no clipboard, which a page served over plain HTTP does:
+  a button that cannot copy is worse than none. The words come from the site's
+  string table, under `copy` and `copied`.
+
+- **`albatros` posts can carry their own contents and the ones nearest them.**
+  `toc: true` in a page's frontmatter draws a contents list from its own
+  headings. Every post ends with the posts that share the most tags with it,
+  inside its own collection; a post with no tags gets none rather than the
+  newest three.
+
+- **`phares` has breadcrumbs, a last-updated line, and the components a manual
+  writes with.** `callout` is joined by `tabs`/`pane`, `steps`, `cards`/`card`
+  and `badge`. Tabs emit every pane visible and the script builds the strip, so
+  a page without script hides nothing. Breadcrumbs come from the page's own URL
+  and link only where a page is published, so the middle of the trail on a
+  manual whose directories have no index page is text rather than a dead link.
+  `updated: datetime(..)` prints the day a page last changed.
+
+- **`@baudelaire/site` names the feeds the build writes.** `feeds` is one
+  `(format, mime, urls)` dict per configured format, and `feed-url(feed, code)`
+  gives that feed's URL in one language. A footer linking a feed through them
+  cannot name a file no pass wrote, under a name config changed, or in the wrong
+  language.
+
+### Fixed
+
+- **The stored colour scheme is applied before the first paint.** `albatros`,
+  `phares` and `paysage` read it from a deferred module script, so a reader
+  whose stored choice differed from their system's saw one page in the wrong
+  colours on every navigation. It is now a classic inline script at the top of
+  the body that does nothing but stamp `data-theme`.
+
+- **A feed link follows the config instead of a hardcoded name.** The themes'
+  footers linked `/rss.xml` and `/atom.xml` whatever `generate { feed }` said,
+  and linked the default language's feed from a translated page. They also
+  emitted a `<link rel="alternate">` that duplicated baudelaire's own, without
+  the base URL on it; that one is gone.
+
+- **`phares` keeps its contents column at 1280px**, the commonest desktop width
+  there is, where it used to drop it. Nested sidebar groups are stepped in, so a
+  subsection reads as one rather than as another top-level heading.
+
+- **`paysage`'s prose starts where the brand does.** The landing page's cap was
+  on the whole hero rather than on its headline, which set the prose under it to
+  a width no paragraph should be; and the header sat at one width while every
+  page's text was centred inside another, so the two read as different pages
+  stacked. There are narrow-screen rules now, which there were none of.
+
+- **A wide table scrolls instead of crushing its cells**, in all four themes.
+
+- **The skip link no longer reflows the header when focused.** Taking it out of
+  the flow and putting it back moved the header under the reader the moment they
+  tabbed into the page.
+
 ## [0.0.16] - 2026-08-20
 
 ### Added
@@ -3706,7 +3780,7 @@ take these as warnings.
 - CSS import order, `url()` tails, EXIF rotation in assets
 - Orphans properly cleaned by `clean`
 
-[unreleased]: https://github.com/cestef/baudelaire/compare/v0.0.15...HEAD
+[unreleased]: https://github.com/cestef/baudelaire/compare/v0.0.16...HEAD
 [0.0.16]: https://github.com/cestef/baudelaire/compare/v0.0.15...v0.0.16
 [0.0.15]: https://github.com/cestef/baudelaire/compare/v0.0.14...v0.0.15
 [0.0.14]: https://github.com/cestef/baudelaire/compare/v0.0.13...v0.0.14
