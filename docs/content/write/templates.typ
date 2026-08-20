@@ -67,7 +67,16 @@ Paths are file names inside `paths { templates }` (`templates/` by default). #li
   [`url`], [str], [Where this page publishes, base path included.],
   [`collection`], [str], [The collection it belongs to.],
   [`assets`], [dict], [The files beside it in its own bundle, authored name to served URL. Empty unless the page is a bundle.],
+  [`source`], [str or none], [The page's own file, project-root-absolute (`/content/posts/hello.typ`). `none` on a generated listing, which has no file.],
 )
+
+`page.source` is what an "edit this page" link is built from: it is
+root-absolute, so appending it to a forge URL is concatenation rather than path
+arithmetic.
+
+```typ
+#let edit = "https://github.com/you/site/edit/main" + page.source
+```
 
 Read optional frontmatter defensively, since a page may not declare it:
 

@@ -80,6 +80,10 @@ pub(in crate::engine) struct Context {
     /// the page carries no date; typst's `datetime.display` knows English month
     /// names only, so a template cannot localize `frontmatter.date` itself.
     pub date: Value,
+    /// The page's own file, project-root-absolute
+    /// (`/content/posts/hello.typ`), or `none` for a generated listing, whose
+    /// path names no file anyone can open.
+    pub source: Value,
 }
 
 impl Context {
@@ -101,6 +105,7 @@ impl Context {
             url,
             collection,
             assets,
+            source,
         } = self;
         Value::dict([
             ("frontmatter", frontmatter),
@@ -117,6 +122,7 @@ impl Context {
             ("url", url.clone()),
             ("collection", collection.clone()),
             ("assets", assets.clone()),
+            ("source", source.clone()),
         ])
     }
 }
@@ -211,6 +217,7 @@ mod tests {
             url: Value::str("/posts/a/"),
             collection: Value::str("posts"),
             assets: raw("(:)"),
+            source: Value::str("/content/posts/a.typ"),
         }
     }
 
@@ -221,7 +228,7 @@ mod tests {
             "(frontmatter: {frontmatter}, taxonomies: (:), credits: (:), members: (), \
              nav: (prev: none, next: none), lang: \"en\", translations: (), strings: (:), \
              reading: (words: 0, minutes: 0), backlinks: (), date: none, url: \"/posts/a/\", \
-             collection: \"posts\", assets: (:))"
+             collection: \"posts\", assets: (:), source: \"/content/posts/a.typ\")"
         )
     }
 

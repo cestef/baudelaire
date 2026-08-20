@@ -48,11 +48,24 @@ chores are visible in the git history and change nothing for a site.
   manual whose directories have no index page is text rather than a dead link.
   `updated: datetime(..)` prints the day a page last changed.
 
+- **A page knows its own file.** `page.source` is the page's own path,
+  project-root-absolute (`/content/posts/hello.typ`), so appending it to a forge
+  URL is concatenation rather than path arithmetic. `none` on a generated
+  listing, which has no file to name. `phares` uses it for an *Edit this page*
+  link, taking the prefix from `typst { inputs { edit ".." } }`.
+
 - **`@baudelaire/site` names the feeds the build writes.** `feeds` is one
   `(format, mime, urls)` dict per configured format, and `feed-url(feed, code)`
   gives that feed's URL in one language. A footer linking a feed through them
   cannot name a file no pass wrote, under a name config changed, or in the wrong
   language.
+
+### Upgrading
+
+- **One cold rebuild.** `page.source` is a new field in the wrapper each page is
+  compiled through, and that wrapper is the page's cache fingerprint, so the
+  first build after upgrading recompiles the site. Nothing else changes, and the
+  build after it is incremental again.
 
 ### Fixed
 

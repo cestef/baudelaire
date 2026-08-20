@@ -420,6 +420,65 @@ scenario "a page carries its own url, collection and colocated files" {
   }
 }
 
+// A page's own file, for the template that has to name it: an edit link on a
+// manual, a provenance line on an archive. Project-root-absolute, so appending
+// it to a forge URL is concatenation and not path arithmetic. A generated
+// listing reads `none`: its path is synthetic, and a link built from one would
+// lead to a file nobody can open.
+scenario "a page carries its own source file, and a generated one carries none" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      content {
+        collections {
+          posts "posts/**/*" {
+            template "page.typ"
+            paginate { template "page.typ"; size 10 }
+          }
+        }
+      }
+      """#
+    "templates/page.typ" #"""
+      #import "@baudelaire/html:0.1.0": h
+      #let page(page, body) = h("main", h("p", {
+        "from:"
+        if page.source == none { "none" } else { page.source }
+      }))
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "Home", template: "page.typ",)
+      body
+      """#
+    "content/posts/plain.typ" #"""
+      #let frontmatter = (title: "Plain",)
+      body
+      """#
+    "content/posts/bundle/index.typ" #"""
+      #let frontmatter = (title: "Bundle",)
+      body
+      """#
+    "content/posts/note.md" #"""
+      ---
+      title: Note
+      ---
+
+      A page written in another dialect still names its own file.
+      """#
+  }
+  expect {
+    ok
+    file "index.html" { contains "from:/content/index.typ" }
+    file "posts/plain/index.html" { contains "from:/content/posts/plain.typ" }
+    // A bundle's file is its `index`, not the directory around it.
+    file "posts/bundle/index.html" { contains "from:/content/posts/bundle/index.typ" }
+    file "posts/note/index.html" { contains "from:/content/posts/note.md" }
+    // The collection index is generated; nothing on disk holds it.
+    file "posts/index.html" { contains "from:none" }
+  }
+}
+
 // typst-html owns `<html>`, `<head>` and `<body>`: when a page's markup is a
 // single `<html>` element the compiler hands that root back verbatim and
 // generates no head. Every transform that appends to one (the charset, the

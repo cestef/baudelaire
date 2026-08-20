@@ -262,7 +262,22 @@ impl<'a> Prepare<'a> {
             url: Value::str(self.config.prefixed(&page.permalink)),
             collection: Value::str(page.section()),
             assets: self.colocated(page),
+            source: self.source(page),
         }
+    }
+
+    /// The page's own file as the compiler spells it, for a template that has
+    /// to name it: an edit link, a provenance line.
+    ///
+    /// `None` for a generated listing. Its path is synthetic and names no file
+    /// on disk, so a link built from one leads nowhere.
+    fn source(&self, page: &Page) -> Value {
+        if !page.authored() {
+            return Value::None;
+        }
+        self.project
+            .virtualize(&page.source)
+            .map_or(Value::None, |rooted| Value::str(Self::rooted_str(&rooted)))
     }
 
     /// The files sitting beside a *page bundle*, as authored name to served
