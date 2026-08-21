@@ -8,6 +8,27 @@ use std::fs;
 use crate::common::{CONFIG, Site, silent};
 use baudelaire::engine::{Engine, Mode};
 
+/// A static `_redirects` shadows the rules file, so the run writes a stub per
+/// old path instead. Those are at destinations `claims()` cannot name, so a
+/// second build that skipped the pass would let the sweep take them.
+#[test]
+fn a_shadowed_redirects_file_keeps_the_stubs_it_wrote_instead() {
+    let site = Site::with(
+        "site \"T\"\npaths {\n  content \"content\"\n  static \"static\"\n  dist \"public\"\n}\nredirects {\n  file #true\n  rules {\n    \"/old/\" \"/new/\"\n  }\n}\n",
+    );
+    site.write("static/_redirects", "# mine\n");
+    site.write("content/new.typ", "#let frontmatter = (title: \"N\",)\nnew");
+
+    site.stats();
+    assert!(site.exists("public/old/index.html"), "the stub is written");
+
+    site.stats();
+    assert!(
+        site.exists("public/old/index.html"),
+        "and a second build does not sweep it away"
+    );
+}
+
 /// A markdown page with no template compiles its lowered body alone, so the
 /// frontmatter the render pass reads reaches the compile through nothing the
 /// body would carry.

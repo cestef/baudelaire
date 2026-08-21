@@ -49,11 +49,16 @@ impl Processor for Redirects {
             .collect()
     }
 
-    /// Only when every rule lands in the rules file. With `redirects { file }`
-    /// off, each rule is written as a page of its own at a destination the page
-    /// set decides, and [`Processor::claims`] names none of them.
-    fn inputs(&self, config: &Config) -> Option<&'static [Reads]> {
-        config.redirects.file.then_some(&[Reads::Listing])
+    /// Never: whether a rule lands in the rules file is decided by the run, not
+    /// by the config.
+    ///
+    /// `redirects { file }` is only the request. A static `_redirects` shadows
+    /// it, and then each rule is written as a stub of its own at a destination
+    /// the page set decides, which [`Processor::claims`] names none of. A skip
+    /// would keep the rules file the static copy already provides and let the
+    /// sweep take every stub.
+    fn inputs(&self, _config: &Config) -> Option<&'static [Reads]> {
+        None
     }
 
     /// A rule file and a stub cannot coexist: a host serves a static file in
