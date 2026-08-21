@@ -1069,6 +1069,7 @@ impl Config {
     /// Apply a single config node over `self`, used to overlay profile nodes
     /// (see [`Config::with_profile`]).
     pub(crate) fn overlay(&mut self, text: &str, node: &KdlNode) -> Result<()> {
+        let _layer = dispatch::Overlaying::begin();
         self.apply(std::slice::from_ref(node), text)
     }
 }

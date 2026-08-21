@@ -8,6 +8,8 @@
 //! block) or [`Attributed`] (a `key=value` line), which is also where the merge
 //! policy lives: sections fill in place, lists replace wholesale.
 
+use std::cell::Cell;
+
 use itertools::Itertools;
 use kdl::{KdlIdentifier, KdlNode, KdlValue};
 use miette::SourceSpan;
@@ -18,6 +20,38 @@ use crate::ui::{Code, markup};
 use super::node::{EntryExt, NodeExt};
 use super::value::Kdl;
 use super::values::Value;
+
+thread_local! {
+    /// Whether this thread is inside an [`Overlaying`] pass.
+    static OVERLAYING: Cell<bool> = const { Cell::new(false) };
+}
+
+/// A pass that lays one layer's nodes over a config already read: for as long as
+/// the guard is alive, naming a section does not turn it on, since the switch is
+/// a value the layer below decided and a section fills in place.
+///
+/// A layer that means to turn a section on says so on its line (`check #true`),
+/// or names it with no block at all.
+pub(super) struct Overlaying(bool);
+
+impl Overlaying {
+    /// Begin an overlay on the current thread; the previous mode is restored
+    /// when the guard drops, so the guard has to be bound.
+    #[must_use]
+    pub(super) fn begin() -> Self {
+        Self(OVERLAYING.replace(true))
+    }
+
+    fn active() -> bool {
+        OVERLAYING.get()
+    }
+}
+
+impl Drop for Overlaying {
+    fn drop(&mut self) {
+        OVERLAYING.set(self.0);
+    }
+}
 
 /// A `(key, kind, doc, read, write)` rule for a node-keyed [`Block`] scope, in
 /// one tuple so that documenting a key, reading it and writing it are the same
@@ -377,6 +411,9 @@ pub(super) trait Section: Sized + 'static {
     /// presence of its block sets its flag here and returns `true`, which is
     /// what lets a bare node with no `{ }` mean "just turn it on".
     ///
+    /// Not run for a block an [`Overlaying`] pass names without a boolean: there
+    /// the switch is a value the layer below decided.
+    ///
     /// Overridden only where presence records something the line's boolean is
     /// *not* (`MarkdownConfig::present`, `PdfBundle::present`).
     fn enable(&mut self, on: bool) -> bool {
@@ -395,7 +432,10 @@ pub(super) trait Section: Sized + 'static {
     /// is accepted only where there is a switch to flip.
     fn fill(&mut self, node: &KdlNode, text: &str) -> Result<()> {
         Self::line(node, text)?;
-        let switch = self.enable(node.boolean(text, Self::LEADING)?);
+        let flips = node.get(Self::LEADING).is_some()
+            || node.children().is_none()
+            || !Overlaying::active();
+        let switch = flips && self.enable(node.boolean(text, Self::LEADING)?);
         match node.children() {
             Some(block) => Self::RULES.apply(self, block.nodes(), text),
             None if switch => Ok(()),

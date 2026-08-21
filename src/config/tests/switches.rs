@@ -105,6 +105,35 @@ fn a_profile_takes_back_what_the_base_turned_on() {
     assert_eq!(dev.artifacts.cards.width, 800);
 }
 
+/// A section fills in place, and its switch is one of the values that fills: a
+/// profile tuning a key of a section the base turned off leaves it off.
+#[test]
+fn a_profile_tuning_a_section_does_not_turn_it_back_on() {
+    for &(line, on) in SWITCHES {
+        let config = format!(
+            "{}\nprofiles {{\n  dev {{\n{}\n  }}\n}}",
+            written(line, "#false"),
+            written(line, "{\n}")
+        );
+        let cfg = parse(&config);
+        let dev = cfg.with_profile("dev").expect("profile exists");
+        assert!(!on(&dev), "{line}");
+    }
+}
+
+/// The line is how a profile says so, and it still works from either side.
+#[test]
+fn a_profile_turns_a_section_on_by_saying_so() {
+    for &(line, on) in SWITCHES {
+        let config = format!(
+            "profiles {{\n  dev {{\n{}\n  }}\n}}",
+            written(line, "#true")
+        );
+        let dev = parse(&config).with_profile("dev").expect("profile exists");
+        assert!(on(&dev), "{line}");
+    }
+}
+
 /// `headers { cache }` is the one switch that fills a policy in when it is
 /// thrown, so it is also the one that must fill nothing when it is not.
 #[test]
