@@ -120,7 +120,9 @@ impl<'a> Git<'a> {
     /// `entry` as it arrives.
     ///
     /// Streamed rather than collected: a log holds a line per file per commit,
-    /// and what a caller keeps of it is far smaller than the log itself.
+    /// and what a caller keeps of it is far smaller than the log itself. A read
+    /// that fails part way is unanswered rather than short, since git can have
+    /// written every line and still exit zero.
     pub(super) fn walk<const N: usize>(
         &self,
         args: &[&'static str],
@@ -136,14 +138,25 @@ impl<'a> Git<'a> {
             .spawn()
             .map_err(Unanswered::Unavailable)?;
         let stdout = child.stdout.take().expect("stdout was piped");
+        let mut unread = None;
         for line in BufReader::new(stdout).split(b'\n') {
-            let Ok(bytes) = line else { break };
-            let text = String::from_utf8_lossy(&bytes);
-            if let Some(found) = Entry::of(text.trim_end_matches('\r')) {
-                entry(found);
+            match line {
+                Ok(bytes) => {
+                    let text = String::from_utf8_lossy(&bytes);
+                    if let Some(found) = Entry::of(text.trim_end_matches('\r')) {
+                        entry(found);
+                    }
+                }
+                Err(why) => {
+                    unread = Some(why);
+                    break;
+                }
             }
         }
         let status = child.wait().map_err(Unanswered::Unavailable)?;
+        if let Some(why) = unread {
+            return Err(Unanswered::Unavailable(why));
+        }
         if status.success() {
             Ok(())
         } else {
