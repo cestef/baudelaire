@@ -29,7 +29,7 @@ impl Processor for Headers {
     }
 
     fn claims(&self, config: &Config) -> Vec<PathBuf> {
-        vec![config.paths.dist.join(Self::FILE)]
+        vec![Site::at(config, &[Self::FILE])]
     }
 
     /// The catch-all rule carries the policy this build's own pages were

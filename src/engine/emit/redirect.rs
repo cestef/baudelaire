@@ -44,7 +44,7 @@ impl Processor for Redirects {
         config
             .redirects
             .file
-            .then(|| config.paths.dist.join(Self::RULES))
+            .then(|| Site::at(config, &[Self::RULES]))
             .into_iter()
             .collect()
     }

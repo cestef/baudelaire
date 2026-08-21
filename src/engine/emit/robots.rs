@@ -24,7 +24,7 @@ impl Processor for Robots {
     }
 
     fn claims(&self, config: &Config) -> Vec<PathBuf> {
-        vec![config.paths.dist.join(Self::FILE)]
+        vec![Site::at(config, &[Self::FILE])]
     }
 
     /// Nothing but the config, which the manifest fingerprints whole.

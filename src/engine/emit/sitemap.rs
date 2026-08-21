@@ -95,7 +95,7 @@ impl Processor for SiteMap {
     }
 
     fn claims(&self, config: &Config) -> Vec<PathBuf> {
-        vec![config.paths.dist.join(Self::FILE)]
+        vec![Site::at(config, &[Self::FILE])]
     }
 
     fn inputs(&self, _config: &Config) -> Option<&'static [Reads]> {

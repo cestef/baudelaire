@@ -18,7 +18,7 @@ impl Processor for Spa {
     }
 
     fn claims(&self, config: &Config) -> Vec<PathBuf> {
-        vec![config.paths.dist.join(SpaConfig::FILE)]
+        vec![Site::at(config, &[SpaConfig::FILE])]
     }
 
     /// Nothing but the config, which the manifest fingerprints whole.

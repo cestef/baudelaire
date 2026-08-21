@@ -27,7 +27,7 @@ impl Processor for Standalone {
     }
 
     fn claims(&self, config: &Config) -> Vec<PathBuf> {
-        vec![config.paths.dist.join(&config.navigation.standalone.file)]
+        vec![Site::at(config, &[&config.navigation.standalone.file])]
     }
 
     fn inputs(&self, _config: &Config) -> Option<&'static [Reads]> {
