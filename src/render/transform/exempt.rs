@@ -25,8 +25,10 @@ impl Transform for Exempt {
         &[]
     }
 
-    fn enabled(&self, config: &Config) -> bool {
-        config.check.enabled
+    /// Every build: the marker is emitted whether or not the lint runs, and a
+    /// page that kept it would ship a `div` its author never wrote.
+    fn enabled(&self, _config: &Config) -> bool {
+        true
     }
 
     fn apply(&self, doc: &mut HtmlDocument, cx: &mut Cx<'_>) {
