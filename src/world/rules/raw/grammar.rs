@@ -202,7 +202,10 @@ impl Grammar {
     /// line it opened on.
     ///
     /// A line is parsed without its break, which is the no-newline mode both
-    /// the bundled set and a decoded `.sublime-syntax` are built in.
+    /// the bundled set and a decoded `.sublime-syntax` are built in. A grammar
+    /// that loses its scope stack part way emits the rest of that line unclassed
+    /// rather than dropping it, since the reader would otherwise be shown code
+    /// the file does not have.
     fn sublime(set: &SyntaxSet, lang: &str, lines: &[EcoString], piece: &mut dyn FnMut(Piece<'_>)) {
         let Some(syntax) = set.find_syntax_by_token(lang) else {
             return Self::plain(lines, piece);
@@ -223,6 +226,14 @@ impl Grammar {
             let mut offset = 0;
             for (region, op) in ScopeRegionIterator::new(&ops, text) {
                 if stack.apply(op).is_err() {
+                    if offset < text.len() {
+                        piece(Piece {
+                            line,
+                            text: &text[offset..],
+                            offset,
+                            token: None,
+                        });
+                    }
                     break;
                 }
                 if region.is_empty() {
