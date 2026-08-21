@@ -1,1359 +1,1363 @@
 {
- "badge": "67177e1daa9cc4d5",
- "commit": "df395403740efa03d29c71d67bf146d10029e8fc",
- "covered": 16263,
+ "badge": "cdbb584c6d8f2ce0",
+ "commit": "ad9ede9592b4cd7f6f4a0b2667549243f49e41d6",
+ "covered": 40879,
  "files": {
   "src/announce/mod.rs": [
-   45,
-   47
+   100,
+   118
   ],
   "src/announce/standard/mod.rs": [
-   104,
-   122
+   212,
+   256
   ],
   "src/announce/standard/record.rs": [
-   21,
-   21
+   119,
+   123
   ],
   "src/atproto/client.rs": [
-   86,
-   105
+   129,
+   172
   ],
   "src/atproto/id.rs": [
-   36,
-   36
+   115,
+   119
   ],
   "src/cli/announce.rs": [
    0,
-   7
+   15
   ],
   "src/cli/build.rs": [
-   5,
-   5
+   7,
+   8
   ],
   "src/cli/check.rs": [
-   6,
-   6
+   8,
+   9
   ],
   "src/cli/clean.rs": [
-   62,
-   62
+   169,
+   177
   ],
   "src/cli/completions.rs": [
-   34,
-   34
+   50,
+   54
   ],
   "src/cli/config/check.rs": [
-   54,
-   85
+   88,
+   155
   ],
   "src/cli/config/explain.rs": [
-   5,
-   84
+   12,
+   167
   ],
   "src/cli/config/get.rs": [
    0,
-   24
+   47
   ],
   "src/cli/config/key.rs": [
-   8,
-   17
+   11,
+   32
   ],
   "src/cli/config/mod.rs": [
-   3,
-   9
+   5,
+   15
   ],
   "src/cli/config/set.rs": [
-   6,
-   17
+   13,
+   28
   ],
   "src/cli/config/show.rs": [
    0,
-   28
+   47
   ],
   "src/cli/deploy.rs": [
-   7,
-   7
+   13,
+   15
   ],
   "src/cli/help.rs": [
-   48,
-   48
+   130,
+   134
   ],
   "src/cli/init.rs": [
-   4,
-   5
+   7,
+   9
   ],
   "src/cli/man.rs": [
-   5,
-   5
+   7,
+   8
   ],
   "src/cli/mirror.rs": [
-   9,
-   30
+   17,
+   50
   ],
   "src/cli/mod.rs": [
-   146,
-   163
+   407,
+   464
   ],
   "src/cli/new.rs": [
-   26,
-   26
+   41,
+   46
   ],
   "src/cli/prompt.rs": [
-   2,
-   116
+   4,
+   228
   ],
   "src/cli/reference.rs": [
-   11,
-   12
+   20,
+   24
   ],
   "src/cli/remote.rs": [
-   14,
-   14
+   29,
+   30
   ],
   "src/cli/scaffold/draft.rs": [
-   94,
-   123
+   187,
+   265
   ],
   "src/cli/scaffold/init.rs": [
-   107,
-   154
+   231,
+   313
   ],
   "src/cli/scaffold/mod.rs": [
-   27,
-   31
+   47,
+   58
   ],
   "src/cli/scaffold/templates.rs": [
-   87,
-   90
+   333,
+   348
   ],
   "src/cli/scaffold/vcs.rs": [
-   5,
-   35
+   16,
+   75
   ],
   "src/cli/serve/dev.rs": [
-   16,
-   141
+   68,
+   275
   ],
   "src/cli/serve/live.rs": [
-   14,
-   30
+   63,
+   97
   ],
   "src/cli/serve/mod.rs": [
    0,
-   22
+   33
   ],
   "src/cli/serve/open.rs": [
    0,
-   49
+   94
   ],
   "src/cli/serve/route.rs": [
-   41,
-   130
+   176,
+   353
   ],
   "src/cli/serve/watch.rs": [
-   66,
-   96
+   294,
+   379
   ],
   "src/cli/theme.rs": [
-   120,
-   188
+   174,
+   308
   ],
   "src/codegen.rs": [
-   226,
-   238
+   664,
+   728
   ],
   "src/config/announce/mod.rs": [
-   2,
-   2
+   5,
+   6
   ],
   "src/config/announce/standard.rs": [
-   28,
-   35
+   65,
+   89
   ],
   "src/config/artifacts/bundle.rs": [
-   39,
-   55
+   78,
+   124
   ],
   "src/config/artifacts/cards.rs": [
-   19,
-   19
+   43,
+   50
   ],
   "src/config/artifacts/mod.rs": [
-   8,
-   8
+   18,
+   21
   ],
   "src/config/artifacts/pdf.rs": [
-   15,
-   15
+   37,
+   41
   ],
   "src/config/assets/images/mod.rs": [
-   17,
-   17
+   40,
+   45
   ],
   "src/config/assets/images/optimize.rs": [
-   21,
-   26
+   50,
+   66
   ],
   "src/config/assets/images/responsive.rs": [
-   23,
-   23
+   49,
+   56
   ],
   "src/config/assets/minify.rs": [
-   13,
-   15
+   28,
+   36
   ],
   "src/config/assets/mod.rs": [
-   24,
-   24
+   52,
+   62
   ],
   "src/config/assets/sourcemap.rs": [
-   27,
-   27
+   47,
+   52
   ],
   "src/config/assets/tailwind.rs": [
-   19,
-   22
+   41,
+   55
   ],
   "src/config/assets/targets.rs": [
-   30,
-   53
+   69,
+   126
   ],
   "src/config/cache.rs": [
-   8,
-   16
-  ],
-  "src/config/check/budget.rs": [
-   25,
-   25
-  ],
-  "src/config/check/external.rs": [
-   28,
-   28
-  ],
-  "src/config/check/headings.rs": [
-   10,
-   10
-  ],
-  "src/config/check/mod.rs": [
-   56,
-   57
-  ],
-  "src/config/check/rule.rs": [
-   3,
-   10
-  ],
-  "src/config/check/severity.rs": [
-   12,
-   12
-  ],
-  "src/config/check/snippets.rs": [
-   30,
-   30
-  ],
-  "src/config/content/collection.rs": [
-   57,
-   70
-  ],
-  "src/config/content/drafts.rs": [
-   10,
-   10
-  ],
-  "src/config/content/entities/mod.rs": [
-   54,
-   59
-  ],
-  "src/config/content/entities/shape.rs": [
-   25,
-   26
-  ],
-  "src/config/content/entities/slots.rs": [
-   34,
-   48
-  ],
-  "src/config/content/entities/source.rs": [
-   45,
-   59
-  ],
-  "src/config/content/markdown.rs": [
-   24,
-   24
-  ],
-  "src/config/content/mod.rs": [
-   46,
-   46
-  ],
-  "src/config/content/reading.rs": [
-   7,
-   7
-  ],
-  "src/config/content/taxonomy.rs": [
-   61,
-   71
-  ],
-  "src/config/deploy/mod.rs": [
-   4,
-   4
-  ],
-  "src/config/deploy/s3.rs": [
-   23,
+   19,
    33
   ],
+  "src/config/check/budget.rs": [
+   57,
+   66
+  ],
+  "src/config/check/external.rs": [
+   57,
+   66
+  ],
+  "src/config/check/headings.rs": [
+   21,
+   23
+  ],
+  "src/config/check/mod.rs": [
+   113,
+   129
+  ],
+  "src/config/check/rule.rs": [
+   12,
+   23
+  ],
+  "src/config/check/severity.rs": [
+   26,
+   27
+  ],
+  "src/config/check/snippets.rs": [
+   51,
+   56
+  ],
+  "src/config/content/collection.rs": [
+   124,
+   163
+  ],
+  "src/config/content/drafts.rs": [
+   23,
+   26
+  ],
+  "src/config/content/entities/mod.rs": [
+   87,
+   103
+  ],
+  "src/config/content/entities/shape.rs": [
+   61,
+   63
+  ],
+  "src/config/content/entities/slots.rs": [
+   68,
+   102
+  ],
+  "src/config/content/entities/source.rs": [
+   77,
+   115
+  ],
+  "src/config/content/markdown.rs": [
+   52,
+   60
+  ],
+  "src/config/content/mod.rs": [
+   86,
+   97
+  ],
+  "src/config/content/reading.rs": [
+   15,
+   16
+  ],
+  "src/config/content/taxonomy.rs": [
+   114,
+   152
+  ],
+  "src/config/deploy/mod.rs": [
+   9,
+   12
+  ],
+  "src/config/deploy/s3.rs": [
+   46,
+   75
+  ],
   "src/config/deploy/ssh.rs": [
-   22,
-   31
+   49,
+   76
   ],
   "src/config/dispatch.rs": [
-   167,
-   177
+   1861,
+   2386
   ],
   "src/config/edit.rs": [
-   40,
-   41
+   101,
+   113
   ],
   "src/config/explain.rs": [
    0,
-   69
+   151
   ],
   "src/config/generate/feed.rs": [
-   53,
-   56
+   106,
+   126
   ],
   "src/config/generate/llms.rs": [
-   5,
-   5
-  ],
-  "src/config/generate/manifest.rs": [
-   60,
-   71
-  ],
-  "src/config/generate/mod.rs": [
-   14,
-   14
-  ],
-  "src/config/generate/robots.rs": [
-   5,
-   5
-  ],
-  "src/config/generate/search.rs": [
-   45,
-   65
-  ],
-  "src/config/headers/cache.rs": [
-   17,
-   23
-  ],
-  "src/config/headers/mod.rs": [
-   18,
-   21
-  ],
-  "src/config/hooks.rs": [
-   8,
-   8
-  ],
-  "src/config/html/anchors.rs": [
-   19,
-   19
-  ],
-  "src/config/html/highlight.rs": [
-   45,
-   45
-  ],
-  "src/config/html/math.rs": [
-   16,
-   19
-  ],
-  "src/config/html/meta.rs": [
-   10,
-   10
-  ],
-  "src/config/html/mod.rs": [
-   50,
-   50
-  ],
-  "src/config/html/region.rs": [
    11,
-   11
-  ],
-  "src/config/key.rs": [
-   18,
-   18
-  ],
-  "src/config/lang.rs": [
-   30,
-   40
-  ],
-  "src/config/links.rs": [
-   8,
-   8
-  ],
-  "src/config/mod.rs": [
-   365,
-   373
-  ],
-  "src/config/named.rs": [
-   10,
-   10
-  ],
-  "src/config/navigation/mod.rs": [
-   6,
-   6
-  ],
-  "src/config/navigation/spa.rs": [
-   12,
    12
   ],
-  "src/config/navigation/speculation.rs": [
-   10,
-   10
+  "src/config/generate/manifest.rs": [
+   105,
+   147
   ],
-  "src/config/navigation/standalone.rs": [
-   16,
-   16
+  "src/config/generate/mod.rs": [
+   33,
+   39
   ],
-  "src/config/node.rs": [
-   194,
-   199
+  "src/config/generate/robots.rs": [
+   11,
+   12
   ],
-  "src/config/paths.rs": [
-   67,
-   67
+  "src/config/generate/search.rs": [
+   107,
+   165
   ],
-  "src/config/permalink.rs": [
-   74,
-   78
+  "src/config/headers/cache.rs": [
+   29,
+   43
   ],
-  "src/config/profile.rs": [
-   28,
-   28
+  "src/config/headers/mod.rs": [
+   33,
+   41
   ],
-  "src/config/prune.rs": [
-   7,
-   7
+  "src/config/hooks.rs": [
+   14,
+   18
   ],
-  "src/config/redirects/mod.rs": [
-   8,
-   8
+  "src/config/html/anchors.rs": [
+   43,
+   46
   ],
-  "src/config/redirects/rule.rs": [
-   19,
-   19
+  "src/config/html/highlight.rs": [
+   87,
+   97
   ],
-  "src/config/reference.rs": [
-   109,
-   111
+  "src/config/html/math.rs": [
+   31,
+   43
   ],
-  "src/config/schema.rs": [
-   121,
-   149
+  "src/config/html/meta.rs": [
+   26,
+   30
   ],
-  "src/config/security/csp.rs": [
-   28,
+  "src/config/html/mod.rs": [
+   105,
+   118
+  ],
+  "src/config/html/region.rs": [
+   22,
+   26
+  ],
+  "src/config/key.rs": [
+   50,
    55
   ],
+  "src/config/lang.rs": [
+   53,
+   86
+  ],
+  "src/config/links.rs": [
+   15,
+   18
+  ],
+  "src/config/mod.rs": [
+   728,
+   810
+  ],
+  "src/config/named.rs": [
+   173,
+   256
+  ],
+  "src/config/navigation/mod.rs": [
+   15,
+   18
+  ],
+  "src/config/navigation/spa.rs": [
+   26,
+   30
+  ],
+  "src/config/navigation/speculation.rs": [
+   26,
+   30
+  ],
+  "src/config/navigation/standalone.rs": [
+   37,
+   40
+  ],
+  "src/config/node.rs": [
+   454,
+   490
+  ],
+  "src/config/paths.rs": [
+   127,
+   144
+  ],
+  "src/config/permalink.rs": [
+   293,
+   308
+  ],
+  "src/config/profile.rs": [
+   257,
+   260
+  ],
+  "src/config/prune.rs": [
+   18,
+   20
+  ],
+  "src/config/redirects/mod.rs": [
+   16,
+   18
+  ],
+  "src/config/redirects/rule.rs": [
+   34,
+   36
+  ],
+  "src/config/reference.rs": [
+   191,
+   209
+  ],
+  "src/config/schema.rs": [
+   253,
+   309
+  ],
+  "src/config/security/csp.rs": [
+   70,
+   140
+  ],
   "src/config/security/mod.rs": [
-   6,
-   6
+   12,
+   15
   ],
   "src/config/serve.rs": [
-   35,
-   38
-  ],
-  "src/config/typst/fonts.rs": [
-   14,
-   14
-  ],
-  "src/config/typst/mod.rs": [
-   14,
-   14
-  ],
-  "src/config/url.rs": [
-   82,
+   67,
    82
   ],
+  "src/config/typst/fonts.rs": [
+   31,
+   36
+  ],
+  "src/config/typst/mod.rs": [
+   27,
+   35
+  ],
+  "src/config/url.rs": [
+   163,
+   174
+  ],
   "src/config/value.rs": [
-   84,
-   92
+   260,
+   336
   ],
   "src/config/values/mod.rs": [
-   91,
-   138
+   211,
+   427
   ],
   "src/config/values/source.rs": [
-   34,
-   59
+   52,
+   95
   ],
   "src/content/cache.rs": [
-   159,
-   160
+   310,
+   340
   ],
   "src/content/date.rs": [
-   44,
-   44
+   154,
+   157
   ],
   "src/content/discovery.rs": [
-   78,
-   78
+   127,
+   148
   ],
   "src/content/entities/credit.rs": [
-   113,
-   124
+   241,
+   287
   ],
   "src/content/entities/mod.rs": [
-   191,
-   202
+   335,
+   395
   ],
   "src/content/entities/provenance.rs": [
+   34,
+   41
+  ],
+  "src/content/entities/source.rs": [
+   92,
+   109
+  ],
+  "src/content/frontmatter/check.rs": [
+   160,
+   165
+  ],
+  "src/content/frontmatter/mod.rs": [
+   322,
+   393
+  ],
+  "src/content/frontmatter/origin.rs": [
+   288,
+   307
+  ],
+  "src/content/generate.rs": [
+   11,
+   13
+  ],
+  "src/content/listing.rs": [
+   221,
+   241
+  ],
+  "src/content/markdown/frontmatter/kdl.rs": [
+   229,
+   236
+  ],
+  "src/content/markdown/frontmatter/mod.rs": [
+   115,
+   118
+  ],
+  "src/content/markdown/frontmatter/toml.rs": [
+   209,
+   218
+  ],
+  "src/content/markdown/frontmatter/yaml.rs": [
+   262,
+   269
+  ],
+  "src/content/markdown/lower/fence.rs": [
+   69,
+   69
+  ],
+  "src/content/markdown/lower/located.rs": [
+   68,
+   71
+  ],
+  "src/content/markdown/lower/mod.rs": [
+   367,
+   371
+  ],
+  "src/content/markdown/lower/writer.rs": [
+   347,
+   384
+  ],
+  "src/content/markdown/mod.rs": [
+   171,
+   178
+  ],
+  "src/content/mod.rs": [
+   156,
+   177
+  ],
+  "src/content/page.rs": [
+   401,
+   454
+  ],
+  "src/content/pagination.rs": [
+   133,
+   149
+  ],
+  "src/content/relate.rs": [
+   41,
+   48
+  ],
+  "src/content/section.rs": [
+   48,
+   54
+  ],
+  "src/content/selection.rs": [
+   80,
+   99
+  ],
+  "src/content/slug.rs": [
+   66,
+   75
+  ],
+  "src/content/sourcemap.rs": [
+   115,
+   130
+  ],
+  "src/content/stem.rs": [
+   125,
+   131
+  ],
+  "src/content/strings.rs": [
+   92,
+   95
+  ],
+  "src/content/taxonomy.rs": [
+   172,
+   195
+  ],
+  "src/deploy/digest.rs": [
+   26,
+   26
+  ],
+  "src/deploy/mod.rs": [
+   483,
+   515
+  ],
+  "src/deploy/s3.rs": [
+   542,
+   580
+  ],
+  "src/deploy/sigv4.rs": [
+   204,
+   204
+  ],
+  "src/deploy/ssh/auth.rs": [
+   80,
+   159
+  ],
+  "src/deploy/ssh/hosts.rs": [
+   29,
+   36
+  ],
+  "src/deploy/ssh/mod.rs": [
+   119,
+   132
+  ],
+  "src/deploy/ssh/session.rs": [
+   205,
+   253
+  ],
+  "src/digest.rs": [
+   60,
+   65
+  ],
+  "src/engine/asset/css.rs": [
+   217,
+   273
+  ],
+  "src/engine/asset/exif.rs": [
+   134,
+   156
+  ],
+  "src/engine/asset/handler.rs": [
+   166,
+   196
+  ],
+  "src/engine/asset/image.rs": [
+   134,
+   171
+  ],
+  "src/engine/asset/js.rs": [
+   119,
+   154
+  ],
+  "src/engine/asset/memo.rs": [
+   109,
+   116
+  ],
+  "src/engine/asset/mod.rs": [
+   291,
+   313
+  ],
+  "src/engine/asset/module/client.rs": [
    24,
    26
   ],
-  "src/content/entities/source.rs": [
-   54,
-   54
+  "src/engine/asset/module/data.rs": [
+   151,
+   168
   ],
-  "src/content/frontmatter/check.rs": [
-   50,
-   53
-  ],
-  "src/content/frontmatter/mod.rs": [
-   135,
-   143
-  ],
-  "src/content/frontmatter/origin.rs": [
-   102,
-   112
-  ],
-  "src/content/generate.rs": [
-   7,
-   7
-  ],
-  "src/content/listing.rs": [
-   116,
-   116
-  ],
-  "src/content/markdown/frontmatter/kdl.rs": [
-   88,
-   89
-  ],
-  "src/content/markdown/frontmatter/mod.rs": [
-   21,
-   21
-  ],
-  "src/content/markdown/frontmatter/toml.rs": [
-   65,
-   66
-  ],
-  "src/content/markdown/frontmatter/yaml.rs": [
-   81,
-   84
-  ],
-  "src/content/markdown/lower/fence.rs": [
-   27,
-   27
-  ],
-  "src/content/markdown/lower/located.rs": [
-   37,
-   39
-  ],
-  "src/content/markdown/lower/mod.rs": [
-   31,
-   32
-  ],
-  "src/content/markdown/lower/writer.rs": [
-   233,
-   274
-  ],
-  "src/content/markdown/mod.rs": [
-   46,
-   47
-  ],
-  "src/content/mod.rs": [
-   108,
-   109
-  ],
-  "src/content/page.rs": [
-   188,
-   192
-  ],
-  "src/content/pagination.rs": [
-   81,
-   83
-  ],
-  "src/content/relate.rs": [
-   26,
-   26
-  ],
-  "src/content/section.rs": [
-   29,
-   29
-  ],
-  "src/content/selection.rs": [
-   38,
-   42
-  ],
-  "src/content/slug.rs": [
-   17,
-   19
-  ],
-  "src/content/sourcemap.rs": [
-   33,
-   35
-  ],
-  "src/content/stem.rs": [
-   39,
-   40
-  ],
-  "src/content/strings.rs": [
-   27,
-   31
-  ],
-  "src/content/taxonomy.rs": [
-   102,
-   103
-  ],
-  "src/deploy/digest.rs": [
-   7,
-   7
-  ],
-  "src/deploy/mod.rs": [
-   140,
-   152
-  ],
-  "src/deploy/s3.rs": [
-   198,
-   209
-  ],
-  "src/deploy/sigv4.rs": [
-   55,
-   55
-  ],
-  "src/deploy/ssh/auth.rs": [
-   26,
-   57
-  ],
-  "src/deploy/ssh/hosts.rs": [
-   15,
-   17
-  ],
-  "src/deploy/ssh/mod.rs": [
+  "src/engine/asset/module/declare.rs": [
    48,
    48
   ],
-  "src/deploy/ssh/session.rs": [
-   103,
-   113
-  ],
-  "src/digest.rs": [
-   24,
-   26
-  ],
-  "src/engine/asset/css.rs": [
-   146,
-   162
-  ],
-  "src/engine/asset/exif.rs": [
-   57,
-   70
-  ],
-  "src/engine/asset/handler.rs": [
-   66,
-   66
-  ],
-  "src/engine/asset/image.rs": [
-   79,
-   88
-  ],
-  "src/engine/asset/js.rs": [
-   72,
-   83
-  ],
-  "src/engine/asset/memo.rs": [
-   43,
-   47
-  ],
-  "src/engine/asset/mod.rs": [
-   166,
-   168
-  ],
-  "src/engine/asset/module/client.rs": [
-   13,
-   13
-  ],
-  "src/engine/asset/module/data.rs": [
-   84,
-   84
-  ],
-  "src/engine/asset/module/declare.rs": [
-   21,
-   21
-  ],
   "src/engine/asset/module/mod.rs": [
-   57,
-   57
+   104,
+   119
   ],
   "src/engine/asset/sass.rs": [
-   10,
-   10
-  ],
-  "src/engine/asset/sourcemap.rs": [
-   29,
-   30
-  ],
-  "src/engine/check/external.rs": [
-   95,
-   107
-  ],
-  "src/engine/check/lint.rs": [
-   71,
-   73
-  ],
-  "src/engine/check/mod.rs": [
-   54,
-   55
-  ],
-  "src/engine/compile/bundle.rs": [
-   83,
-   86
-  ],
-  "src/engine/compile/card.rs": [
-   52,
-   54
-  ],
-  "src/engine/compile/image.rs": [
-   70,
-   80
-  ],
-  "src/engine/compile/layout.rs": [
-   54,
-   54
-  ],
-  "src/engine/compile/paged.rs": [
-   24,
-   30
-  ],
-  "src/engine/compile/pdf.rs": [
-   13,
-   13
-  ],
-  "src/engine/compile/prepare.rs": [
-   196,
-   200
-  ],
-  "src/engine/compile/sidecar.rs": [
-   42,
-   42
-  ],
-  "src/engine/emit/csp.rs": [
-   66,
-   70
-  ],
-  "src/engine/emit/dts.rs": [
-   26,
-   26
-  ],
-  "src/engine/emit/epub.rs": [
-   143,
-   149
-  ],
-  "src/engine/emit/feed.rs": [
-   216,
-   224
-  ],
-  "src/engine/emit/headers.rs": [
-   39,
-   39
-  ],
-  "src/engine/emit/line.rs": [
-   37,
-   37
-  ],
-  "src/engine/emit/llms.rs": [
-   52,
-   53
-  ],
-  "src/engine/emit/manifest.rs": [
    36,
-   36
-  ],
-  "src/engine/emit/mod.rs": [
-   79,
-   79
-  ],
-  "src/engine/emit/redirect.rs": [
-   79,
-   80
-  ],
-  "src/engine/emit/robots.rs": [
-   24,
-   24
-  ],
-  "src/engine/emit/script.rs": [
-   21,
-   21
-  ],
-  "src/engine/emit/search/client.rs": [
-   28,
-   28
-  ],
-  "src/engine/emit/search/corpus.rs": [
-   42,
-   43
-  ],
-  "src/engine/emit/search/index.rs": [
-   46,
-   46
-  ],
-  "src/engine/emit/search/mod.rs": [
-   26,
-   26
-  ],
-  "src/engine/emit/search/tokens.rs": [
-   10,
-   10
-  ],
-  "src/engine/emit/sitemap.rs": [
-   39,
-   39
-  ],
-  "src/engine/emit/spa.rs": [
-   20,
-   20
-  ],
-  "src/engine/emit/standalone.rs": [
-   91,
-   93
-  ],
-  "src/engine/emit/standard.rs": [
-   12,
-   13
-  ],
-  "src/engine/emit/xhtml.rs": [
-   50,
-   55
-  ],
-  "src/engine/emit/xml.rs": [
-   45,
-   45
-  ],
-  "src/engine/gate.rs": [
-   31,
-   39
-  ],
-  "src/engine/hook.rs": [
-   18,
-   18
-  ],
-  "src/engine/layers.rs": [
-   17,
-   17
-  ],
-  "src/engine/links.rs": [
-   45,
-   48
-  ],
-  "src/engine/mod.rs": [
-   456,
-   474
-  ],
-  "src/engine/pass.rs": [
-   41,
-   42
-  ],
-  "src/engine/prune.rs": [
-   32,
-   34
-  ],
-  "src/engine/statics.rs": [
-   36,
-   37
-  ],
-  "src/engine/summary.rs": [
-   25,
-   25
-  ],
-  "src/engine/text.rs": [
-   160,
-   164
-  ],
-  "src/error/aggregate.rs": [
-   18,
-   24
-  ],
-  "src/error/annotated.rs": [
-   14,
-   26
-  ],
-  "src/error/announce.rs": [
-   0,
-   14
-  ],
-  "src/error/asset.rs": [
-   6,
-   16
-  ],
-  "src/error/bundle.rs": [
-   0,
-   3
-  ],
-  "src/error/card.rs": [
-   0,
-   5
-  ],
-  "src/error/cli.rs": [
-   10,
-   27
-  ],
-  "src/error/config.rs": [
-   188,
-   200
-  ],
-  "src/error/content.rs": [
-   74,
-   78
-  ],
-  "src/error/deploy.rs": [
-   30,
-   70
-  ],
-  "src/error/entity.rs": [
-   53,
-   53
-  ],
-  "src/error/fs.rs": [
-   21,
-   35
-  ],
-  "src/error/hook.rs": [
-   7,
-   8
-  ],
-  "src/error/image.rs": [
-   2,
-   2
-  ],
-  "src/error/link.rs": [
-   41,
-   49
-  ],
-  "src/error/lint.rs": [
-   86,
-   107
-  ],
-  "src/error/markdown.rs": [
-   10,
-   10
-  ],
-  "src/error/mirror.rs": [
-   0,
-   2
-  ],
-  "src/error/mod.rs": [
-   16,
-   25
-  ],
-  "src/error/scaffold.rs": [
-   10,
-   12
-  ],
-  "src/error/schema.rs": [
-   42,
-   55
-  ],
-  "src/error/serialize.rs": [
-   0,
-   9
-  ],
-  "src/error/serve.rs": [
-   0,
-   8
-  ],
-  "src/error/svg.rs": [
-   18,
-   20
-  ],
-  "src/error/template.rs": [
-   8,
-   8
-  ],
-  "src/error/theme.rs": [
-   25,
    38
   ],
-  "src/error/typ.rs": [
-   62,
-   76
+  "src/engine/asset/sourcemap.rs": [
+   83,
+   85
   ],
-  "src/error/warning.rs": [
-   0,
-   1
+  "src/engine/check/external.rs": [
+   253,
+   287
   ],
-  "src/fs.rs": [
-   95,
-   97
+  "src/engine/check/lint.rs": [
+   259,
+   261
   ],
-  "src/generated.rs": [
-   9,
-   9
+  "src/engine/check/mod.rs": [
+   222,
+   232
   ],
-  "src/graph/access.rs": [
-   129,
-   132
+  "src/engine/compile/bundle.rs": [
+   156,
+   170
   ],
-  "src/graph/cache.rs": [
-   178,
-   187
+  "src/engine/compile/card.rs": [
+   114,
+   131
   ],
-  "src/graph/deps.rs": [
-   5,
-   5
+  "src/engine/compile/image.rs": [
+   123,
+   145
   ],
-  "src/graph/digest.rs": [
-   6,
-   6
+  "src/engine/compile/layout.rs": [
+   175,
+   176
   ],
-  "src/graph/hash.rs": [
-   53,
-   55
+  "src/engine/compile/paged.rs": [
+   57,
+   78
   ],
-  "src/graph/objects.rs": [
-   36,
-   37
-  ],
-  "src/graph/portable.rs": [
-   9,
-   10
-  ],
-  "src/main.rs": [
-   6,
-   6
-  ],
-  "src/mime.rs": [
-   44,
-   44
-  ],
-  "src/mirror/mod.rs": [
-   63,
-   77
-  ],
-  "src/mirror/packages.rs": [
-   32,
-   34
-  ],
-  "src/mirror/types.rs": [
-   17,
-   17
-  ],
-  "src/owned/math.rs": [
-   4,
-   4
-  ],
-  "src/owned/mod.rs": [
-   20,
-   20
-  ],
-  "src/owned/tailwind.rs": [
-   29,
-   32
-  ],
-  "src/remote.rs": [
-   42,
-   54
-  ],
-  "src/render/asset.rs": [
-   17,
-   17
-  ],
-  "src/render/emitted.rs": [
-   16,
-   16
-  ],
-  "src/render/fragment.rs": [
-   72,
-   73
-  ],
-  "src/render/inline.rs": [
-   13,
-   14
-  ],
-  "src/render/links.rs": [
-   135,
-   135
-  ],
-  "src/render/lint/alt.rs": [
-   5,
-   5
-  ],
-  "src/render/lint/aria.rs": [
+  "src/engine/compile/pdf.rs": [
    24,
-   27
+   28
   ],
-  "src/render/lint/headings.rs": [
-   12,
-   12
+  "src/engine/compile/prepare.rs": [
+   346,
+   398
   ],
-  "src/render/lint/ids.rs": [
-   7,
-   7
+  "src/engine/compile/sidecar.rs": [
+   81,
+   92
   ],
-  "src/render/lint/mod.rs": [
-   73,
-   74
+  "src/engine/emit/csp.rs": [
+   186,
+   186
   ],
-  "src/render/lint/snippet/command.rs": [
-   44,
-   57
-  ],
-  "src/render/lint/snippet/mod.rs": [
-   24,
-   25
-  ],
-  "src/render/lint/snippet/parser.rs": [
-   65,
-   67
-  ],
-  "src/render/lint/weigh.rs": [
-   24,
-   27
-  ],
-  "src/render/mod.rs": [
+  "src/engine/emit/dts.rs": [
    49,
    49
   ],
-  "src/render/origin.rs": [
-   34,
-   45
+  "src/engine/emit/epub.rs": [
+   289,
+   342
   ],
-  "src/render/scope.rs": [
-   110,
-   112
+  "src/engine/emit/feed.rs": [
+   367,
+   424
   ],
-  "src/render/snippet.rs": [
-   121,
-   126
+  "src/engine/emit/headers.rs": [
+   149,
+   153
   ],
-  "src/render/srcset.rs": [
-   11,
-   11
-  ],
-  "src/render/transform/anchors.rs": [
-   42,
-   43
-  ],
-  "src/render/transform/base.rs": [
-   7,
-   7
-  ],
-  "src/render/transform/embed.rs": [
-   28,
-   29
-  ],
-  "src/render/transform/exempt.rs": [
-   31,
-   31
-  ],
-  "src/render/transform/externalize.rs": [
-   68,
-   70
-  ],
-  "src/render/transform/fences.rs": [
-   19,
-   19
-  ],
-  "src/render/transform/fingerprint.rs": [
-   8,
-   8
-  ],
-  "src/render/transform/footnotes.rs": [
-   43,
-   44
-  ],
-  "src/render/transform/highlight.rs": [
-   34,
-   36
-  ],
-  "src/render/transform/image.rs": [
-   9,
-   9
-  ],
-  "src/render/transform/integrity.rs": [
-   27,
-   29
-  ],
-  "src/render/transform/lang.rs": [
-   6,
-   7
-  ],
-  "src/render/transform/math.rs": [
-   19,
-   20
-  ],
-  "src/render/transform/meta.rs": [
-   243,
-   247
-  ],
-  "src/render/transform/mod.rs": [
-   134,
-   135
-  ],
-  "src/render/transform/outbound.rs": [
-   11,
-   12
-  ],
-  "src/render/transform/rewrite.rs": [
-   44,
-   44
-  ],
-  "src/render/transform/sheets.rs": [
-   22,
-   23
-  ],
-  "src/render/transform/sources.rs": [
-   22,
-   26
-  ],
-  "src/render/transform/spans.rs": [
-   13,
-   15
-  ],
-  "src/render/transform/speculation.rs": [
-   23,
-   24
-  ],
-  "src/render/transform/standard.rs": [
-   14,
-   14
-  ],
-  "src/render/transform/svg.rs": [
-   162,
-   171
-  ],
-  "src/shell.rs": [
-   20,
-   22
-  ],
-  "src/theme/archive.rs": [
-   112,
-   119
-  ],
-  "src/theme/bundled.rs": [
-   36,
-   39
-  ],
-  "src/theme/forge.rs": [
-   54,
-   76
-  ],
-  "src/theme/install.rs": [
-   99,
-   122
-  ],
-  "src/theme/local.rs": [
-   33,
-   38
-  ],
-  "src/theme/mod.rs": [
-   48,
-   48
-  ],
-  "src/theme/package.rs": [
-   6,
-   17
-  ],
-  "src/theme/source.rs": [
-   42,
-   60
-  ],
-  "src/ui/fmt.rs": [
-   106,
-   111
-  ],
-  "src/ui/highlight.rs": [
-   13,
-   27
-  ],
-  "src/ui/marker.rs": [
-   18,
-   26
-  ],
-  "src/ui/markup.rs": [
-   103,
-   103
-  ],
-  "src/ui/mod.rs": [
-   154,
-   215
-  ],
-  "src/ui/progress.rs": [
-   16,
-   33
-  ],
-  "src/ui/trace.rs": [
-   20,
-   20
-  ],
-  "src/version.rs": [
-   34,
-   37
-  ],
-  "src/world/context.rs": [
-   100,
-   101
-  ],
-  "src/world/fonts.rs": [
-   31,
-   32
-  ],
-  "src/world/generated.rs": [
-   19,
-   19
-  ],
-  "src/world/markdown.rs": [
-   67,
-   78
-  ],
-  "src/world/mod.rs": [
-   171,
-   190
-  ],
-  "src/world/module/builtin.rs": [
-   39,
-   39
-  ],
-  "src/world/module/mod.rs": [
+  "src/engine/emit/line.rs": [
    129,
    132
   ],
-  "src/world/module/package.rs": [
-   34,
-   37
+  "src/engine/emit/llms.rs": [
+   143,
+   149
   ],
-  "src/world/packages.rs": [
-   7,
+  "src/engine/emit/manifest.rs": [
+   151,
+   156
+  ],
+  "src/engine/emit/mod.rs": [
+   216,
+   266
+  ],
+  "src/engine/emit/redirect.rs": [
+   230,
+   234
+  ],
+  "src/engine/emit/robots.rs": [
+   84,
+   87
+  ],
+  "src/engine/emit/script.rs": [
+   49,
+   49
+  ],
+  "src/engine/emit/search/client.rs": [
+   81,
+   82
+  ],
+  "src/engine/emit/search/corpus.rs": [
+   142,
+   146
+  ],
+  "src/engine/emit/search/index.rs": [
+   169,
+   169
+  ],
+  "src/engine/emit/search/mod.rs": [
+   42,
+   49
+  ],
+  "src/engine/emit/search/tokens.rs": [
+   26,
+   26
+  ],
+  "src/engine/emit/sitemap.rs": [
+   64,
+   76
+  ],
+  "src/engine/emit/spa.rs": [
+   75,
+   77
+  ],
+  "src/engine/emit/standalone.rs": [
+   336,
+   341
+  ],
+  "src/engine/emit/standard.rs": [
+   20,
+   25
+  ],
+  "src/engine/emit/xhtml.rs": [
+   105,
+   116
+  ],
+  "src/engine/emit/xml.rs": [
+   170,
+   192
+  ],
+  "src/engine/gate.rs": [
+   261,
+   323
+  ],
+  "src/engine/hook.rs": [
+   65,
+   67
+  ],
+  "src/engine/layers.rs": [
+   74,
+   75
+  ],
+  "src/engine/links.rs": [
+   96,
+   116
+  ],
+  "src/engine/mod.rs": [
+   709,
+   803
+  ],
+  "src/engine/pass.rs": [
+   84,
+   93
+  ],
+  "src/engine/prune.rs": [
+   164,
+   169
+  ],
+  "src/engine/statics.rs": [
+   91,
+   98
+  ],
+  "src/engine/summary.rs": [
+   35,
+   36
+  ],
+  "src/engine/text.rs": [
+   417,
+   431
+  ],
+  "src/error/aggregate.rs": [
+   66,
+   104
+  ],
+  "src/error/annotated.rs": [
+   30,
+   62
+  ],
+  "src/error/announce.rs": [
+   0,
+   48
+  ],
+  "src/error/asset.rs": [
+   20,
+   64
+  ],
+  "src/error/bundle.rs": [
+   0,
+   8
+  ],
+  "src/error/card.rs": [
+   0,
+   16
+  ],
+  "src/error/cli.rs": [
+   19,
+   51
+  ],
+  "src/error/config.rs": [
+   384,
+   446
+  ],
+  "src/error/content.rs": [
+   212,
+   238
+  ],
+  "src/error/deploy.rs": [
+   93,
+   189
+  ],
+  "src/error/entity.rs": [
+   129,
+   147
+  ],
+  "src/error/fs.rs": [
+   48,
+   80
+  ],
+  "src/error/hook.rs": [
+   21,
+   25
+  ],
+  "src/error/image.rs": [
+   6,
    7
   ],
-  "src/world/rules/image.rs": [
-   21,
-   21
+  "src/error/link.rs": [
+   86,
+   108
   ],
-  "src/world/rules/mod.rs": [
-   5,
-   5
+  "src/error/lint.rs": [
+   203,
+   235
   ],
-  "src/world/rules/raw/grammar.rs": [
-   106,
-   128
-  ],
-  "src/world/rules/raw/scope.rs": [
-   25,
+  "src/error/markdown.rs": [
+   30,
    34
   ],
-  "src/world/rules/raw/shipped.rs": [
+  "src/error/mirror.rs": [
+   0,
+   5
+  ],
+  "src/error/mod.rs": [
+   30,
+   55
+  ],
+  "src/error/scaffold.rs": [
+   31,
+   42
+  ],
+  "src/error/schema.rs": [
+   85,
+   121
+  ],
+  "src/error/serialize.rs": [
+   0,
+   16
+  ],
+  "src/error/serve.rs": [
+   0,
+   26
+  ],
+  "src/error/svg.rs": [
+   44,
+   58
+  ],
+  "src/error/template.rs": [
+   20,
+   23
+  ],
+  "src/error/theme.rs": [
+   76,
+   131
+  ],
+  "src/error/typ.rs": [
+   129,
+   185
+  ],
+  "src/error/warning.rs": [
+   0,
+   5
+  ],
+  "src/fs.rs": [
+   344,
+   422
+  ],
+  "src/generated.rs": [
+   31,
+   33
+  ],
+  "src/graph/access.rs": [
+   367,
+   382
+  ],
+  "src/graph/cache.rs": [
+   341,
+   392
+  ],
+  "src/graph/deps.rs": [
+   13,
+   17
+  ],
+  "src/graph/digest.rs": [
    9,
+   10
+  ],
+  "src/graph/hash.rs": [
+   190,
+   214
+  ],
+  "src/graph/objects.rs": [
+   71,
+   83
+  ],
+  "src/graph/portable.rs": [
+   41,
+   42
+  ],
+  "src/main.rs": [
+   8,
    9
+  ],
+  "src/mime.rs": [
+   142,
+   148
+  ],
+  "src/mirror/mod.rs": [
+   191,
+   219
+  ],
+  "src/mirror/packages.rs": [
+   53,
+   57
+  ],
+  "src/mirror/types.rs": [
+   29,
+   29
+  ],
+  "src/owned/math.rs": [
+   10,
+   10
+  ],
+  "src/owned/mod.rs": [
+   52,
+   59
+  ],
+  "src/owned/tailwind.rs": [
+   56,
+   72
+  ],
+  "src/remote.rs": [
+   194,
+   215
+  ],
+  "src/render/asset.rs": [
+   37,
+   43
+  ],
+  "src/render/emitted.rs": [
+   73,
+   75
+  ],
+  "src/render/fragment.rs": [
+   135,
+   157
+  ],
+  "src/render/inline.rs": [
+   29,
+   31
+  ],
+  "src/render/links.rs": [
+   511,
+   527
+  ],
+  "src/render/lint/alt.rs": [
+   10,
+   12
+  ],
+  "src/render/lint/aria.rs": [
+   37,
+   44
+  ],
+  "src/render/lint/headings.rs": [
+   18,
+   20
+  ],
+  "src/render/lint/ids.rs": [
+   12,
+   14
+  ],
+  "src/render/lint/mod.rs": [
+   134,
+   155
+  ],
+  "src/render/lint/snippet/command.rs": [
+   89,
+   125
+  ],
+  "src/render/lint/snippet/mod.rs": [
+   41,
+   51
+  ],
+  "src/render/lint/snippet/parser.rs": [
+   160,
+   170
+  ],
+  "src/render/lint/weigh.rs": [
+   40,
+   50
+  ],
+  "src/render/mod.rs": [
+   86,
+   89
+  ],
+  "src/render/origin.rs": [
+   61,
+   86
+  ],
+  "src/render/scope.rs": [
+   228,
+   233
+  ],
+  "src/render/snippet.rs": [
+   321,
+   334
+  ],
+  "src/render/srcset.rs": [
+   24,
+   27
+  ],
+  "src/render/transform/anchors.rs": [
+   73,
+   80
+  ],
+  "src/render/transform/base.rs": [
+   13,
+   16
+  ],
+  "src/render/transform/embed.rs": [
+   46,
+   54
+  ],
+  "src/render/transform/exempt.rs": [
+   46,
+   52
+  ],
+  "src/render/transform/externalize.rs": [
+   141,
+   153
+  ],
+  "src/render/transform/fences.rs": [
+   31,
+   36
+  ],
+  "src/render/transform/fingerprint.rs": [
+   14,
+   17
+  ],
+  "src/render/transform/footnotes.rs": [
+   76,
+   90
+  ],
+  "src/render/transform/highlight.rs": [
+   153,
+   160
+  ],
+  "src/render/transform/image.rs": [
+   18,
+   21
+  ],
+  "src/render/transform/integrity.rs": [
+   39,
+   47
+  ],
+  "src/render/transform/lang.rs": [
+   11,
+   14
+  ],
+  "src/render/transform/math.rs": [
+   55,
+   60
+  ],
+  "src/render/transform/meta.rs": [
+   500,
+   545
+  ],
+  "src/render/transform/mod.rs": [
+   344,
+   451
+  ],
+  "src/render/transform/outbound.rs": [
+   37,
+   42
+  ],
+  "src/render/transform/rewrite.rs": [
+   78,
+   84
+  ],
+  "src/render/transform/sheets.rs": [
+   38,
+   46
+  ],
+  "src/render/transform/sources.rs": [
+   33,
+   42
+  ],
+  "src/render/transform/spans.rs": [
+   22,
+   28
+  ],
+  "src/render/transform/speculation.rs": [
+   77,
+   81
+  ],
+  "src/render/transform/standard.rs": [
+   20,
+   22
+  ],
+  "src/render/transform/svg.rs": [
+   320,
+   362
+  ],
+  "src/shell.rs": [
+   46,
+   48
+  ],
+  "src/theme/archive.rs": [
+   334,
+   383
+  ],
+  "src/theme/bundled.rs": [
+   131,
+   143
+  ],
+  "src/theme/forge.rs": [
+   131,
+   171
+  ],
+  "src/theme/install.rs": [
+   288,
+   336
+  ],
+  "src/theme/local.rs": [
+   119,
+   136
+  ],
+  "src/theme/mod.rs": [
+   127,
+   138
+  ],
+  "src/theme/package.rs": [
+   25,
+   49
+  ],
+  "src/theme/source.rs": [
+   74,
+   127
+  ],
+  "src/ui/fmt.rs": [
+   300,
+   321
+  ],
+  "src/ui/highlight.rs": [
+   29,
+   51
+  ],
+  "src/ui/marker.rs": [
+   24,
+   35
+  ],
+  "src/ui/markup.rs": [
+   581,
+   598
+  ],
+  "src/ui/mod.rs": [
+   307,
+   462
+  ],
+  "src/ui/progress.rs": [
+   32,
+   59
+  ],
+  "src/ui/trace.rs": [
+   41,
+   44
+  ],
+  "src/version.rs": [
+   95,
+   106
+  ],
+  "src/world/context.rs": [
+   172,
+   181
+  ],
+  "src/world/fonts.rs": [
+   124,
+   136
+  ],
+  "src/world/generated.rs": [
+   80,
+   82
+  ],
+  "src/world/markdown.rs": [
+   112,
+   145
+  ],
+  "src/world/mod.rs": [
+   281,
+   365
+  ],
+  "src/world/module/builtin.rs": [
+   84,
+   85
+  ],
+  "src/world/module/mod.rs": [
+   332,
+   353
+  ],
+  "src/world/module/package.rs": [
+   76,
+   86
+  ],
+  "src/world/packages.rs": [
+   31,
+   31
+  ],
+  "src/world/rules/image.rs": [
+   121,
+   129
+  ],
+  "src/world/rules/mod.rs": [
+   9,
+   10
+  ],
+  "src/world/rules/raw/grammar.rs": [
+   290,
+   327
+  ],
+  "src/world/rules/raw/mod.rs": [
+   53,
+   56
+  ],
+  "src/world/rules/raw/scope.rs": [
+   124,
+   133
+  ],
+  "src/world/rules/raw/shipped.rs": [
+   29,
+   29
   ]
  },
- "percent": 87.45,
+ "percent": 83.42,
  "schema": 2,
- "total": 18597,
- "updated": "2026-08-21T04:14:14+00:00"
+ "total": 49006,
+ "updated": "2026-08-21T15:28:28+00:00"
 }
