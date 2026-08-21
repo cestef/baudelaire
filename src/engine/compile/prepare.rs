@@ -170,13 +170,16 @@ impl<'a> Prepare<'a> {
     /// backlinks, since the link graph does not exist at cache-split time; what
     /// the page was compiled with is recorded separately (`Outputs::backlinks`)
     /// and verified once the graph is known. A page with no template has no
-    /// wrapper, so its byline is folded in by hand: the roster is read at plan
-    /// time and is in no page's dependency set.
+    /// wrapper to stand for it, so what a wrapper would have carried is folded
+    /// in by hand: the byline, because the roster is read at plan time and is in
+    /// no page's dependency set, and the page's own identity, because a
+    /// markdown body is lowered without the frontmatter the render pass reads.
     pub(in crate::engine) fn input(&self, page: &Page) -> Result<Prepared> {
         let rooted = self.project.virtualize(&page.source)?;
         let Some(template) = &page.template else {
             let text = page.body.clone();
-            let fingerprint = Hash::of(&(&text, Value::from(&self.byline(page))));
+            let fingerprint =
+                Hash::of(&(&text, Value::from(&self.byline(page)), Self::identity(page)));
             return Ok((FileId::new(rooted), text, fingerprint));
         };
         let id = match &page.data {
@@ -192,6 +195,24 @@ impl<'a> Prepare<'a> {
             self.bound(page, &rooted, &dir, template, &self.backlinks)
         };
         Ok((id, text, fingerprint))
+    }
+
+    /// What a templateless page carries besides its body: the values a render
+    /// pass reads off the page rather than out of the markup it compiled.
+    fn identity(page: &Page) -> Value {
+        Value::dict([
+            (
+                "data".to_owned(),
+                match &page.data {
+                    #[cfg(feature = "markdown")]
+                    Data::Lowered { dict, .. } => Value::Raw(dict.clone()),
+                    Data::Generated { dict, .. } => Value::Raw(dict.clone()),
+                    Data::Export | Data::Empty => Value::None,
+                },
+            ),
+            ("url".to_owned(), Value::str(&page.permalink)),
+            ("lang".to_owned(), Value::str(&page.lang)),
+        ])
     }
 
     /// The synthetic module binding `page` to the template `file` under `dir`,

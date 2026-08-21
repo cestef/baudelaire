@@ -432,9 +432,8 @@ pub(super) trait Section: Sized + 'static {
     /// is accepted only where there is a switch to flip.
     fn fill(&mut self, node: &KdlNode, text: &str) -> Result<()> {
         Self::line(node, text)?;
-        let flips = node.get(Self::LEADING).is_some()
-            || node.children().is_none()
-            || !Overlaying::active();
+        let flips =
+            node.get(Self::LEADING).is_some() || node.children().is_none() || !Overlaying::active();
         let switch = flips && self.enable(node.boolean(text, Self::LEADING)?);
         match node.children() {
             Some(block) => Self::RULES.apply(self, block.nodes(), text),

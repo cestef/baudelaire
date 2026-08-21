@@ -8,6 +8,38 @@ use std::fs;
 use crate::common::{CONFIG, Site, silent};
 use baudelaire::engine::{Engine, Mode};
 
+/// A markdown page with no template compiles its lowered body alone, so the
+/// frontmatter the render pass reads reaches the compile through nothing the
+/// body would carry.
+#[test]
+#[cfg(feature = "markdown")]
+fn a_templateless_markdown_page_rebuilds_when_only_its_frontmatter_changes() {
+    let site = Site::with(CONFIG);
+    site.write(
+        "content/notes/a.md",
+        "---\ntitle: A\ndescription: before\n---\n# Hi\n",
+    );
+    site.stats();
+    assert!(
+        site.read("public/notes/a/index.html").contains("before"),
+        "{}",
+        site.read("public/notes/a/index.html")
+    );
+
+    site.write(
+        "content/notes/a.md",
+        "---\ntitle: A\ndescription: after\n---\n# Hi\n",
+    );
+    let stats = site.stats();
+
+    assert_eq!(stats.cached, 0, "the frontmatter changed");
+    assert!(
+        site.read("public/notes/a/index.html").contains("after"),
+        "{}",
+        site.read("public/notes/a/index.html")
+    );
+}
+
 /// The dev server keeps one engine across rebuilds, so the world it compiles in
 /// outlives a build. Every file it loaded is marked stale before each build; a
 /// world that answered from the copy it first read would serve the page before
