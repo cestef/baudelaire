@@ -303,15 +303,16 @@ impl Ui {
     /// A vite-style pointer line: `➜ local  http://..`, its label padded so
     /// consecutive arrows align.
     pub fn arrow(&self, label: &str, value: impl Display) {
-        self.arrow_inner(label, value, Level::Default);
+        self.pointer(label, value, Level::Default);
     }
 
-    /// The same line, shown at every level but [`Level::Silent`].
-    pub fn arrow_kept(&self, label: &str, value: impl Display) {
-        self.arrow_inner(label, value, Level::Quiet);
+    /// The same line pinned through `-q`, for the one a command exists to
+    /// print: the address a dev server is answering on. Silenced only by `-qq`.
+    pub fn pinned(&self, label: &str, value: impl Display) {
+        self.pointer(label, value, Level::Quiet);
     }
 
-    fn arrow_inner(&self, label: &str, value: impl Display, least: Level) {
+    fn pointer(&self, label: &str, value: impl Display, least: Level) {
         let mut s = self.state.lock();
         if s.level < least {
             return;

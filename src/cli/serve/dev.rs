@@ -87,7 +87,7 @@ impl<'a> Dev<'a> {
         };
 
         self.ui.blank();
-        self.ui.arrow_kept(
+        self.ui.pinned(
             "local",
             format!("http://{addr}{}/", self.config.base_path())
                 .cyan()
