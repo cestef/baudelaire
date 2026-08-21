@@ -3,9 +3,6 @@
 //! SSH/SFTP server.
 // Split from `deploy_e2e.rs` because a whole file is the one granularity cargo
 // will skip building outright.
-#![cfg(feature = "ssh")]
-
-mod common;
 
 use std::collections::BTreeMap;
 use std::net::TcpListener;
@@ -17,7 +14,7 @@ use baudelaire::deploy;
 use baudelaire::error::{BaudelaireErrorKind, DeployError, Result as BResult};
 use baudelaire::remote::{Interaction, Options};
 
-use common::{Site, dist, silent};
+use crate::common::{Site, dist, silent};
 
 /// A headless [`Interaction`]: confirms everything, never supplies a secret.
 struct Headless;

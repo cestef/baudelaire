@@ -1,6 +1,4 @@
-mod common;
-
-use common::Site;
+use crate::common::Site;
 
 /// The standard config plus a `static` passthrough dir alongside content.
 const CONFIG: &str = r#"

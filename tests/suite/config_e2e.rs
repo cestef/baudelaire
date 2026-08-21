@@ -1,7 +1,5 @@
-mod common;
-
+use crate::common::Site;
 use baudelaire::config::Config;
-use common::Site;
 
 fn fixture_config() -> &'static str {
     r#"

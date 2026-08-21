@@ -1,10 +1,6 @@
 //! Generated social cards.
 
-#![cfg(feature = "cards")]
-
-mod common;
-
-use common::Site;
+use crate::common::Site;
 
 /// The PNG header's declared dimensions.
 fn dimensions(bytes: &[u8]) -> (u32, u32) {

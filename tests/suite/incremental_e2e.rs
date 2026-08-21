@@ -3,12 +3,10 @@
 //! What stays here needs more than the site's own files: the cache's internals,
 //! a site that moves on disk, a symlinked content tree, or the CLI's own logs.
 
-mod common;
-
 use std::fs;
 
+use crate::common::{CONFIG, Site, silent};
 use baudelaire::engine::{Engine, Mode};
-use common::{CONFIG, Site, silent};
 
 /// The dev server keeps one engine across rebuilds, so the world it compiles in
 /// outlives a build. Every file it loaded is marked stale before each build; a

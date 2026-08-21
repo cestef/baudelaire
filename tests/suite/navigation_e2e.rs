@@ -1,8 +1,6 @@
 //! Client-side navigation: the single-file export and the SPA runtime.
 
-mod common;
-
-use common::Site;
+use crate::common::Site;
 
 /// A two-page site that links between its pages and loads a stylesheet, with
 /// both navigation outputs on and assets inlined (what a single file needs).

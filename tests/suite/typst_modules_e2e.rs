@@ -1,9 +1,7 @@
 //! The `@baudelaire/*` virtual Typst modules: a template imports one and the
 //! compiler resolves it from memory, with nothing on disk.
 
-mod common;
-
-use common::Site;
+use crate::common::Site;
 
 /// A failed build's diagnostics as one string, the message that matters being
 /// on the nested per-source diagnostic.

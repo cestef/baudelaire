@@ -3,9 +3,7 @@
 //! The fixtures in `tests/fixtures/svg` are the shapes an icon actually arrives
 //! in, and the failure mode is silent: a dropped element leaves a smaller icon.
 
-mod common;
-
-use common::Site;
+use crate::common::Site;
 
 /// Build a site whose page inlines `fixture` with `attrs`, and return its HTML.
 fn inline(fixture: &str, attrs: &str) -> String {

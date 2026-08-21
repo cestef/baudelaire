@@ -1,11 +1,9 @@
 //! A page's body taken from a file above the project root.
 
-mod common;
-
+#[cfg(feature = "markdown")]
+use crate::common::Site;
 #[cfg(feature = "markdown")]
 use baudelaire::config::Config;
-#[cfg(feature = "markdown")]
-use common::Site;
 
 /// A site in `proj/` whose config declares the `CHANGELOG.md` beside it, with
 /// `page` as the stub that names it.
@@ -40,8 +38,8 @@ fn site(page: &str) -> (Site, Config) {
 fn a_source_may_sit_above_the_project_root() {
     let (site, config) = site(";;;\ntitle \"Changelog\"\nsource \"changelog\"\n;;;\n");
 
-    let page =
-        common::load_page("", &site.root.join("proj/content/changelog.md"), &config).expect("load");
+    let page = crate::common::load_page("", &site.root.join("proj/content/changelog.md"), &config)
+        .expect("load");
 
     assert_eq!(page.frontmatter.title.as_deref(), Some("Changelog"));
     assert!(page.body.contains("today"), "{}", page.body);
@@ -53,7 +51,8 @@ fn a_source_may_sit_above_the_project_root() {
 fn the_page_follows_the_file_it_sources() {
     let (site, config) = site(";;;\ntitle \"Changelog\"\nsource \"changelog\"\n;;;\n");
     let load = || {
-        common::load_page("", &site.root.join("proj/content/changelog.md"), &config).expect("load")
+        crate::common::load_page("", &site.root.join("proj/content/changelog.md"), &config)
+            .expect("load")
     };
 
     assert!(load().body.contains("today"));

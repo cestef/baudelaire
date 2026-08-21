@@ -1,13 +1,11 @@
 //! The end-to-end builds that a scenario cannot express: they need the CLI's
 //! own stderr, the cache's internal files, or the library's own return values.
 
-mod common;
-
 use std::fs;
 
 use baudelaire::content::Discovery;
 
-use common::{Site, has_ext, project};
+use crate::common::{Site, has_ext, project};
 
 #[test]
 fn check_compiles_without_writing() {
@@ -339,7 +337,7 @@ fn optimize_losslessly_shrinks_png_assets() {
     );
     site.write("content/a.typ", "#let frontmatter = (title: \"A\",)\nbody");
     // A PNG bloated with strippable metadata and a stored (uncompressed) IDAT.
-    let png = include_bytes!("fixtures/bloated.png");
+    let png = include_bytes!("../fixtures/bloated.png");
     site.write_bytes("assets/pic.png", png);
     site.stats();
 
@@ -363,7 +361,7 @@ fn optimize_reencodes_jpeg_with_lax_extension() {
     );
     site.write("content/a.typ", "#let frontmatter = (title: \"A\",)\nbody");
     // The `.jpg` extension has to match the `jpeg` format leniently.
-    let jpg = include_bytes!("fixtures/big.jpg");
+    let jpg = include_bytes!("../fixtures/big.jpg");
     site.write_bytes("assets/photo.jpg", jpg);
     site.stats();
 

@@ -1,9 +1,7 @@
 //! Subpath hosting: a site whose `url` carries a path is served under that
 //! directory.
 
-mod common;
-
-use common::{Serve, Site, wait_for_port};
+use crate::common::{Serve, Site, wait_for_port};
 
 /// A site served from `/docs`, with an internal link, a raw absolute link, a
 /// redirect, and the search client.
@@ -163,7 +161,7 @@ fn css_references_carry_the_subpath() {
     let sheet = site
         .files("public/assets")
         .into_iter()
-        .find(|name| name.starts_with("app.") && common::has_ext(name, "css"))
+        .find(|name| name.starts_with("app.") && crate::common::has_ext(name, "css"))
         .expect("fingerprinted stylesheet");
     let css = site.read(&format!("public/assets/{sheet}"));
     assert!(css.contains("/docs/assets/logo."), "{css}");

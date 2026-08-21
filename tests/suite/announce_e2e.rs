@@ -1,10 +1,7 @@
 //! (Compiled only with the `announce` feature, which owns everything below.)
-#![cfg(feature = "announce")]
 
 //! End-to-end announce tests: the standard.site backend driven through the
 //! public [`baudelaire::announce::Announce::run`], against an in-process PDS.
-
-mod common;
 
 use std::collections::BTreeSet;
 use std::io::{BufRead, BufReader, Read, Write};
@@ -17,7 +14,7 @@ use baudelaire::config::{Config, StandardConfig, VerifyConfig};
 use baudelaire::error::Result as BResult;
 use baudelaire::remote::{Interaction, Options};
 
-use common::{Site, silent};
+use crate::common::{Site, silent};
 
 /// A headless [`Interaction`]: confirms everything, never supplies a secret.
 struct Headless;
@@ -152,7 +149,7 @@ fn query(path: &str, key: &str) -> String {
 /// A site with two dated pages and one undated, changed into because the
 /// skip-cache and the content tree both resolve from the working directory.
 fn site() -> Site {
-    let site = Site::with(common::CONFIG);
+    let site = Site::with(crate::common::CONFIG);
     site.write(
         "content/posts/hello.typ",
         "#let frontmatter = (title: \"Hello\", date: datetime(year: 2026, month: 1, day: 2),)\nbody\n",

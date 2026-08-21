@@ -1,11 +1,8 @@
 //! The `baudelaire:*` virtual JS modules: a user entry imports one and rolldown
 //! inlines the generated data into the bundle.
-#![cfg(feature = "js")]
 
-mod common;
-
+use crate::common::{Site, has_ext};
 use baudelaire::graph::Hash;
-use common::{Site, has_ext};
 
 /// The 16-hex fingerprint baudelaire splices into an asset's filename.
 fn fingerprint(bytes: &[u8]) -> String {
