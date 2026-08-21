@@ -342,6 +342,7 @@ dependencies = [
  "comemo",
  "console",
  "criterion",
+ "dispatch-derive",
  "encre-css",
  "flate2",
  "flume",
@@ -1399,6 +1400,15 @@ dependencies = [
  "option-ext",
  "redox_users",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "dispatch-derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]

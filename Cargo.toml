@@ -1,3 +1,6 @@
+[workspace]
+members = ["macros"]
+
 [package]
 name = "baudelaire"
 version = "0.0.16"
@@ -13,6 +16,7 @@ readme = "README.md"
 keywords = ["typst", "static-site", "ssg", "website", "cli"]
 categories = ["command-line-utilities", "web-programming"]
 exclude = [
+  "/macros",
   "/docs",
   "/themes/demo",
   "/.github",
@@ -115,6 +119,7 @@ markdown = ["dep:pulldown-cmark", "dep:typst-library", "dep:typst-utils"]
 vendored-openssl = ["typst-kit/vendor-openssl", "ureq/vendored"]
 
 [dependencies]
+dispatch-derive = { version = "0.1.0", path = "macros" }
 typst = { version = "0.15" }
 typst-html = { version = "0.15" }
 typst-svg = { version = "0.15" }
