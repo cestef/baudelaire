@@ -1,14 +1,20 @@
 //! `content { drafts { } }`: whether drafts build, and what marks one.
 
-use crate::config::dispatch::Kind::{Flag, Text};
-use crate::config::dispatch::{Block, Section};
-use crate::config::node::NodeExt;
+use dispatch_derive::Table;
 
-#[derive(Debug, Clone, Hash)]
+use crate::config::dispatch::{Block, Section};
+use crate::config::vocab::rule;
+
+#[derive(Debug, Clone, Hash, Table)]
 pub struct DraftConfig {
+    /// Build draft pages at all.
+    ///
     /// Set by `--drafts` or a profile, not only by this block.
+    #[key(flag)]
     pub build: bool,
-    /// Suffix marking draft sources, e.g. `post.draft.typ`.
+
+    /// The filename marker that flags a draft, peeled off the stem: `post.draft.typ`.
+    #[key(text)]
     pub suffix: String,
 }
 
@@ -19,29 +25,4 @@ impl Default for DraftConfig {
             suffix: ".draft".into(),
         }
     }
-}
-
-impl Section for DraftConfig {
-    const RULES: Block<Self> = Block(&[
-        (
-            "build",
-            Flag,
-            "Build draft pages at all.",
-            |c| c.build.into(),
-            |c, n, t| {
-                c.build = n.boolean(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "suffix",
-            Text,
-            "The filename marker that flags a draft, peeled off the stem: `post.draft.typ`.",
-            |c| c.suffix.clone().into(),
-            |c, n, t| {
-                c.suffix = n.string(t, 0)?;
-                Ok(())
-            },
-        ),
-    ]);
 }

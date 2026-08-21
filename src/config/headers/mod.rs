@@ -5,25 +5,34 @@ pub mod cache;
 
 use kdl::KdlNode;
 
-use crate::config::dispatch::Kind::Block as Nested;
+use dispatch_derive::Table;
+
 use crate::config::dispatch::Kind::Tables;
-use crate::config::dispatch::{Block, Section, Switch};
+use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
+use crate::config::vocab::rule;
 use crate::config::{CacheControl, Value};
 use crate::error::Result;
 
 /// The headers the built files are served with: the `Cache-Control` policy
 /// every destination applies, and the rules the site states beyond it.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Table)]
+#[table(hook(switch = file))]
 pub struct HeadersConfig {
     /// Write the `_headers` file Netlify and Cloudflare Pages read from the
     /// publish directory. On with the block's presence, so a site that only
     /// wants the policy writes `headers #false { cache { } }`.
     pub file: bool,
+
+    /// The `Cache-Control` the built files are served with, by this file and by every destination that can say so. Its presence turns it on; `#false` turns it off again.
+    #[key(nested(CacheControl))]
     pub cache: CacheControl,
-    /// A path pattern, and the headers it adds, in the order they were written.
+
+    /// Headers of the site's own, one block per path pattern, applied before the derived ones.
+    ///
     /// A `Vec` at both levels because the host applies the file top to bottom,
     /// so sorting would silently reorder a policy.
+    #[key(custom(Tables, Self::written, Self::read))]
     pub rules: Vec<(String, Vec<(String, String)>)>,
 }
 
@@ -61,28 +70,4 @@ impl std::hash::Hash for HeadersConfig {
         } = self;
         (file, rules).hash(state);
     }
-}
-
-impl Section for HeadersConfig {
-    const SWITCH: Option<Switch<Self>> = Some(Switch {
-        set: |c, on| c.file = on,
-        on: |c| c.file,
-    });
-
-    const RULES: Block<Self> = Block(&[
-        (
-            "cache",
-            Nested(CacheControl::rows),
-            "The `Cache-Control` the built files are served with, by this file and by every destination that can say so. Its presence turns it on; `#false` turns it off again.",
-            |c| c.cache.values(),
-            |c, n, t| c.cache.fill(n, t),
-        ),
-        (
-            "rules",
-            Tables,
-            "Headers of the site's own, one block per path pattern, applied before the derived ones.",
-            Self::written,
-            Self::read,
-        ),
-    ]);
 }

@@ -2,11 +2,13 @@
 
 use kdl::KdlNode;
 
+use dispatch_derive::Table;
+
 use crate::config::Value;
-use crate::config::dispatch::Kind::{Choice, Lines, Number, Text};
-use crate::config::dispatch::{Attributed, Attrs, Block, Section, Switch};
+use crate::config::dispatch::Kind::Lines;
+use crate::config::dispatch::{Attributed, Attrs, Block, Section};
 use crate::config::node::NodeExt;
-use crate::config::value::ValueExt;
+use crate::config::vocab::{attr, rule};
 use crate::config::{Config, Named};
 use crate::error::Result;
 
@@ -15,32 +17,77 @@ use crate::error::Result;
 /// the presence of a `generate { manifest }` block.
 ///
 /// [spec]: https://www.w3.org/TR/appmanifest/
-#[derive(Debug, Clone, Hash, Default)]
+#[derive(Debug, Clone, Hash, Default, Table)]
+#[table(hook(switch = enabled))]
 pub struct ManifestConfig {
     pub enabled: bool,
-    /// The installed app's name. Defaults to the site title in the language the
-    /// manifest is written for.
+
+    /// The installed app's name. Defaults to the site title.
+    ///
+    /// In the language the manifest is written for.
+    #[key(opt text)]
     pub name: Option<String>,
-    /// The name a launcher falls back to when the full one does not fit.
+
+    /// The name a launcher shows when the full one does not fit.
+    #[key(name = "short", opt text)]
     pub short: Option<String>,
+
+    /// One line about the app, shown by an install prompt.
+    #[key(opt text)]
     pub description: Option<String>,
+
+    /// How the installed app is presented.
+    #[key(choice(DisplayMode))]
     pub display: DisplayMode,
-    /// CSS colour of the browser UI around the app, also written to every
-    /// page's `<meta name="theme-color">` so a tab is tinted before any
-    /// install.
+
+    /// CSS colour of the browser UI around the app, and of every page's `theme-color`.
+    ///
+    /// Written to every page's `<meta name="theme-color">` so a tab is tinted
+    /// before any install.
+    #[key(opt text)]
     pub theme: Option<String>,
+
     /// CSS colour painted before the first page has rendered.
+    #[key(opt text)]
     pub background: Option<String>,
-    /// Where launching the installed app lands, as a root-relative path
-    /// localized per language: `/home/` launches the French app into
-    /// `/fr/home/`. Defaults to the language's root.
+
+    /// Where launching the installed app lands, per language. Defaults to the language's root.
+    ///
+    /// A root-relative path localized per language: `/home/` launches the
+    /// French app into `/fr/home/`.
+    #[key(opt text)]
     pub start: Option<String>,
-    /// The URLs the installed app covers, localized like
-    /// [`start`](Self::start); navigating outside it leaves the app. Defaults
-    /// to the language's root.
+
+    /// The URLs the installed app covers, per language. Defaults to the language's root.
+    ///
+    /// Localized like [`start`](Self::start); navigating outside it leaves the
+    /// app.
+    #[key(opt text)]
     pub scope: Option<String>,
-    /// The icons a launcher picks from; a manifest with none cannot be
-    /// installed, so a build that emits one warns.
+
+    /// One line per icon, each named by the path it is served from.
+    ///
+    /// A manifest with none cannot be installed, so a build that emits one
+    /// warns.
+    #[key(custom(
+        Lines(IconConfig::rows),
+        |c: &Self| {
+            Value::block(
+                c.icons
+                    .iter()
+                    .map(|icon| (icon.src.clone(), icon.values()))
+                    .collect(),
+            )
+        },
+        |c: &mut Self, n: &kdl::KdlNode, t: &str| {
+            c.icons = n
+                .unique(t, "icon", IconConfig::item)?
+                .into_iter()
+                .map(|(_, icon)| icon)
+                .collect();
+            Ok(())
+        },
+    ))]
     pub icons: Vec<IconConfig>,
 }
 
@@ -63,14 +110,21 @@ impl ManifestConfig {
 }
 
 /// One entry of a manifest's `icons` array.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, Table)]
+#[table(impl = Attributed, const ATTRS: Attrs<Self> = Attrs, rule = attr)]
 pub struct IconConfig {
     /// Where the image is served from, root-relative, written as the node's
     /// name: `"/icon-512.png" size=512`.
     pub src: String,
-    /// The square edge in pixels. Absent means the image scales to any size,
-    /// which is what a vector icon does.
+
+    /// The square edge in pixels. Absent means the image scales to any size.
+    ///
+    /// Which is what a vector icon does.
+    #[key(opt bounded(u32, 1, 4096))]
     pub size: Option<u32>,
+
+    /// What a launcher may do with the image.
+    #[key(choice(IconPurpose))]
     pub purpose: IconPurpose,
 }
 
@@ -144,118 +198,6 @@ impl Named for IconPurpose {
     ];
 }
 
-/// The `manifest { }` block, whose presence enables the manifest.
-impl Section for ManifestConfig {
-    const SWITCH: Option<Switch<Self>> = Some(Switch {
-        set: |c, on| c.enabled = on,
-        on: |c| c.enabled,
-    });
-
-    const RULES: Block<Self> = Block(&[
-        (
-            "name",
-            Text,
-            "The installed app's name. Defaults to the site title.",
-            |c| c.name.clone().into(),
-            |c, n, t| {
-                c.name = Some(n.string(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "short",
-            Text,
-            "The name a launcher shows when the full one does not fit.",
-            |c| c.short.clone().into(),
-            |c, n, t| {
-                c.short = Some(n.string(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "description",
-            Text,
-            "One line about the app, shown by an install prompt.",
-            |c| c.description.clone().into(),
-            |c, n, t| {
-                c.description = Some(n.string(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "display",
-            Choice(DisplayMode::names),
-            "How the installed app is presented.",
-            |c| Value::named(c.display),
-            |c, n, t| {
-                c.display = n.arg(t, 0)?.one::<DisplayMode>(t, NodeExt::span(n))?;
-                Ok(())
-            },
-        ),
-        (
-            "theme",
-            Text,
-            "CSS colour of the browser UI around the app, and of every page's `theme-color`.",
-            |c| c.theme.clone().into(),
-            |c, n, t| {
-                c.theme = Some(n.string(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "background",
-            Text,
-            "CSS colour painted before the first page has rendered.",
-            |c| c.background.clone().into(),
-            |c, n, t| {
-                c.background = Some(n.string(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "start",
-            Text,
-            "Where launching the installed app lands, per language. Defaults to the language's root.",
-            |c| c.start.clone().into(),
-            |c, n, t| {
-                c.start = Some(n.string(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "scope",
-            Text,
-            "The URLs the installed app covers, per language. Defaults to the language's root.",
-            |c| c.scope.clone().into(),
-            |c, n, t| {
-                c.scope = Some(n.string(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "icons",
-            Lines(IconConfig::rows),
-            "One line per icon, each named by the path it is served from.",
-            |c| {
-                Value::block(
-                    c.icons
-                        .iter()
-                        .map(|icon| (icon.src.clone(), icon.values()))
-                        .collect(),
-                )
-            },
-            |c, n, t| {
-                c.icons = n
-                    .unique(t, "icon", IconConfig::item)?
-                    .into_iter()
-                    .map(|(_, icon)| icon)
-                    .collect();
-                Ok(())
-            },
-        ),
-    ]);
-}
-
 impl IconConfig {
     /// One `"/icon-512.png" size=512` line: the node name is the path the image
     /// is served from, which is also what makes two icons the same icon.
@@ -265,29 +207,4 @@ impl IconConfig {
         icon.read(node, text)?;
         Ok((src, icon))
     }
-}
-
-impl Attributed for IconConfig {
-    const ATTRS: Attrs<Self> = Attrs(&[
-        (
-            "size",
-            Number,
-            "The square edge in pixels. Absent means the image scales to any size.",
-            |c| c.size.into(),
-            |c, v, t, s| {
-                c.size = Some(v.bounded(t, s, 1, 4096)?);
-                Ok(())
-            },
-        ),
-        (
-            "purpose",
-            Choice(IconPurpose::names),
-            "What a launcher may do with the image.",
-            |c| Value::named(c.purpose),
-            |c, v, t, s| {
-                c.purpose = v.one::<IconPurpose>(t, s)?;
-                Ok(())
-            },
-        ),
-    ]);
 }

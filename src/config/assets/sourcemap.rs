@@ -3,12 +3,13 @@
 
 use kdl::KdlNode;
 
+use dispatch_derive::Table;
+
 use crate::config::Named;
-use crate::config::Value;
-use crate::config::dispatch::Kind::Choice;
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
 use crate::config::value::ValueExt;
+use crate::config::vocab::rule;
 use crate::error::{ConfigError, Result};
 
 /// What is done with the source map for one kind of asset.
@@ -53,39 +54,11 @@ impl SourceMaps {
 
 /// The `assets { sourcemap }` section: one [`SourceMaps`] per kind of asset the
 /// pipeline can map.
-#[derive(Debug, Clone, Hash, Default)]
-pub struct SourceMapConfig {
-    pub scripts: SourceMaps,
-    pub styles: SourceMaps,
-}
-
-impl Section for SourceMapConfig {
+#[derive(Debug, Clone, Hash, Default, Table)]
+#[table(items {
     /// The value on the section's own line, which stands for every kind at
     /// once.
     const LEADING: usize = 1;
-
-    const RULES: Block<Self> = Block(&[
-        (
-            "scripts",
-            Choice(SourceMaps::names),
-            "What becomes of the source map for a bundled script.",
-            |c| Value::named(c.scripts),
-            |c, n, t| {
-                c.scripts = n.arg(t, 0)?.one::<SourceMaps>(t, NodeExt::span(n))?;
-                Ok(())
-            },
-        ),
-        (
-            "styles",
-            Choice(SourceMaps::names),
-            "What becomes of the source map for a processed stylesheet.",
-            |c| Value::named(c.styles),
-            |c, n, t| {
-                c.styles = n.arg(t, 0)?.one::<SourceMaps>(t, NodeExt::span(n))?;
-                Ok(())
-            },
-        ),
-    ]);
 
     /// `sourcemap "external"` sets every kind; a block narrows it per kind.
     ///
@@ -108,4 +81,13 @@ impl Section for SourceMapConfig {
             None => Err(ConfigError::missing_children(text, NodeExt::span(node)).into()),
         }
     }
+})]
+pub struct SourceMapConfig {
+    /// What becomes of the source map for a bundled script.
+    #[key(choice(SourceMaps))]
+    pub scripts: SourceMaps,
+
+    /// What becomes of the source map for a processed stylesheet.
+    #[key(choice(SourceMaps))]
+    pub styles: SourceMaps,
 }

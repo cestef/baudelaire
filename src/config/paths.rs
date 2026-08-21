@@ -2,31 +2,73 @@
 
 use std::path::{Path, PathBuf};
 
+use dispatch_derive::Table as Derive;
+
 use crate::codegen::TypstFmt;
 use crate::config::Value;
-use crate::config::dispatch::Kind::Path as Directory;
 use crate::config::dispatch::Kind::Table;
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
+use crate::config::vocab::rule;
 use crate::error::ConfigError;
 
 /// Directory layout, every entry relative to [`Config::root`](crate::config::Config::root).
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, Derive)]
 pub struct Paths {
+    /// The content tree of `.typ` pages.
+    #[key(path)]
     pub content: PathBuf,
+
+    /// Where the built site is written.
+    #[key(path)]
     pub dist: PathBuf,
-    /// Assets that go through the pipeline: minified, bundled, fingerprinted.
-    pub assets: PathBuf,
-    /// Copied verbatim to the `dist` root: no processing, no fingerprint, no
-    /// URL prefix.
-    pub r#static: PathBuf,
-    pub templates: PathBuf,
-    /// Files a page may adopt as its body, each under a name of the site's
-    /// choosing: `sources { changelog "../CHANGELOG.md" }`.
+
+    /// Assets that go through the pipeline: CSS, JS, images.
     ///
-    /// A page selects a source by name, never by path, so content can only
-    /// reach files the config already offered it. Unlike every other entry
-    /// here, a value may climb out of the project.
+    /// Minified, bundled, fingerprinted.
+    #[key(path)]
+    pub assets: PathBuf,
+
+    /// Files copied to the output verbatim, untouched by the pipeline.
+    ///
+    /// No processing, no fingerprint, no URL prefix.
+    #[key(name = "static", path)]
+    pub r#static: PathBuf,
+
+    /// Where layouts and partials are imported from.
+    #[key(path)]
+    pub templates: PathBuf,
+
+    /// Files a page may take as its body, each under a name: a page names the name, never the path.
+    ///
+    /// `sources { changelog "../CHANGELOG.md" }`. A page selects a source by
+    /// name, never by path, so content can only reach files the config already
+    /// offered it. Unlike every other entry here, a value may climb out of the
+    /// project.
+    #[key(custom(
+        Table,
+        |c: &Self| Value::each(&c.sources, |path| path.clone().into()),
+        |c: &mut Self, n: &kdl::KdlNode, t: &str| {
+            let mut seen: Vec<String> = Vec::new();
+            for entry in n.block(t)?.nodes() {
+                let name = entry.name().value();
+                let span = NodeExt::span(entry);
+                if !TypstFmt::bindable(name) {
+                    return Err(ConfigError::not_an_identifier(t, name, span).into());
+                }
+                if seen.iter().any(|declared| declared == name) {
+                    return Err(ConfigError::duplicate_id(t, "source", name, span).into());
+                }
+                seen.push(name.to_owned());
+            }
+            c.sources = n
+                .pairs(t)?
+                .into_iter()
+                .map(|(name, path)| (name, PathBuf::from(path)))
+                .collect();
+            Ok(())
+        },
+    ))]
     pub sources: Vec<(String, PathBuf)>,
 }
 
@@ -110,87 +152,6 @@ impl Default for Paths {
             sources: Vec::new(),
         }
     }
-}
-
-impl Section for Paths {
-    const RULES: Block<Self> = Block(&[
-        (
-            "content",
-            Directory,
-            "The content tree of `.typ` pages.",
-            |c| c.content.clone().into(),
-            |c, n, t| {
-                c.content = n.string(t, 0)?.into();
-                Ok(())
-            },
-        ),
-        (
-            "dist",
-            Directory,
-            "Where the built site is written.",
-            |c| c.dist.clone().into(),
-            |c, n, t| {
-                c.dist = n.string(t, 0)?.into();
-                Ok(())
-            },
-        ),
-        (
-            "assets",
-            Directory,
-            "Assets that go through the pipeline: CSS, JS, images.",
-            |c| c.assets.clone().into(),
-            |c, n, t| {
-                c.assets = n.string(t, 0)?.into();
-                Ok(())
-            },
-        ),
-        (
-            "static",
-            Directory,
-            "Files copied to the output verbatim, untouched by the pipeline.",
-            |c| c.r#static.clone().into(),
-            |c, n, t| {
-                c.r#static = n.string(t, 0)?.into();
-                Ok(())
-            },
-        ),
-        (
-            "templates",
-            Directory,
-            "Where layouts and partials are imported from.",
-            |c| c.templates.clone().into(),
-            |c, n, t| {
-                c.templates = n.string(t, 0)?.into();
-                Ok(())
-            },
-        ),
-        (
-            "sources",
-            Table,
-            "Files a page may take as its body, each under a name: a page names the name, never the path.",
-            |c| Value::each(&c.sources, |path| path.clone().into()),
-            |c, n, t| {
-                let mut seen: Vec<String> = Vec::new();
-                for entry in n.block(t)?.nodes() {
-                    let name = entry.name().value();
-                    let span = NodeExt::span(entry);
-                    if !TypstFmt::bindable(name) {
-                        return Err(ConfigError::not_an_identifier(t, name, span).into());
-                    }
-                    if seen.iter().any(|declared| declared == name) {
-                        return Err(ConfigError::duplicate_id(t, "source", name, span).into());
-                    }
-                    seen.push(name.to_owned());
-                }
-                c.sources = n
-                    .pairs(t)?
-                    .into_iter()
-                    .map(|(name, path)| (name, PathBuf::from(path)))
-                    .collect();
-                Ok(())
-            },
-        ),
-    ]);
 }
 
 impl Paths {

@@ -2,11 +2,14 @@
 
 use kdl::KdlNode;
 
+use dispatch_derive::Table as Derive;
+
 use crate::config::Value;
-use crate::config::dispatch::Kind::{Number, Table, Text};
+use crate::config::dispatch::Kind::{Number, Table};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
 use crate::config::value::ValueExt;
+use crate::config::vocab::rule;
 use crate::error::Result;
 
 /// Languages written right to left, so `dir="rtl"` is right without the site
@@ -29,24 +32,63 @@ impl Rtl {
     }
 }
 
-#[derive(Debug, Clone, Default, Hash, serde::Serialize)]
+#[derive(Debug, Clone, Default, Hash, serde::Serialize, Derive)]
 pub struct LanguageConfig {
-    /// Display name for a language switcher, e.g. `Français`. Falls back to the
-    /// code when unset.
+    /// The language's name in its own language, for a switcher.
+    ///
+    /// Falls back to the code when unset.
+    #[key(opt text)]
     pub name: Option<String>,
-    /// Writing direction, `ltr` (default) or `rtl`, surfaced as `<html dir>`.
+
+    /// Writing direction, `ltr` or `rtl`.
+    ///
+    /// Surfaced as `<html dir>`.
+    #[key(opt text)]
     pub dir: Option<String>,
-    /// Overrides the site-wide `site` when set.
+
+    /// The site name in this language.
+    #[key(opt text)]
     pub site: Option<String>,
-    /// Overrides the site-wide `description` when set.
-    pub description: Option<String>,
-    /// Overrides the site-wide `author` when set.
+
+    /// The default author in this language.
+    #[key(opt text)]
     pub author: Option<String>,
-    /// Overrides `content { reading { wpm } }` when set, because a reading rate
-    /// is a fact about the language rather than about the site.
+
+    /// What the site is, in this language.
+    #[key(opt text)]
+    pub description: Option<String>,
+
+    /// Words a reader of this language gets through in a minute.
+    ///
+    /// Overrides `content { reading { wpm } }`, because a reading rate is a
+    /// fact about the language rather than about the site.
+    #[key(custom(
+        Number,
+        |c: &Self| c.wpm.into(),
+        |c: &mut Self, n: &kdl::KdlNode, t: &str| {
+            c.wpm = Some(usize::from(n.arg(t, 0)?.bounded::<u16>(
+                t,
+                NodeExt::span(n),
+                1,
+                u16::MAX,
+            )?));
+            Ok(())
+        },
+    ))]
     pub wpm: Option<usize>,
-    /// UI-string table for this language, exposed to templates as
-    /// `page.strings` and to client JS via `baudelaire:i18n`.
+
+    /// This language's UI string table, one `key value` line per entry.
+    ///
+    /// Exposed to templates as `page.strings` and to client JS via
+    /// `baudelaire:i18n`.
+    #[key(custom(
+        Table,
+        |c: &Self| Value::each(&c.strings, |value| value.into()),
+        |c: &mut Self, n: &kdl::KdlNode, t: &str| {
+            c.strings = n.table(t)?;
+            Ok(())
+        },
+    ))]
     pub strings: Vec<(String, crate::codegen::Value)>,
 }
 
@@ -57,84 +99,4 @@ impl LanguageConfig {
         lang.fill(node, text)?;
         Ok((node.name().value().to_owned(), lang))
     }
-}
-
-impl Section for LanguageConfig {
-    const RULES: Block<Self> = Block(&[
-        (
-            "name",
-            Text,
-            "The language's name in its own language, for a switcher.",
-            |c| c.name.clone().into(),
-            |c, n, t| {
-                c.name = Some(n.string(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "dir",
-            Text,
-            "Writing direction, `ltr` or `rtl`.",
-            |c| c.dir.clone().into(),
-            |c, n, t| {
-                c.dir = Some(n.string(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "site",
-            Text,
-            "The site name in this language.",
-            |c| c.site.clone().into(),
-            |c, n, t| {
-                c.site = Some(n.string(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "author",
-            Text,
-            "The default author in this language.",
-            |c| c.author.clone().into(),
-            |c, n, t| {
-                c.author = Some(n.string(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "description",
-            Text,
-            "What the site is, in this language.",
-            |c| c.description.clone().into(),
-            |c, n, t| {
-                c.description = Some(n.string(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "wpm",
-            Number,
-            "Words a reader of this language gets through in a minute.",
-            |c| c.wpm.into(),
-            |c, n, t| {
-                c.wpm = Some(usize::from(n.arg(t, 0)?.bounded::<u16>(
-                    t,
-                    NodeExt::span(n),
-                    1,
-                    u16::MAX,
-                )?));
-                Ok(())
-            },
-        ),
-        (
-            "strings",
-            Table,
-            "This language's UI string table, one `key value` line per entry.",
-            |c| Value::each(&c.strings, |value| value.into()),
-            |c, n, t| {
-                c.strings = n.table(t)?;
-                Ok(())
-            },
-        ),
-    ]);
 }

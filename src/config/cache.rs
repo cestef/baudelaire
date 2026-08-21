@@ -3,14 +3,20 @@
 
 use std::path::PathBuf;
 
-use crate::config::Config;
-use crate::config::dispatch::Kind::{Flag, Path};
-use crate::config::dispatch::{Block, Section};
-use crate::config::node::NodeExt;
+use dispatch_derive::Table;
 
-#[derive(Debug, Clone)]
+use crate::config::Config;
+use crate::config::dispatch::{Block, Section};
+use crate::config::vocab::rule;
+
+#[derive(Debug, Clone, Table)]
 pub struct CacheConfig {
+    /// Where incremental build state is kept.
+    #[key(path)]
     pub dir: PathBuf,
+
+    /// Reuse that state. Off, every build is a cold one.
+    #[key(flag)]
     pub incremental: bool,
 }
 
@@ -34,29 +40,4 @@ impl Default for CacheConfig {
             incremental: true,
         }
     }
-}
-
-impl Section for CacheConfig {
-    const RULES: Block<Self> = Block(&[
-        (
-            "dir",
-            Path,
-            "Where incremental build state is kept.",
-            |c| c.dir.clone().into(),
-            |c, n, t| {
-                c.dir = n.string(t, 0)?.into();
-                Ok(())
-            },
-        ),
-        (
-            "incremental",
-            Flag,
-            "Reuse that state. Off, every build is a cold one.",
-            |c| c.incremental.into(),
-            |c, n, t| {
-                c.incremental = n.boolean(t, 0)?;
-                Ok(())
-            },
-        ),
-    ]);
 }

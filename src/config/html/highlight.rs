@@ -1,10 +1,13 @@
 //! `html { highlight { } }`: syntax highlighting as CSS classes.
 
+use dispatch_derive::Table as Derive;
+
 use crate::config::Named;
 use crate::config::Value;
-use crate::config::dispatch::Kind::{Flag, Table, Text, Toggled};
-use crate::config::dispatch::{Block, Keys, Section, Switch};
+use crate::config::dispatch::Kind::Table;
+use crate::config::dispatch::{Block, Keys, Section};
 use crate::config::node::NodeExt;
+use crate::config::vocab::rule;
 use crate::error::Result;
 
 /// One class a piece of highlighted code can carry.
@@ -77,18 +80,51 @@ impl Token {
 /// stylesheet owns the palette and can follow a light/dark toggle.
 ///
 /// Off, typst's own inline colours are what the page gets.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, Derive)]
+#[table(hook(switch = enabled))]
 pub struct HighlightConfig {
     /// Whether to class rather than colour.
     pub enabled: bool,
-    /// What every class starts with. Empty emits the bare token name.
+
+    /// What every emitted class starts with. Empty for none.
+    #[key(text)]
     pub prefix: String,
-    /// The tokens that reach the page.
+
+    /// The tokens that reach the page, or `-name` to drop one. All are on.
+    #[key(toggled(Token, Token::all(), Token::names))]
     pub tokens: Vec<Token>,
-    /// Per-token renames, prefix aside: `keyword "kw"` writes `sx-kw`.
+
+    /// Per-token class names, prefix aside: `keyword "kw"` writes `sx-kw`.
+    #[key(custom(
+        Table,
+        |c: &Self| {
+            Value::block(
+                c.classes
+                    .iter()
+                    .map(|(token, class)| (token.name().to_owned(), class.clone().into()))
+                    .collect(),
+            )
+        },
+        |c: &mut Self, n: &kdl::KdlNode, t: &str| {
+            c.classes = n
+                .block(t)?
+                .nodes()
+                .iter()
+                .map(|entry| {
+                    let name = entry.name().value();
+                    let token = Token::of(name).ok_or_else(|| {
+                        Keys::unknown_value(Token::NAMES, t, name, NodeExt::span(entry))
+                    })?;
+                    Ok((token, entry.string(t, 0)?))
+                })
+                .collect::<Result<_>>()?;
+            Ok(())
+        },
+    ))]
     pub classes: Vec<(Token, String)>,
-    /// Also stamp each classed span with the grammar's own scope, as
-    /// `data-scope`.
+
+    /// Also stamp each span with the grammar's own scope, as `data-scope`.
+    #[key(flag)]
     pub scopes: bool,
 }
 
@@ -120,72 +156,4 @@ impl HighlightConfig {
             .map_or_else(|| token.name(), |(_, class)| class.as_str());
         Some(format!("{}{name}", self.prefix))
     }
-}
-
-impl Section for HighlightConfig {
-    const SWITCH: Option<Switch<Self>> = Some(Switch {
-        set: |c, on| c.enabled = on,
-        on: |c| c.enabled,
-    });
-
-    const RULES: Block<Self> = Block(&[
-        (
-            "prefix",
-            Text,
-            "What every emitted class starts with. Empty for none.",
-            |c| c.prefix.clone().into(),
-            |c, n, t| {
-                c.prefix = n.string(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "tokens",
-            Toggled(Token::names, Token::names),
-            "The tokens that reach the page, or `-name` to drop one. All are on.",
-            |c| c.tokens.iter().copied().map(Value::named).collect(),
-            |c, n, t| {
-                c.tokens = n.toggled::<Token>(t, &Token::all())?;
-                Ok(())
-            },
-        ),
-        (
-            "classes",
-            Table,
-            "Per-token class names, prefix aside: `keyword \"kw\"` writes `sx-kw`.",
-            |c| {
-                Value::block(
-                    c.classes
-                        .iter()
-                        .map(|(token, class)| (token.name().to_owned(), class.clone().into()))
-                        .collect(),
-                )
-            },
-            |c, n, t| {
-                c.classes = n
-                    .block(t)?
-                    .nodes()
-                    .iter()
-                    .map(|entry| {
-                        let name = entry.name().value();
-                        let token = Token::of(name).ok_or_else(|| {
-                            Keys::unknown_value(Token::NAMES, t, name, NodeExt::span(entry))
-                        })?;
-                        Ok((token, entry.string(t, 0)?))
-                    })
-                    .collect::<Result<_>>()?;
-                Ok(())
-            },
-        ),
-        (
-            "scopes",
-            Flag,
-            "Also stamp each span with the grammar's own scope, as `data-scope`.",
-            |c| c.scopes.into(),
-            |c, n, t| {
-                c.scopes = n.boolean(t, 0)?;
-                Ok(())
-            },
-        ),
-    ]);
 }

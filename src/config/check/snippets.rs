@@ -2,27 +2,41 @@
 
 use kdl::KdlNode;
 
+use dispatch_derive::Table;
+
 use crate::config::Level;
-use crate::config::dispatch::Kind::Text;
 use crate::config::dispatch::{Attributed, Attrs};
 use crate::config::node::NodeExt;
-use crate::config::value::ValueExt;
+use crate::config::vocab::attr;
 use crate::error::{ConfigError, ConfigErrorKind, Result};
 use crate::render::lint::snippet::parser::Parsers;
 use crate::ui::markup;
 
 /// How the fences claiming one language are checked.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, Table)]
+#[table(
+    impl = Attributed,
+    const ATTRS: Attrs<Self> = Attrs,
+    rule = attr,
+    items {
+        /// The level, which [`SnippetConfig::item`] reads before the attributes.
+        const LEADING: usize = 1;
+
+        fn unkeyed(&self) -> Vec<crate::config::Value> {
+            vec![self.level.into()]
+        }
+    },
+)]
 pub struct SnippetConfig {
     /// How loud a finding in one of them is.
     pub level: Level,
-    /// The command that checks one snippet, `{file}` standing for the file it
-    /// is written out to and `{lang}` for the language it claimed. `None`
-    /// checks it with this build's parser for that language.
+    /// The command that checks one snippet, `{file}` standing for the file it is written to and `{lang}` for its language. Without one, this build's parser for the language checks it.
+    #[key(opt text)]
     pub run: Option<String>,
-    /// The line prefix that keeps a line out of the page while leaving it in
-    /// what the checker reads, for the context a fragment needs to stand on its
-    /// own. `None` is a language whose fences are shown entire.
+    /// A line prefix that checks a line without showing it, for the context a fragment needs to stand on its own. Only at the very start of a line.
+    ///
+    /// `None` is a language whose fences are shown entire.
+    #[key(opt text)]
     pub hidden: Option<String>,
 }
 
@@ -62,36 +76,4 @@ impl SnippetConfig {
         )
         .into())
     }
-}
-
-impl Attributed for SnippetConfig {
-    /// The level, which [`SnippetConfig::item`] reads before the attributes.
-    const LEADING: usize = 1;
-
-    fn unkeyed(&self) -> Vec<crate::config::Value> {
-        vec![self.level.into()]
-    }
-
-    const ATTRS: Attrs<Self> = Attrs(&[
-        (
-            "run",
-            Text,
-            "The command that checks one snippet, `{file}` standing for the file it is written to and `{lang}` for its language. Without one, this build's parser for the language checks it.",
-            |c| c.run.clone().into(),
-            |c, v, t, s| {
-                c.run = Some(v.as_str(t, s)?);
-                Ok(())
-            },
-        ),
-        (
-            "hidden",
-            Text,
-            "A line prefix that checks a line without showing it, for the context a fragment needs to stand on its own. Only at the very start of a line.",
-            |c| c.hidden.clone().into(),
-            |c, v, t, s| {
-                c.hidden = Some(v.as_str(t, s)?);
-                Ok(())
-            },
-        ),
-    ]);
 }

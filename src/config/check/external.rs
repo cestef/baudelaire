@@ -2,30 +2,54 @@
 
 use std::time::Duration;
 
-use crate::config::dispatch::Kind::{Number, Numbers, Texts, Time};
-use crate::config::dispatch::{Block, Section, Switch};
+use dispatch_derive::Table;
+
+use crate::config::dispatch::Kind::Number;
+use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
 use crate::config::value::ValueExt;
+use crate::config::vocab::rule;
 
 /// The outbound link check: whether it runs, and the manners it runs with.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, Table)]
+#[table(hook(switch = enabled))]
 pub struct ExternalConfig {
     /// Verify outbound `http(s)` links over the network at all. Read by `check`
     /// alone, so a build stays offline and deterministic.
     pub enabled: bool,
-    /// How long a URL that answered stays answered; only successes are
-    /// remembered.
+
+    /// How long a link that answered is trusted before it is asked again.
+    ///
+    /// Only successes are remembered.
+    #[key(time)]
     pub fresh: Duration,
-    /// How long one request may take before it counts as unreachable.
+
+    /// How long one request may take before the link counts as unreachable.
+    #[key(time)]
     pub timeout: Duration,
-    /// How many requests are in flight at once. `None` leaves it to the build's
-    /// own thread pool.
+
+    /// How many links are fetched at once. Unset, as many as the build has threads.
+    #[key(custom(
+        Number,
+        |c: &Self| c.concurrency.into(),
+        |c: &mut Self, n: &kdl::KdlNode, t: &str| {
+            let at_once: u16 = n.arg(t, 0)?.bounded(t, NodeExt::span(n), 1, u16::MAX)?;
+            c.concurrency = Some(usize::from(at_once));
+            Ok(())
+        },
+    ))]
     pub concurrency: Option<usize>,
-    /// Globs, matched against each URL without its scheme, that are never
-    /// requested. The same glob grammar as `prune { keep }`: `*.internal/**`.
+
+    /// Globs, matched against each URL without its scheme, that are never requested: `ignore "*.internal/**"`.
+    ///
+    /// The same glob grammar as `prune { keep }`.
+    #[key(texts)]
     pub ignore: Vec<String>,
-    /// Status codes that count as the link working, beyond the 2xx and 3xx that
-    /// always do: a page behind a login answers 401 and is still there.
+
+    /// Status codes that count as alive, beyond the 2xx and 3xx that always do.
+    ///
+    /// A page behind a login answers 401 and is still there.
+    #[key(numbers(u16, 100, 599))]
     pub accept: Vec<u16>,
 }
 
@@ -47,65 +71,4 @@ impl Default for ExternalConfig {
             accept: Vec::new(),
         }
     }
-}
-
-impl Section for ExternalConfig {
-    const SWITCH: Option<Switch<Self>> = Some(Switch {
-        set: |c, on| c.enabled = on,
-        on: |c| c.enabled,
-    });
-
-    const RULES: Block<Self> = Block(&[
-        (
-            "fresh",
-            Time,
-            "How long a link that answered is trusted before it is asked again.",
-            |c| c.fresh.into(),
-            |c, n, t| {
-                c.fresh = n.duration(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "timeout",
-            Time,
-            "How long one request may take before the link counts as unreachable.",
-            |c| c.timeout.into(),
-            |c, n, t| {
-                c.timeout = n.duration(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "concurrency",
-            Number,
-            "How many links are fetched at once. Unset, as many as the build has threads.",
-            |c| c.concurrency.into(),
-            |c, n, t| {
-                let at_once: u16 = n.arg(t, 0)?.bounded(t, NodeExt::span(n), 1, u16::MAX)?;
-                c.concurrency = Some(usize::from(at_once));
-                Ok(())
-            },
-        ),
-        (
-            "ignore",
-            Texts,
-            "Globs, matched against each URL without its scheme, that are never requested: `ignore \"*.internal/**\"`.",
-            |c| c.ignore.clone().into(),
-            |c, n, t| {
-                c.ignore = n.words(t)?;
-                Ok(())
-            },
-        ),
-        (
-            "accept",
-            Numbers,
-            "Status codes that count as alive, beyond the 2xx and 3xx that always do.",
-            |c| c.accept.clone().into(),
-            |c, n, t| {
-                c.accept = n.bounds::<u16>(t, 100, 599)?;
-                Ok(())
-            },
-        ),
-    ]);
 }

@@ -1,21 +1,33 @@
 //! `artifacts { cards { } }`: generated social cards.
 
+use dispatch_derive::Table;
+
 use crate::config::Basename;
-use crate::config::dispatch::Kind::{Number, Text};
-use crate::config::dispatch::{Block, Section, Switch};
-use crate::config::node::NodeExt;
-use crate::config::value::ValueExt;
+use crate::config::dispatch::{Block, Section};
+use crate::config::vocab::rule;
 
 /// Generated social cards: the image a link to this site unfurls into, rendered
 /// per page from a paged Typst template, where `html.elem` does not exist.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, Table)]
+#[table(hook(switch = enabled))]
 pub struct CardsConfig {
     pub enabled: bool,
-    /// The template file under the templates directory.
+
+    /// The typst template each card is drawn with.
+    ///
+    /// A file under the templates directory.
+    #[key(text)]
     pub template: String,
-    /// Card size in pixels; the card is one page rendered at one pixel per
-    /// point, so these are also the page's dimensions in points.
+
+    /// Card width in pixels.
+    ///
+    /// The card is one page rendered at one pixel per point, so this is also
+    /// the page's width in points.
+    #[key(bounded(u32, 1, Self::MAX))]
     pub width: u32,
+
+    /// Card height in pixels.
+    #[key(bounded(u32, 1, Self::MAX))]
     pub height: u32,
 }
 
@@ -49,45 +61,4 @@ impl Default for CardsConfig {
             height: 630,
         }
     }
-}
-
-/// The `cards { }` block, whose presence enables social card rendering.
-impl Section for CardsConfig {
-    const SWITCH: Option<Switch<Self>> = Some(Switch {
-        set: |c, on| c.enabled = on,
-        on: |c| c.enabled,
-    });
-
-    const RULES: Block<Self> = Block(&[
-        (
-            "template",
-            Text,
-            "The typst template each card is drawn with.",
-            |c| c.template.clone().into(),
-            |c, n, t| {
-                c.template = n.string(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "width",
-            Number,
-            "Card width in pixels.",
-            |c| c.width.into(),
-            |c, n, t| {
-                c.width = n.arg(t, 0)?.bounded(t, NodeExt::span(n), 1, Self::MAX)?;
-                Ok(())
-            },
-        ),
-        (
-            "height",
-            Number,
-            "Card height in pixels.",
-            |c| c.height.into(),
-            |c, n, t| {
-                c.height = n.arg(t, 0)?.bounded(t, NodeExt::span(n), 1, Self::MAX)?;
-                Ok(())
-            },
-        ),
-    ]);
 }

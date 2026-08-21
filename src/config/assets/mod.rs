@@ -8,33 +8,52 @@ pub mod targets;
 
 use std::path::PathBuf;
 
-use crate::config::dispatch::Kind::{Block as Nested, Flag, Path};
+use dispatch_derive::Table;
+
 use crate::config::dispatch::{Block, Section};
-use crate::config::node::NodeExt;
+use crate::config::vocab::rule;
 use crate::config::{ImagesConfig, MinifyConfig, SourceMapConfig, TailwindConfig, TargetConfig};
 
 /// Asset pipeline options. All opt-in: a fresh site copies assets verbatim.
-#[derive(Debug, Clone, Hash, Default)]
+#[derive(Debug, Clone, Hash, Default, Table)]
 pub struct AssetConfig {
+    /// What is minified. Its presence turns every kind on; `#false` turns them off again.
+    #[key(nested(MinifyConfig))]
     pub minify: MinifyConfig,
-    /// The oldest browsers the stylesheets must run on.
+
+    /// The oldest browser versions the stylesheets must run on. Naming any compiles the CSS down to them.
+    #[key(nested(TargetConfig))]
     pub targets: TargetConfig,
-    /// Bundle JavaScript entry points through rolldown. Required for any
-    /// JavaScript processing at all.
+
+    /// Bundle JavaScript modules into one file per entry point.
+    ///
+    /// Required for any JavaScript processing at all.
+    #[key(flag)]
     pub bundle: bool,
-    /// Content-hash asset filenames (`style.css` -> `style.<hash>.css`) and
-    /// rewrite references, for far-future caching.
+
+    /// Put a content hash in each asset's filename, so it can be cached forever.
+    ///
+    /// `style.css` becomes `style.<hash>.css`, and references are rewritten.
+    #[key(flag)]
     pub fingerprint: bool,
-    /// What becomes of the source map for each kind of processed asset. Off by
-    /// default, and has to be: a usable map carries the original sources, so
-    /// asking for one publishes them.
+
+    /// What becomes of each kind of asset's source map. Embeds the original sources, so asking for one publishes them.
+    #[key(nested(SourceMapConfig))]
     pub sourcemap: SourceMapConfig,
-    /// The `tsconfig.json` the bundler transforms TypeScript and JSX against,
-    /// relative to the project root. `None` means one is discovered per module,
+
+    /// The `tsconfig.json` TypeScript and JSX are transformed against. Unset, one is discovered per script.
+    ///
+    /// Relative to the project root. Unset, one is discovered per module,
     /// walking up from the file as `tsc` does.
+    #[key(opt path)]
     pub tsconfig: Option<PathBuf>,
+
+    /// Image markup and build-time processing.
+    #[key(nested(ImagesConfig))]
     pub images: ImagesConfig,
-    /// The generated utility stylesheet, off unless the block is written.
+
+    /// A utility stylesheet generated from the class names the site is written with. Its presence turns it on.
+    #[key(nested(TailwindConfig))]
     pub tailwind: TailwindConfig,
 }
 
@@ -43,74 +62,4 @@ impl AssetConfig {
     pub fn bundling(&self) -> bool {
         self.bundle && cfg!(feature = "js")
     }
-}
-
-impl Section for AssetConfig {
-    const RULES: Block<Self> = Block(&[
-        (
-            "minify",
-            Nested(MinifyConfig::rows),
-            "What is minified. Its presence turns every kind on; `#false` turns them off again.",
-            |c| c.minify.values(),
-            |c, n, t| c.minify.fill(n, t),
-        ),
-        (
-            "targets",
-            Nested(TargetConfig::rows),
-            "The oldest browser versions the stylesheets must run on. Naming any compiles the CSS down to them.",
-            |c| c.targets.values(),
-            |c, n, t| c.targets.fill(n, t),
-        ),
-        (
-            "bundle",
-            Flag,
-            "Bundle JavaScript modules into one file per entry point.",
-            |c| c.bundle.into(),
-            |c, n, t| {
-                c.bundle = n.boolean(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "fingerprint",
-            Flag,
-            "Put a content hash in each asset's filename, so it can be cached forever.",
-            |c| c.fingerprint.into(),
-            |c, n, t| {
-                c.fingerprint = n.boolean(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "sourcemap",
-            Nested(SourceMapConfig::rows),
-            "What becomes of each kind of asset's source map. Embeds the original sources, so asking for one publishes them.",
-            |c| c.sourcemap.values(),
-            |c, n, t| c.sourcemap.fill(n, t),
-        ),
-        (
-            "tsconfig",
-            Path,
-            "The `tsconfig.json` TypeScript and JSX are transformed against. Unset, one is discovered per script.",
-            |c| c.tsconfig.clone().into(),
-            |c, n, t| {
-                c.tsconfig = Some(n.string(t, 0)?.into());
-                Ok(())
-            },
-        ),
-        (
-            "images",
-            Nested(ImagesConfig::rows),
-            "Image markup and build-time processing.",
-            |c| c.images.values(),
-            |c, n, t| c.images.fill(n, t),
-        ),
-        (
-            "tailwind",
-            Nested(TailwindConfig::rows),
-            "A utility stylesheet generated from the class names the site is written with. Its presence turns it on.",
-            |c| c.tailwind.values(),
-            |c, n, t| c.tailwind.fill(n, t),
-        ),
-    ]);
 }

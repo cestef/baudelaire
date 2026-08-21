@@ -1,8 +1,9 @@
 //! `assets { targets { } }`: the browsers a stylesheet is compiled for.
 
-use crate::config::dispatch::Kind::Version as Ver;
+use dispatch_derive::Table;
+
 use crate::config::dispatch::{Block, Section};
-use crate::config::node::NodeExt;
+use crate::config::vocab::rule;
 
 /// A browser version, as `major.minor.patch` packed one byte apiece, which is
 /// the encoding lightningcss reads.
@@ -45,16 +46,42 @@ impl From<Version> for crate::config::Value {
 /// The oldest browser version the CSS must run on, per browser. Naming any
 /// turns lightningcss's *transform* on (nesting flattened, prefixes added,
 /// colour fallbacks); without one it only minifies.
-#[derive(Debug, Clone, Default, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Hash, PartialEq, Eq, Table)]
 pub struct TargetConfig {
+    /// Oldest Android WebView.
+    #[key(opt version)]
     pub android: Option<Version>,
+
+    /// Oldest Chrome.
+    #[key(opt version)]
     pub chrome: Option<Version>,
+
+    /// Oldest Edge.
+    #[key(opt version)]
     pub edge: Option<Version>,
+
+    /// Oldest Firefox.
+    #[key(opt version)]
     pub firefox: Option<Version>,
+
+    /// Oldest Internet Explorer.
+    #[key(opt version)]
     pub ie: Option<Version>,
+
+    /// Oldest Safari on iOS.
+    #[key(opt version)]
     pub ios: Option<Version>,
+
+    /// Oldest Opera.
+    #[key(opt version)]
     pub opera: Option<Version>,
+
+    /// Oldest Safari.
+    #[key(opt version)]
     pub safari: Option<Version>,
+
+    /// Oldest Samsung Internet.
+    #[key(opt version)]
     pub samsung: Option<Version>,
 }
 
@@ -62,124 +89,5 @@ impl TargetConfig {
     /// Whether any browser is named, and so whether there is a floor at all.
     pub fn any(&self) -> bool {
         *self != Self::default()
-    }
-}
-
-impl Section for TargetConfig {
-    const RULES: Block<Self> = Block(&[
-        (
-            "android",
-            Ver,
-            "Oldest Android WebView.",
-            |c| c.android.into(),
-            |c, n, t| {
-                c.android = Some(n.version(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "chrome",
-            Ver,
-            "Oldest Chrome.",
-            |c| c.chrome.into(),
-            |c, n, t| {
-                c.chrome = Some(n.version(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "edge",
-            Ver,
-            "Oldest Edge.",
-            |c| c.edge.into(),
-            |c, n, t| {
-                c.edge = Some(n.version(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "firefox",
-            Ver,
-            "Oldest Firefox.",
-            |c| c.firefox.into(),
-            |c, n, t| {
-                c.firefox = Some(n.version(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "ie",
-            Ver,
-            "Oldest Internet Explorer.",
-            |c| c.ie.into(),
-            |c, n, t| {
-                c.ie = Some(n.version(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "ios",
-            Ver,
-            "Oldest Safari on iOS.",
-            |c| c.ios.into(),
-            |c, n, t| {
-                c.ios = Some(n.version(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "opera",
-            Ver,
-            "Oldest Opera.",
-            |c| c.opera.into(),
-            |c, n, t| {
-                c.opera = Some(n.version(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "safari",
-            Ver,
-            "Oldest Safari.",
-            |c| c.safari.into(),
-            |c, n, t| {
-                c.safari = Some(n.version(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "samsung",
-            Ver,
-            "Oldest Samsung Internet.",
-            |c| c.samsung.into(),
-            |c, n, t| {
-                c.samsung = Some(n.version(t, 0)?);
-                Ok(())
-            },
-        ),
-    ]);
-}
-
-#[cfg(test)]
-mod tests {
-    use super::Version;
-
-    #[test]
-    fn a_version_packs_one_byte_per_component() {
-        assert_eq!(Version::parse("15"), Some(Version(15 << 16)));
-        assert_eq!(Version::parse("15.4"), Some(Version((15 << 16) | (4 << 8))));
-        assert_eq!(
-            Version::parse("15.4.1"),
-            Some(Version((15 << 16) | (4 << 8) | 1))
-        );
-        assert_eq!(Version::parse(" 120 "), Some(Version(120 << 16)));
-    }
-
-    #[test]
-    fn a_version_that_does_not_fit_the_encoding_is_refused() {
-        assert_eq!(Version::parse("300"), None);
-        assert_eq!(Version::parse("1.2.3.4"), None);
-        assert_eq!(Version::parse("latest"), None);
-        assert_eq!(Version::parse(""), None);
     }
 }

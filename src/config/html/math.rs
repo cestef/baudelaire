@@ -2,12 +2,11 @@
 
 use std::path::PathBuf;
 
+use dispatch_derive::Table;
+
 use crate::config::Named;
-use crate::config::Value;
-use crate::config::dispatch::Kind::{Asset, Choice};
 use crate::config::dispatch::{Block, Section};
-use crate::config::node::NodeExt;
-use crate::config::value::ValueExt;
+use crate::config::vocab::rule;
 
 /// Where the CSS that MathML output depends on lives.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -55,10 +54,14 @@ impl MathStyles {
     }
 }
 
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, Table)]
 pub struct MathConfig {
+    /// Where the CSS that MathML needs lives: a served `link`, typst's `inline` block, or `none`.
+    #[key(choice(MathStyles))]
     pub styles: MathStyles,
-    /// The path the stylesheet is served from, relative to the asset root.
+
+    /// Where the stylesheet is served from, relative to the asset root.
+    #[key(asset)]
     pub path: PathBuf,
 }
 
@@ -69,29 +72,4 @@ impl Default for MathConfig {
             path: PathBuf::from("math.css"),
         }
     }
-}
-
-impl Section for MathConfig {
-    const RULES: Block<Self> = Block(&[
-        (
-            "styles",
-            Choice(MathStyles::names),
-            "Where the CSS that MathML needs lives: a served `link`, typst's `inline` block, or `none`.",
-            |c| Value::named(c.styles),
-            |c, n, t| {
-                c.styles = n.arg(t, 0)?.one::<MathStyles>(t, NodeExt::span(n))?;
-                Ok(())
-            },
-        ),
-        (
-            "path",
-            Asset,
-            "Where the stylesheet is served from, relative to the asset root.",
-            |c| c.path.clone().into(),
-            |c, n, t| {
-                c.path = n.asset(t, 0)?;
-                Ok(())
-            },
-        ),
-    ]);
 }

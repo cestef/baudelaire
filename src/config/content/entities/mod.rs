@@ -10,11 +10,13 @@ pub mod source;
 
 use kdl::KdlNode;
 
+use dispatch_derive::Table;
+
 use crate::config::Value;
-use crate::config::dispatch::Kind::{Block as Nested, Choice, Items, Line};
+use crate::config::dispatch::Kind::{Choice, Items, Line};
 use crate::config::dispatch::{Attributed, Block, Keys, Section};
 use crate::config::node::NodeExt;
-use crate::config::value::ValueExt;
+use crate::config::vocab::rule;
 use crate::config::{FieldSchema, Named};
 use crate::error::{ConfigError, ConfigErrorKind, Result};
 
@@ -24,17 +26,65 @@ pub use source::{Declared, SourceConfig, SourcesConfig};
 
 /// One registry: what its entities carry, where they come from, and what an
 /// undeclared reference means.
-#[derive(Debug, Clone, Default, Hash)]
+#[derive(Debug, Clone, Default, Hash, Table)]
 pub struct RegistryConfig {
+    /// A named field set to take instead of declaring one.
+    #[key(opt choice(Shape))]
     pub shape: Option<Shape>,
-    /// Every entity's fields, in declaration order: the `shape`'s fields with
-    /// the registry's own filled over them. Empty constrains nothing.
+
+    /// What every entity carries, one line per field. Declaring a field requires it; with a `shape`, a field of the same name replaces that shape's and any other is added.
+    ///
+    /// In declaration order: the `shape`'s fields with the registry's own
+    /// filled over them. Empty constrains nothing.
+    #[key(custom(
+        Items(FieldSchema::rows),
+        |c: &Self| Value::each(&c.fields, Attributed::values),
+        |c: &mut Self, n: &kdl::KdlNode, t: &str| {
+            c.fields = n.unique(t, "field", FieldSchema::item)?;
+            Ok(())
+        },
+    ))]
     pub fields: Vec<(String, FieldSchema)>,
+
+    /// Which field answers each question a renderer asks of an entity.
+    #[key(custom(
+        Line(Slots::rows),
+        |c: &Self| c.slots.values(),
+        |c: &mut Self, n: &kdl::KdlNode, t: &str| c.slots.read(n, t),
+    ))]
     pub slots: Slots,
+
+    /// Where the entities come from, read in the order written.
+    ///
     /// In declaration order.
+    #[key(custom(
+        crate::config::dispatch::Kind::Block(SourcesConfig::rows),
+        |c: &Self| SourcesConfig(c.sources.clone()).values(),
+        |c: &mut Self, n: &kdl::KdlNode, t: &str| {
+            let mut sources = SourcesConfig::default();
+            sources.fill(n, t)?;
+            c.sources = sources.0;
+            Ok(())
+        },
+    ))]
     pub sources: Vec<SourceConfig>,
+
+    /// What a reference to an entity nobody declared means. Defaults to `error` where there is a roster, `synthesize` where there is not.
+    ///
     /// `None` until the site says; see [`RegistryConfig::unknown`] for the
     /// default.
+    #[key(custom(
+        Choice(Unknown::names),
+        |c: &Self| Value::named(c.unknown()),
+        |c: &mut Self, n: &kdl::KdlNode, t: &str| {
+            c.unknown = Some(crate::config::value::ValueExt::one::<Unknown>(
+                n.arg(t, 0)?,
+                t,
+                NodeExt::span(n),
+            )?);
+            Ok(())
+        },
+    ))]
     unknown: Option<Unknown>,
 }
 
@@ -121,58 +171,4 @@ impl RegistryConfig {
         }
         Ok(())
     }
-}
-
-impl Section for RegistryConfig {
-    const RULES: Block<Self> = Block(&[
-        (
-            "shape",
-            Choice(Shape::names),
-            "A named field set to take instead of declaring one.",
-            |c| c.shape.map(Value::named).into(),
-            |c, n, t| {
-                c.shape = Some(n.arg(t, 0)?.one::<Shape>(t, NodeExt::span(n))?);
-                Ok(())
-            },
-        ),
-        (
-            "fields",
-            Items(FieldSchema::rows),
-            "What every entity carries, one line per field. Declaring a field requires it; with a `shape`, a field of the same name replaces that shape's and any other is added.",
-            |c| Value::each(&c.fields, Attributed::values),
-            |c, n, t| {
-                c.fields = n.unique(t, "field", FieldSchema::item)?;
-                Ok(())
-            },
-        ),
-        (
-            "slots",
-            Line(Slots::rows),
-            "Which field answers each question a renderer asks of an entity.",
-            |c| c.slots.values(),
-            |c, n, t| c.slots.read(n, t),
-        ),
-        (
-            "sources",
-            Nested(SourcesConfig::rows),
-            "Where the entities come from, read in the order written.",
-            |c| SourcesConfig(c.sources.clone()).values(),
-            |c, n, t| {
-                let mut sources = SourcesConfig::default();
-                sources.fill(n, t)?;
-                c.sources = sources.0;
-                Ok(())
-            },
-        ),
-        (
-            "unknown",
-            Choice(Unknown::names),
-            "What a reference to an entity nobody declared means. Defaults to `error` where there is a roster, `synthesize` where there is not.",
-            |c| Value::named(c.unknown()),
-            |c, n, t| {
-                c.unknown = Some(n.arg(t, 0)?.one::<Unknown>(t, NodeExt::span(n))?);
-                Ok(())
-            },
-        ),
-    ]);
 }

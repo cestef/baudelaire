@@ -64,8 +64,10 @@ chores are visible in the git history and change nothing for a site.
 
 - **One cold rebuild.** `page.source` is a new field in the wrapper each page is
   compiled through, and that wrapper is the page's cache fingerprint, so the
-  first build after upgrading recompiles the site. Nothing else changes, and the
-  build after it is incremental again.
+  first build after upgrading recompiles the site. Several config sections also
+  hash differently, their fields having been reordered to match the order their
+  block reads them in. Nothing else changes, and the build after it is
+  incremental again.
 
 ### Fixed
 

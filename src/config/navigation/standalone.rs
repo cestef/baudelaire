@@ -1,25 +1,35 @@
 //! `navigation { standalone { } }`: the whole site as one file.
 
+use dispatch_derive::Table;
+
 use crate::config::Named;
-use crate::config::Value;
-use crate::config::dispatch::Kind::{Choice, Path, Text};
-use crate::config::dispatch::{Block, Section, Switch};
-use crate::config::node::NodeExt;
-use crate::config::value::ValueExt;
+use crate::config::dispatch::{Block, Section};
+use crate::config::vocab::rule;
 
 /// Single-file export: the whole site inlined into one HTML document, each
 /// page a route the bundled router swaps in.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, Table)]
+#[table(hook(switch = enabled))]
 pub struct StandaloneConfig {
     /// Whether to emit the single-file export.
     pub enabled: bool,
-    /// Output file name, relative to `dist`.
+
+    /// The single file the site is written to.
+    ///
+    /// Relative to `dist`.
+    #[key(contained)]
     pub file: String,
-    /// Permalink of the page whose `<head>` and body seed the shell, the only
-    /// route that renders without JavaScript. `None` means the site home (`/`,
-    /// localized to `lang`).
+
+    /// The page that file opens on.
+    ///
+    /// The permalink of the page whose `<head>` and body seed the shell, the
+    /// only route that renders without JavaScript. `None` means the site home
+    /// (`/`, localized to `lang`).
+    #[key(opt text)]
     pub entry: Option<String>,
-    /// How the router encodes the current route in the address bar.
+
+    /// How it addresses pages once opened.
+    #[key(choice(Router))]
     pub router: Router,
 }
 
@@ -48,44 +58,4 @@ impl Default for StandaloneConfig {
             router: Router::default(),
         }
     }
-}
-
-impl Section for StandaloneConfig {
-    const SWITCH: Option<Switch<Self>> = Some(Switch {
-        set: |c, on| c.enabled = on,
-        on: |c| c.enabled,
-    });
-
-    const RULES: Block<Self> = Block(&[
-        (
-            "file",
-            Path,
-            "The single file the site is written to.",
-            |c| c.file.clone().into(),
-            |c, n, t| {
-                c.file = n.contained(t)?;
-                Ok(())
-            },
-        ),
-        (
-            "entry",
-            Text,
-            "The page that file opens on.",
-            |c| c.entry.clone().into(),
-            |c, n, t| {
-                c.entry = Some(n.string(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "router",
-            Choice(Router::names),
-            "How it addresses pages once opened.",
-            |c| Value::named(c.router),
-            |c, n, t| {
-                c.router = n.arg(t, 0)?.one::<Router>(t, NodeExt::span(n))?;
-                Ok(())
-            },
-        ),
-    ]);
 }

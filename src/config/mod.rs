@@ -41,15 +41,18 @@ pub mod typst;
 mod url;
 mod value;
 pub mod values;
+mod vocab;
 
 use std::path::{Path, PathBuf};
 
+use dispatch_derive::Table as Derive;
 use kdl::{KdlDocument, KdlNode};
 
-use crate::config::dispatch::Kind::{Block as Nested, Items, Overlay, Table, Text, Url};
+use crate::config::dispatch::Kind::{Overlay, Table};
 use crate::config::dispatch::{Block, Section};
 use crate::config::lang::Rtl;
 use crate::config::node::NodeExt;
+use crate::config::vocab::rule;
 use crate::content::listing::Titlecase;
 use crate::error::{ConfigError, Result, ThemeError};
 
@@ -125,81 +128,173 @@ pub use typst::fonts::FontConfig;
 pub use url::{BaseUrl, Basename, Percent, Slashed, UrlStyle};
 pub use values::Value;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Derive)]
 pub struct Config {
+    /// The site's name, used in titles, feeds and metadata.
+    #[key(opt text)]
     pub site: Option<String>,
-    /// Canonical base URL, e.g. `https://example.net`.
-    pub url: Option<String>,
-    /// Default language code.
-    pub lang: String,
-    pub author: Option<String>,
-    /// What the site is, in one line, for the feed channel.
+
+    /// What the site is, in one line, for the feed channel. Not a per-page `<meta>` fallback.
     ///
     /// Deliberately not a fallback for a page's `<meta name="description">`:
     /// the same sentence on every page reads as duplicate metadata.
+    #[key(opt text)]
     pub description: Option<String>,
+
+    /// The absolute base URL. Sitemaps, feeds and social cards cannot be generated without it.
+    ///
+    /// Canonical, e.g. `https://example.net`.
+    #[key(opt base)]
+    pub url: Option<String>,
+
+    /// The default language code, e.g. `en`.
+    #[key(text)]
+    pub lang: String,
+
+    /// The default author, used by any page naming none.
+    #[key(opt text)]
+    pub author: Option<String>,
+
+    /// A theme directory whose templates and assets this site layers over.
+    ///
+    /// Named like any Typst dependency (`@preview/plume:1.0.0`), each of whose
+    /// files the project may override.
+    #[key(opt text)]
+    pub theme: Option<String>,
+
+    /// Where the content, output and asset trees live.
+    #[key(name = Self::PATHS, nested(Paths))]
+    pub paths: Paths,
+
+    /// What the content tree holds and how it is read.
+    ///
+    /// Bundles, drafts, future dating, collections, taxonomies.
+    #[key(nested(ContentConfig))]
+    pub content: ContentConfig,
+
+    /// One block per language, each named by its code.
+    ///
+    /// Empty is a single-language site (only `lang`); a non-empty block turns
+    /// on i18n, and the default `lang` is a known language whether or not it
+    /// appears here.
+    #[key(items(LanguageConfig, "language", LanguageConfig::item))]
+    pub languages: Vec<(String, LanguageConfig)>,
+
+    /// The pipeline applied to the asset tree.
+    #[key(nested(AssetConfig))]
+    pub assets: AssetConfig,
+
+    /// Post-processing of typst's HTML output.
+    #[key(nested(HtmlConfig))]
+    pub html: HtmlConfig,
+
+    /// The shape of generated URLs, and how strictly links are checked.
+    #[key(nested(LinkConfig))]
+    pub links: LinkConfig,
+
+    /// The old paths this site still answers for, and how it answers them.
+    #[key(nested(RedirectsConfig))]
+    pub redirects: RedirectsConfig,
+
+    /// What the build verifies about the pages it produced. Its presence turns the markup rules on; `#false` turns them off again.
+    #[key(name = Self::CHECK, nested(CheckConfig))]
+    pub check: CheckConfig,
+
+    /// What the built pages tell a browser to trust.
+    ///
+    /// Integrity attributes and the content security policy, both derived from
+    /// what the pages actually load and inline.
+    #[key(name = Self::SECURITY, nested(SecurityConfig))]
+    pub security: SecurityConfig,
+
+    /// What a host is told about the built files. Its presence writes `_headers`; `#false` keeps the policy and drops the file.
+    #[key(nested(HeadersConfig))]
+    pub headers: HeadersConfig,
+
+    /// The files a build emits beside the pages.
+    ///
+    /// Sitemap, robots, llms, feeds, search indexes.
+    #[key(nested(GenerateConfig))]
+    pub generate: GenerateConfig,
+
+    /// What a page is drawn as beyond its HTML, each from a paged second compile.
+    ///
+    /// Social cards, PDFs, and the documents many pages are bound into.
+    #[key(nested(ArtifactConfig))]
+    pub artifacts: ArtifactConfig,
+
+    /// How a visitor moves between the built pages.
+    ///
+    /// SPA runtime, single-file export, browser speculation hints.
+    #[key(nested(NavigationConfig))]
+    pub navigation: NavigationConfig,
+
+    /// Delete anything under the output directory that this build did not produce. On by default; `#false` turns it off, and `keep` narrows it.
+    ///
+    /// The asset tree and build cache are never touched.
+    #[key(nested(PruneConfig))]
+    pub prune: PruneConfig,
+
+    /// Where incremental build state lives, and whether to use it.
+    ///
+    /// Not `headers { cache }`, which is what a *browser* is told.
+    #[key(nested(CacheConfig))]
+    pub cache: CacheConfig,
+
+    /// Typst engine knobs: language features, inputs, fonts, package registry.
+    #[key(name = Self::TYPST_SECTION, nested(TypstConfig))]
+    pub typst: TypstConfig,
+
+    /// Constants exposed to client-side JavaScript, one `key value` line per entry.
+    ///
+    /// Reached through the `baudelaire:config` virtual module: arbitrary
+    /// scalars keyed by name.
+    #[key(name = Self::CLIENT, custom(
+        Table,
+        |c: &Self| Value::each(&c.client, |value| value.into()),
+        |c: &mut Self, n: &kdl::KdlNode, t: &str| {
+            c.client = n.table(t)?;
+            Ok(())
+        },
+    ))]
+    pub client: Vec<(String, crate::codegen::Value)>,
+
+    /// External commands run before and after the build.
+    #[key(name = Self::HOOKS, nested(HooksConfig))]
+    pub hooks: HooksConfig,
+
+    /// Where to announce the site's metadata.
+    #[key(name = Self::ANNOUNCE, nested(AnnounceConfig))]
+    pub announce: AnnounceConfig,
+
+    /// Where `baudelaire deploy` uploads the built site.
+    #[key(name = Self::DEPLOY, nested(DeployConfig))]
+    pub deploy: DeployConfig,
+
+    /// The development server.
+    #[key(name = Self::SERVE, nested(ServeConfig))]
+    pub serve: ServeConfig,
+
+    /// Named overlays, each selected with `--profile` and each accepting any key on this page.
+    #[key(name = Self::PROFILES, custom(
+        Overlay,
+        |c: &Self| c.profiles.iter().map(|(name, _)| name.clone()).collect(),
+        |c: &mut Self, n: &kdl::KdlNode, t: &str| {
+            c.profiles = n.unique(t, "profile", |child, t| {
+                Ok((child.name().value().to_owned(), child.block(t)?.clone()))
+            })?;
+            Ok(())
+        },
+    ))]
+    pub profiles: Vec<(String, KdlDocument)>,
+
     /// The project root: what every other path is relative to, and what typst
     /// resolves `/`-absolute imports against.
     pub root: PathBuf,
-    pub paths: Paths,
-    /// A theme package supplying templates, assets, and config defaults, named
-    /// like any Typst dependency (`@preview/plume:1.0.0`), each of which the
-    /// project may override.
-    pub theme: Option<String>,
-    /// What the content tree contains and how it is read: bundles, drafts,
-    /// future dating, collections, taxonomies.
-    pub content: ContentConfig,
-    /// Declared languages keyed by code. Empty is a single-language site (only
-    /// `lang`); a non-empty block turns on i18n, and the default `lang` is a
-    /// known language whether or not it appears here.
-    pub languages: Vec<(String, LanguageConfig)>,
-    pub assets: AssetConfig,
-    pub html: HtmlConfig,
-    pub links: LinkConfig,
-    /// Where the paths no page owns forward to, and whether a rule file or an
-    /// HTML stub says so.
-    pub redirects: RedirectsConfig,
-    /// What the build verifies about the pages it produced: that their links
-    /// resolve, that their markup holds, and that none outweighs its budget.
-    pub check: CheckConfig,
-    /// Integrity attributes and the content security policy, both derived from
-    /// what the pages actually load and inline.
-    pub security: SecurityConfig,
-    /// What a host is told about the built files: the `Cache-Control` policy
-    /// and the rules of the site's own, written to `_headers` and applied by
-    /// every destination that can state them.
-    pub headers: HeadersConfig,
-    /// Files the build generates beside the pages: sitemap, robots, llms,
-    /// feeds, search indexes.
-    pub generate: GenerateConfig,
-    /// What a page is drawn as beyond its HTML: social cards, PDFs, and the
-    /// documents many pages are bound into.
-    pub artifacts: ArtifactConfig,
-    /// How a visitor moves between the built pages: SPA runtime, single-file
-    /// export, browser speculation hints.
-    pub navigation: NavigationConfig,
-    /// Remove orphaned outputs from `dist` on each build: files a previous
-    /// build wrote that this one no longer produces. The asset tree and build
-    /// cache are never touched.
-    pub prune: PruneConfig,
-    /// Typst engine knobs (`sys.inputs`, experimental features).
-    pub typst: TypstConfig,
-    /// Build-time constants exposed to client JS through the `baudelaire:config`
-    /// virtual module: arbitrary scalars keyed by name.
-    pub client: Vec<(String, crate::codegen::Value)>,
-    /// Build cache options: where the incremental manifest lives, and whether
-    /// it is consulted. Not `headers { cache }`, which is what a *browser* is
-    /// told.
-    pub cache: CacheConfig,
-    pub hooks: HooksConfig,
-    pub announce: AnnounceConfig,
-    pub deploy: DeployConfig,
-    pub serve: ServeConfig,
+
     /// The active profile name, if one was applied (exposed to pages).
     pub profile: Option<String>,
-    /// Named profile partials, applied over the base in
-    /// [`Config::with_profile`].
-    pub profiles: Vec<(String, KdlDocument)>,
+
     /// The raw `config.kdl` text this config was parsed from: the retained
     /// profile nodes carry spans into this exact string.
     pub(crate) source: String,
@@ -993,234 +1088,4 @@ impl Scratch {
             Self::Snippets => "snippets",
         }
     }
-}
-
-impl Section for Config {
-    const RULES: Block<Self> = Block(&[
-        (
-            "site",
-            Text,
-            "The site's name, used in titles, feeds and metadata.",
-            |c| c.site.clone().into(),
-            |c, n, t| {
-                c.site = Some(n.string(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "description",
-            Text,
-            "What the site is, in one line, for the feed channel. Not a per-page `<meta>` fallback.",
-            |c| c.description.clone().into(),
-            |c, n, t| {
-                c.description = Some(n.string(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "url",
-            Url,
-            "The absolute base URL. Sitemaps, feeds and social cards cannot be generated without it.",
-            |c| c.url.clone().into(),
-            |c, n, t| {
-                c.url = Some(n.base_url(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "lang",
-            Text,
-            "The default language code, e.g. `en`.",
-            |c| c.lang.clone().into(),
-            |c, n, t| {
-                c.lang = n.string(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "author",
-            Text,
-            "The default author, used by any page naming none.",
-            |c| c.author.clone().into(),
-            |c, n, t| {
-                c.author = Some(n.string(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "theme",
-            Text,
-            "A theme directory whose templates and assets this site layers over.",
-            |c| c.theme.clone().into(),
-            |c, n, t| {
-                c.theme = Some(n.string(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            Self::PATHS,
-            Nested(Paths::rows),
-            "Where the content, output and asset trees live.",
-            |c| c.paths.values(),
-            |c, n, t| c.paths.fill(n, t),
-        ),
-        (
-            "content",
-            Nested(ContentConfig::rows),
-            "What the content tree holds and how it is read.",
-            |c| c.content.values(),
-            |c, n, t| c.content.fill(n, t),
-        ),
-        (
-            "languages",
-            Items(LanguageConfig::rows),
-            "One block per language, each named by its code.",
-            |c| Value::each(&c.languages, Section::values),
-            |c, n, t| {
-                c.languages = n.unique(t, "language", LanguageConfig::item)?;
-                Ok(())
-            },
-        ),
-        (
-            "assets",
-            Nested(AssetConfig::rows),
-            "The pipeline applied to the asset tree.",
-            |c| c.assets.values(),
-            |c, n, t| c.assets.fill(n, t),
-        ),
-        (
-            "html",
-            Nested(HtmlConfig::rows),
-            "Post-processing of typst's HTML output.",
-            |c| c.html.values(),
-            |c, n, t| c.html.fill(n, t),
-        ),
-        (
-            "links",
-            Nested(LinkConfig::rows),
-            "The shape of generated URLs, and how strictly links are checked.",
-            |c| c.links.values(),
-            |c, n, t| c.links.fill(n, t),
-        ),
-        (
-            "redirects",
-            Nested(RedirectsConfig::rows),
-            "The old paths this site still answers for, and how it answers them.",
-            |c| c.redirects.values(),
-            |c, n, t| c.redirects.fill(n, t),
-        ),
-        (
-            Self::CHECK,
-            Nested(CheckConfig::rows),
-            "What the build verifies about the pages it produced. Its presence turns the markup rules on; `#false` turns them off again.",
-            |c| c.check.values(),
-            |c, n, t| c.check.fill(n, t),
-        ),
-        (
-            Self::SECURITY,
-            Nested(SecurityConfig::rows),
-            "What the built pages tell a browser to trust.",
-            |c| c.security.values(),
-            |c, n, t| c.security.fill(n, t),
-        ),
-        (
-            "headers",
-            Nested(HeadersConfig::rows),
-            "What a host is told about the built files. Its presence writes `_headers`; `#false` keeps the policy and drops the file.",
-            |c| c.headers.values(),
-            |c, n, t| c.headers.fill(n, t),
-        ),
-        (
-            "generate",
-            Nested(GenerateConfig::rows),
-            "The files a build emits beside the pages.",
-            |c| c.generate.values(),
-            |c, n, t| c.generate.fill(n, t),
-        ),
-        (
-            "artifacts",
-            Nested(ArtifactConfig::rows),
-            "What a page is drawn as beyond its HTML, each from a paged second compile.",
-            |c| c.artifacts.values(),
-            |c, n, t| c.artifacts.fill(n, t),
-        ),
-        (
-            "navigation",
-            Nested(NavigationConfig::rows),
-            "How a visitor moves between the built pages.",
-            |c| c.navigation.values(),
-            |c, n, t| c.navigation.fill(n, t),
-        ),
-        (
-            "prune",
-            Nested(PruneConfig::rows),
-            "Delete anything under the output directory that this build did not produce. On by default; `#false` turns it off, and `keep` narrows it.",
-            |c| c.prune.values(),
-            |c, n, t| c.prune.fill(n, t),
-        ),
-        (
-            "cache",
-            Nested(CacheConfig::rows),
-            "Where incremental build state lives, and whether to use it.",
-            |c| c.cache.values(),
-            |c, n, t| c.cache.fill(n, t),
-        ),
-        (
-            Self::TYPST_SECTION,
-            Nested(TypstConfig::rows),
-            "Typst engine knobs: language features, inputs, fonts, package registry.",
-            |c| c.typst.values(),
-            |c, n, t| c.typst.fill(n, t),
-        ),
-        (
-            Self::CLIENT,
-            Table,
-            "Constants exposed to client-side JavaScript, one `key value` line per entry.",
-            |c| Value::each(&c.client, |value| value.into()),
-            |c, n, t| {
-                c.client = n.table(t)?;
-                Ok(())
-            },
-        ),
-        (
-            Self::HOOKS,
-            Nested(HooksConfig::rows),
-            "External commands run before and after the build.",
-            |c| c.hooks.values(),
-            |c, n, t| c.hooks.fill(n, t),
-        ),
-        (
-            Self::ANNOUNCE,
-            Nested(AnnounceConfig::rows),
-            "Where to announce the site's metadata.",
-            |c| c.announce.values(),
-            |c, n, t| c.announce.fill(n, t),
-        ),
-        (
-            Self::DEPLOY,
-            Nested(DeployConfig::rows),
-            "Where `baudelaire deploy` uploads the built site.",
-            |c| c.deploy.values(),
-            |c, n, t| c.deploy.fill(n, t),
-        ),
-        (
-            Self::SERVE,
-            Nested(ServeConfig::rows),
-            "The development server.",
-            |c| c.serve.values(),
-            |c, n, t| c.serve.fill(n, t),
-        ),
-        (
-            Self::PROFILES,
-            Overlay,
-            "Named overlays, each selected with `--profile` and each accepting any key on this page.",
-            |c| c.profiles.iter().map(|(name, _)| name.clone()).collect(),
-            |c, n, t| {
-                c.profiles = n.unique(t, "profile", |child, t| {
-                    Ok((child.name().value().to_owned(), child.block(t)?.clone()))
-                })?;
-                Ok(())
-            },
-        ),
-    ]);
 }

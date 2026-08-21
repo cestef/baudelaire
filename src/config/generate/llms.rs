@@ -1,34 +1,22 @@
 //! `generate { llms { } }`: `llms.txt`.
 
-use crate::config::dispatch::Kind::Text;
-use crate::config::dispatch::{Block, Section, Switch};
-use crate::config::node::NodeExt;
+use dispatch_derive::Table;
+
+use crate::config::dispatch::{Block, Section};
+use crate::config::vocab::rule;
 
 /// `llms.txt` generation ([llmstxt.org]): a Markdown index of the site's pages
 /// for LLM consumption. Enabled by the presence of a `generate { llms }` block.
 ///
 /// [llmstxt.org]: https://llmstxt.org
-#[derive(Debug, Clone, Hash, Default)]
+#[derive(Debug, Clone, Hash, Default, Table)]
+#[table(hook(switch = enabled))]
 pub struct LlmsConfig {
     pub enabled: bool,
-    /// Optional one-line summary rendered as the blockquote under the title.
+
+    /// A one-line description of the site, put at the top of the file.
+    ///
+    /// Rendered as the blockquote under the title.
+    #[key(opt text)]
     pub summary: Option<String>,
-}
-
-impl Section for LlmsConfig {
-    const SWITCH: Option<Switch<Self>> = Some(Switch {
-        set: |c, on| c.enabled = on,
-        on: |c| c.enabled,
-    });
-
-    const RULES: Block<Self> = Block(&[(
-        "summary",
-        Text,
-        "A one-line description of the site, put at the top of the file.",
-        |c| c.summary.clone().into(),
-        |c, n, t| {
-            c.summary = Some(n.string(t, 0)?);
-            Ok(())
-        },
-    )]);
 }

@@ -2,66 +2,52 @@
 
 pub mod fonts;
 
+use dispatch_derive::Table;
+
 use crate::config::FontConfig;
 use crate::config::Value;
-use crate::config::dispatch::Kind::{Block as Nested, Table, Toggles, Url};
+use crate::config::dispatch::Kind::{Table as Free, Url};
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
+use crate::config::vocab::rule;
 
-#[derive(Debug, Clone, Hash, Default)]
+#[derive(Debug, Clone, Hash, Default, Table)]
 pub struct TypstConfig {
-    /// Extra experimental Typst features to enable (e.g. `a11y-extras`). `html`
-    /// is always forced on in `world.rs`, so this list is purely additive.
+    /// Typst language features to enable, or `-name` to disable one. `html` cannot be removed.
+    ///
+    /// `html` is always forced on in `world.rs`, so this list is purely
+    /// additive.
+    #[key(toggles)]
     pub features: Vec<String>,
-    /// Typst `sys.inputs` entries.
-    pub inputs: Vec<(String, String)>,
-    /// A mirror of Typst Universe to download the `preview` namespace from,
-    /// without the trailing slash. `None` is the official registry, and only
-    /// `preview` is ever fetched.
-    pub registry: Option<String>,
-    pub fonts: FontConfig,
-}
 
-impl Section for TypstConfig {
-    const RULES: Block<Self> = Block(&[
-        (
-            "features",
-            Toggles,
-            "Typst language features to enable, or `-name` to disable one. `html` cannot be removed.",
-            |c| c.features.clone().into(),
-            |c, n, t| {
-                c.features = n.features(t)?;
-                Ok(())
-            },
-        ),
-        (
-            "inputs",
-            Table,
-            "Values passed to every compile as `sys.inputs`, one `key value` line per entry.",
-            |c| Value::each(&c.inputs, |input| input.clone().into()),
-            |c, n, t| {
-                c.inputs = n.pairs(t)?;
-                Ok(())
-            },
-        ),
-        (
-            "fonts",
-            Nested(FontConfig::rows),
-            "Where a compile looks for glyphs.",
-            |c| c.fonts.values(),
-            |c, n, t| c.fonts.fill(n, t),
-        ),
-        // Stored without its trailing slash: the store joins `/preview/..` onto
-        // it, and a doubled slash is a 404 from some hosts.
-        (
-            "registry",
-            Url,
-            "Where typst packages are fetched from.",
-            |c| c.registry.clone().into(),
-            |c, n, t| {
-                c.registry = Some(n.url(t, 0)?.trim_end_matches('/').to_owned());
-                Ok(())
-            },
-        ),
-    ]);
+    /// Values passed to every compile as `sys.inputs`, one `key value` line per entry.
+    #[key(custom(
+        Free,
+        |c: &Self| Value::each(&c.inputs, |input| input.clone().into()),
+        |c: &mut Self, n: &kdl::KdlNode, t: &str| {
+            c.inputs = n.pairs(t)?;
+            Ok(())
+        },
+    ))]
+    pub inputs: Vec<(String, String)>,
+
+    /// Where a compile looks for glyphs.
+    #[key(nested(FontConfig))]
+    pub fonts: FontConfig,
+
+    /// Where typst packages are fetched from.
+    ///
+    /// A mirror of Typst Universe, stored without its trailing slash: the store
+    /// joins `/preview/..` onto it, and a doubled slash is a 404 from some
+    /// hosts. `None` is the official registry, and only `preview` is ever
+    /// fetched.
+    #[key(custom(
+        Url,
+        |c: &Self| c.registry.clone().into(),
+        |c: &mut Self, n: &kdl::KdlNode, t: &str| {
+            c.registry = Some(n.url(t, 0)?.trim_end_matches('/').to_owned());
+            Ok(())
+        },
+    ))]
+    pub registry: Option<String>,
 }

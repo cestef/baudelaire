@@ -1,19 +1,26 @@
 //! `html { meta { } }`: the head tags a link preview reads.
 
-use crate::config::dispatch::Kind::Text;
-use crate::config::dispatch::{Block, Section, Switch};
-use crate::config::node::NodeExt;
+use dispatch_derive::Table;
+
+use crate::config::dispatch::{Block, Section};
+use crate::config::vocab::rule;
 
 /// The `<meta>` description, Open Graph and Twitter tags, and the two facts a
 /// build cannot derive for them.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, Table)]
+#[table(hook(switch = enabled))]
 pub struct MetaConfig {
     /// Emit the tags at all.
     pub enabled: bool,
-    /// The site's account, as `twitter:site` wants it: `@handle`.
+
+    /// The site's account for `twitter:site`, as `@handle`.
+    #[key(opt text)]
     pub twitter: Option<String>,
-    /// The preview image for a page that names none and gets no generated card;
-    /// a page's own `image` and a generated card both win over it.
+
+    /// The preview image for a page that names none and gets no generated card.
+    ///
+    /// A page's own `image` and a generated card both win over it.
+    #[key(opt text)]
     pub image: Option<String>,
 }
 
@@ -25,34 +32,4 @@ impl Default for MetaConfig {
             image: None,
         }
     }
-}
-
-impl Section for MetaConfig {
-    const SWITCH: Option<Switch<Self>> = Some(Switch {
-        set: |c, on| c.enabled = on,
-        on: |c| c.enabled,
-    });
-
-    const RULES: Block<Self> = Block(&[
-        (
-            "twitter",
-            Text,
-            "The site's account for `twitter:site`, as `@handle`.",
-            |c| c.twitter.clone().into(),
-            |c, n, t| {
-                c.twitter = Some(n.string(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "image",
-            Text,
-            "The preview image for a page that names none and gets no generated card.",
-            |c| c.image.clone().into(),
-            |c, n, t| {
-                c.image = Some(n.string(t, 0)?);
-                Ok(())
-            },
-        ),
-    ]);
 }

@@ -1,15 +1,18 @@
 //! `artifacts { pdf { } }`: a PDF per page. A document bound from *many* pages
 //! is `artifacts { bundles { } }`.
 
+use dispatch_derive::Table;
+
 use crate::config::Basename;
-use crate::config::dispatch::Kind::{Block as Nested, Text};
-use crate::config::dispatch::{Block, Section, Switch};
-use crate::config::node::NodeExt;
+use crate::config::dispatch::{Block, Section};
+use crate::config::vocab::rule;
 
 /// What the typesetter writes on paper, page by page:
 /// `artifacts { pdf { .. } }`.
-#[derive(Debug, Clone, Hash, Default)]
+#[derive(Debug, Clone, Hash, Default, Table)]
 pub struct PdfConfig {
+    /// A PDF per page, beside its HTML. Its presence turns it on; `#false` turns it off again.
+    #[key(nested(PdfPages))]
     pub pages: PdfPages,
 }
 
@@ -25,10 +28,15 @@ impl PdfConfig {
 ///
 /// Like a card it needs its own template, because a layout that emits
 /// `html.elem` produces nothing on the paged target.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, Table)]
+#[table(hook(switch = enabled))]
 pub struct PdfPages {
     pub enabled: bool,
-    /// The paged template file under the templates directory.
+
+    /// The typst template each page is typeset with.
+    ///
+    /// A paged template file under the templates directory.
+    #[key(text)]
     pub template: String,
 }
 
@@ -54,33 +62,4 @@ impl Default for PdfPages {
             template: "print.typ".into(),
         }
     }
-}
-
-impl Section for PdfConfig {
-    const RULES: Block<Self> = Block(&[(
-        "pages",
-        Nested(PdfPages::rows),
-        "A PDF per page, beside its HTML. Its presence turns it on; `#false` turns it off again.",
-        |c| c.pages.values(),
-        |c, n, t| c.pages.fill(n, t),
-    )]);
-}
-
-/// The `pages { }` block, whose presence enables the per-page PDF.
-impl Section for PdfPages {
-    const SWITCH: Option<Switch<Self>> = Some(Switch {
-        set: |c, on| c.enabled = on,
-        on: |c| c.enabled,
-    });
-
-    const RULES: Block<Self> = Block(&[(
-        "template",
-        Text,
-        "The typst template each page is typeset with.",
-        |c| c.template.clone().into(),
-        |c, n, t| {
-            c.template = n.string(t, 0)?;
-            Ok(())
-        },
-    )]);
 }

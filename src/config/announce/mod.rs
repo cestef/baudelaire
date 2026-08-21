@@ -2,26 +2,18 @@
 
 pub mod standard;
 
+use dispatch_derive::Table;
+
 use crate::config::StandardConfig;
-use crate::config::Value;
-use crate::config::dispatch::Kind::Block as Nested;
 use crate::config::dispatch::{Block, Section};
+use crate::config::vocab::rule;
 
 /// Announce destinations for the built site, one optional block per backend.
 /// Secrets are never stored here; a backend reads its credentials from the
 /// environment at announce time.
-#[derive(Debug, Clone, Hash, Default)]
+#[derive(Debug, Clone, Hash, Default, Table)]
 pub struct AnnounceConfig {
-    /// standard.site (AT Protocol) target.
+    /// Announce to standard.site over atproto. Its presence turns it on.
+    #[key(opt nested(StandardConfig))]
     pub standard: Option<StandardConfig>,
-}
-
-impl Section for AnnounceConfig {
-    const RULES: Block<Self> = Block(&[(
-        "standard",
-        Nested(StandardConfig::rows),
-        "Announce to standard.site over atproto. Its presence turns it on.",
-        |c| c.standard.as_ref().map_or(Value::Unset, Section::values),
-        |c, n, t| StandardConfig::optional(&mut c.standard, n, t),
-    )]);
 }

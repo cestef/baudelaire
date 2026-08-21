@@ -3,50 +3,81 @@
 
 use kdl::KdlNode;
 
-use crate::config::Value;
-use crate::config::dispatch::Kind::{Block as Nested, Choice, Flag, Number, Text};
-use crate::config::dispatch::{Block, Section, Switch};
+use dispatch_derive::Table;
+
+use crate::config::dispatch::Kind::Number;
+use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
 use crate::config::value::ValueExt;
-use crate::config::{Named, PaginateConfig, SortKey};
+use crate::config::vocab::rule;
+use crate::config::{PaginateConfig, SortKey};
 use crate::content::Credit;
 use crate::error::{ConfigError, ConfigErrorKind, Result};
 use crate::ui::markup;
 
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, Table)]
 pub struct TaxonomyConfig {
-    /// Frontmatter key to read terms from.
+    /// The frontmatter field its terms are read from. Defaults to the taxonomy's own id.
+    #[key(text)]
     pub key: String,
-    /// What a page claims about the entities it names here: `authors` credits
-    /// them with writing it. Only meaningful with `entities`.
-    pub credit: Option<Credit>,
-    /// The `content { entities { } }` registry this taxonomy's terms are ids
-    /// in. `None` is a plain taxonomy, whose terms are words.
+
+    /// The `content { entities { } }` registry its terms are ids in.
+    ///
+    /// `None` is a plain taxonomy, whose terms are words.
+    #[key(opt text)]
     pub entities: Option<String>,
-    /// The page generated per term, and the index every term appears on.
+
+    /// What a page claims about the entities it names here, for the surfaces that can spell it.
+    ///
+    /// `authors` credits them with writing it. Only meaningful with
+    /// `entities`.
+    #[key(opt choice(Credit))]
+    pub credit: Option<Credit>,
+
+    /// Generate a page per term, and an index of the terms. Its presence turns them on; `#false` turns them off again.
+    #[key(nested(ListingConfig))]
     pub listing: ListingConfig,
-    /// Let a term that names an entity written as a *page* be described by that
-    /// page, instead of generating a listing of its own.
+
+    /// Let a term written as a profile page be described by it, instead of generating a listing beside it.
+    #[key(flag)]
     pub describe: bool,
-    /// What a term's members are ordered by.
+
+    /// What a term's members are ordered by. Defaults to `title`, since a term spans collections.
+    #[key(choice(SortKey))]
     pub sort: SortKey,
-    /// Reverse that order.
+
+    /// Reverse that order, for the newest-first a dated term listing wants.
+    #[key(flag)]
     pub reverse: bool,
 }
 
 /// A taxonomy's generated listings: whether there are any, how a term page is
 /// chunked, and what renders it.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, Table)]
+#[table(hook(switch = enabled))]
 pub struct ListingConfig {
     /// Whether the term pages and their index are generated at all: the
     /// block's presence.
     pub enabled: bool,
-    /// Members per term page. `None` puts every member on one page.
+
+    /// Members per term page. Omitted, a term's listing is one page.
+    #[key(custom(
+        Number,
+        |c: &Self| c.size.into(),
+        |c: &mut Self, n: &kdl::KdlNode, t: &str| {
+            let written = n.arg(t, 0)?.integer(t, NodeExt::span(n))?;
+            c.size = Some(PaginateConfig::size(written, t, NodeExt::span(n))?);
+            Ok(())
+        },
+    ))]
     pub size: Option<usize>,
-    /// Template for the generated term pages and their index.
+
+    /// The layout those listings render through.
+    #[key(opt text)]
     pub template: Option<String>,
-    /// Path segment before a term page's number (`/tags/rust/page/2/`); empty
-    /// drops it.
+
+    /// The path segment before a term page's number, as in `/tags/rust/page/2/`.
+    #[key(segment)]
     pub prefix: String,
 }
 
@@ -120,117 +151,4 @@ impl TaxonomyConfig {
         }
         Ok(())
     }
-}
-
-impl Section for TaxonomyConfig {
-    const RULES: Block<Self> = Block(&[
-        (
-            "key",
-            Text,
-            "The frontmatter field its terms are read from. Defaults to the taxonomy's own id.",
-            |c| c.key.clone().into(),
-            |c, n, t| {
-                c.key = n.string(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "entities",
-            Text,
-            "The `content { entities { } }` registry its terms are ids in.",
-            |c| c.entities.clone().into(),
-            |c, n, t| {
-                c.entities = Some(n.string(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "credit",
-            Choice(Credit::names),
-            "What a page claims about the entities it names here, for the surfaces that can spell it.",
-            |c| c.credit.map(Value::named).into(),
-            |c, n, t| {
-                c.credit = Some(n.arg(t, 0)?.one::<Credit>(t, NodeExt::span(n))?);
-                Ok(())
-            },
-        ),
-        (
-            "listing",
-            Nested(ListingConfig::rows),
-            "Generate a page per term, and an index of the terms. Its presence turns them on; `#false` turns them off again.",
-            |c| c.listing.values(),
-            |c, n, t| c.listing.fill(n, t),
-        ),
-        (
-            "describe",
-            Flag,
-            "Let a term written as a profile page be described by it, instead of generating a listing beside it.",
-            |c| c.describe.into(),
-            |c, n, t| {
-                c.describe = n.boolean(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "sort",
-            Choice(SortKey::names),
-            "What a term's members are ordered by. Defaults to `title`, since a term spans collections.",
-            |c| Value::named(c.sort),
-            |c, n, t| {
-                c.sort = n.arg(t, 0)?.one::<SortKey>(t, NodeExt::span(n))?;
-                Ok(())
-            },
-        ),
-        (
-            "reverse",
-            Flag,
-            "Reverse that order, for the newest-first a dated term listing wants.",
-            |c| c.reverse.into(),
-            |c, n, t| {
-                c.reverse = n.boolean(t, 0)?;
-                Ok(())
-            },
-        ),
-    ]);
-}
-
-impl Section for ListingConfig {
-    const SWITCH: Option<Switch<Self>> = Some(Switch {
-        set: |c, on| c.enabled = on,
-        on: |c| c.enabled,
-    });
-
-    const RULES: Block<Self> = Block(&[
-        (
-            "size",
-            Number,
-            "Members per term page. Omitted, a term's listing is one page.",
-            |c| c.size.into(),
-            |c, n, t| {
-                let written = n.arg(t, 0)?.integer(t, NodeExt::span(n))?;
-                c.size = Some(PaginateConfig::size(written, t, NodeExt::span(n))?);
-                Ok(())
-            },
-        ),
-        (
-            "template",
-            Text,
-            "The layout those listings render through.",
-            |c| c.template.clone().into(),
-            |c, n, t| {
-                c.template = Some(n.string(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "prefix",
-            Text,
-            "The path segment before a term page's number, as in `/tags/rust/page/2/`.",
-            |c| c.prefix.clone().into(),
-            |c, n, t| {
-                c.prefix = n.template(t, 0)?;
-                Ok(())
-            },
-        ),
-    ]);
 }

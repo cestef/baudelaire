@@ -1,25 +1,62 @@
 //! `serve { }`: dev server options.
 
-use crate::config::dispatch::Kind::{Flag, Number, Text, Texts};
+use dispatch_derive::Table;
+
+use crate::config::dispatch::Kind::Texts;
 use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
+use crate::config::vocab::rule;
 use crate::error::ConfigError;
 
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, Table)]
 pub struct ServeConfig {
+    /// The port the dev server listens on.
+    #[key(port)]
     pub port: u16,
+
+    /// The address it binds. Defaults to loopback; it has no authentication.
+    #[key(text)]
     pub bind: String,
+
+    /// Open a browser when the server starts.
+    #[key(flag)]
     pub open: bool,
+
+    /// Watch the sources and rebuild. Off, it serves what is already built.
+    #[key(flag)]
     pub watch: bool,
-    /// Extra paths to watch, beyond content, templates, and assets.
+
+    /// Extra paths to watch, one word each.
+    ///
+    /// Beyond content, templates, and assets.
+    #[key(texts)]
     pub include: Vec<String>,
-    /// Paths the watcher ignores, checked first so they override both the
-    /// defaults and `include`.
+
+    /// Paths to leave unwatched, one word each.
+    ///
+    /// Checked first, so they override both the defaults and `include`.
+    #[key(texts)]
     pub exclude: Vec<String>,
-    /// The command a preview alt-click runs to open a source location: the
-    /// program, then each argument as its own word, with `{file}`, `{line}` and
-    /// `{column}` substituted per argument and no shell in between. Empty means
-    /// no editor.
+
+    /// The command alt-clicking a preview element runs, program and arguments as separate words.
+    ///
+    /// `{file}`, `{line}` and `{column}` are substituted per argument, with no
+    /// shell in between. Empty means no editor.
+    #[key(custom(
+        Texts,
+        |c: &Self| c.editor.clone().into(),
+        |c: &mut Self, n: &kdl::KdlNode, t: &str| {
+            let span = NodeExt::span(n);
+            let words = n.words(t)?;
+            if let [only] = words.as_slice()
+                && only.split_whitespace().count() > 1
+            {
+                return Err(ConfigError::command_line(t, only, span).into());
+            }
+            c.editor = words;
+            Ok(())
+        },
+    ))]
     pub editor: Vec<String>,
 }
 
@@ -35,86 +72,4 @@ impl Default for ServeConfig {
             editor: Vec::new(),
         }
     }
-}
-
-impl Section for ServeConfig {
-    const RULES: Block<Self> = Block(&[
-        (
-            "port",
-            Number,
-            "The port the dev server listens on.",
-            |c| c.port.into(),
-            |c, n, t| {
-                c.port = n.port(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "bind",
-            Text,
-            "The address it binds. Defaults to loopback; it has no authentication.",
-            |c| c.bind.clone().into(),
-            |c, n, t| {
-                c.bind = n.string(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "open",
-            Flag,
-            "Open a browser when the server starts.",
-            |c| c.open.into(),
-            |c, n, t| {
-                c.open = n.boolean(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "watch",
-            Flag,
-            "Watch the sources and rebuild. Off, it serves what is already built.",
-            |c| c.watch.into(),
-            |c, n, t| {
-                c.watch = n.boolean(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "include",
-            Texts,
-            "Extra paths to watch, one word each.",
-            |c| c.include.clone().into(),
-            |c, n, t| {
-                c.include = n.words(t)?;
-                Ok(())
-            },
-        ),
-        (
-            "exclude",
-            Texts,
-            "Paths to leave unwatched, one word each.",
-            |c| c.exclude.clone().into(),
-            |c, n, t| {
-                c.exclude = n.words(t)?;
-                Ok(())
-            },
-        ),
-        (
-            "editor",
-            Texts,
-            "The command alt-clicking a preview element runs, program and arguments as separate words.",
-            |c| c.editor.clone().into(),
-            |c, n, t| {
-                let span = NodeExt::span(n);
-                let words = n.words(t)?;
-                if let [only] = words.as_slice()
-                    && only.split_whitespace().count() > 1
-                {
-                    return Err(ConfigError::command_line(t, only, span).into());
-                }
-                c.editor = words;
-                Ok(())
-            },
-        ),
-    ]);
 }

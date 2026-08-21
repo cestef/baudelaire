@@ -1,17 +1,32 @@
 //! `assets { images { optimize { } } }`: per-format recompression.
 
+use dispatch_derive::Table;
+
 use crate::config::Named;
 use crate::config::Value;
-use crate::config::dispatch::Kind::{Choice, Line, Number};
+use crate::config::dispatch::Kind::Line;
 use crate::config::dispatch::{Attributed, Attrs, Block, Section};
-use crate::config::value::ValueExt;
+use crate::config::vocab::{attr, rule};
 use crate::mime::ImageFormat;
 
 /// Build-time image optimization, per format. A format is enabled by naming it
 /// in the `optimize { .. }` block; `None` leaves that format untouched.
-#[derive(Debug, Clone, Hash, Default)]
+#[derive(Debug, Clone, Hash, Default, Table)]
 pub struct OptimizeConfig {
+    /// Optimize PNGs. Its presence turns them on; the attributes tune it.
+    #[key(custom(
+        Line(PngConfig::rows),
+        |c: &Self| c.png.as_ref().map_or(Value::Unset, Attributed::values),
+        |c: &mut Self, n: &kdl::KdlNode, t: &str| c.png.get_or_insert_default().read(n, t),
+    ))]
     pub png: Option<PngConfig>,
+
+    /// Optimize JPEGs. Its presence turns them on; the attributes tune it.
+    #[key(custom(
+        Line(JpegConfig::rows),
+        |c: &Self| c.jpeg.as_ref().map_or(Value::Unset, Attributed::values),
+        |c: &mut Self, n: &kdl::KdlNode, t: &str| c.jpeg.get_or_insert_default().read(n, t),
+    ))]
     pub jpeg: Option<JpegConfig>,
 }
 
@@ -33,10 +48,15 @@ impl OptimizeConfig {
 }
 
 /// PNG optimization tuning (oxipng).
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, Table)]
+#[table(impl = Attributed, const ATTRS: Attrs<Self> = Attrs, rule = attr)]
 pub struct PngConfig {
-    /// Optimization preset, `0` (fast) – `6` (exhaustive).
+    /// Compression effort, 0 to 6. Higher is slower and smaller.
+    #[key(bounded(u8, 0, 6))]
     pub level: u8,
+
+    /// Which ancillary chunks to discard.
+    #[key(choice(PngStrip))]
     pub strip: PngStrip,
 }
 
@@ -60,9 +80,11 @@ impl Named for PngStrip {
 }
 
 /// JPEG optimization tuning (re-encode).
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, Table)]
+#[table(impl = Attributed, const ATTRS: Attrs<Self> = Attrs, rule = attr)]
 pub struct JpegConfig {
-    /// Re-encode quality, `1`–`100`.
+    /// Encoder quality, 1 to 100.
+    #[key(bounded(u8, 1, 100))]
     pub quality: u8,
 }
 
@@ -79,61 +101,4 @@ impl Default for JpegConfig {
     fn default() -> Self {
         Self { quality: 82 }
     }
-}
-
-impl Section for OptimizeConfig {
-    const RULES: Block<Self> = Block(&[
-        (
-            "png",
-            Line(PngConfig::rows),
-            "Optimize PNGs. Its presence turns them on; the attributes tune it.",
-            |c| c.png.as_ref().map_or(Value::Unset, Attributed::values),
-            |c, n, t| c.png.get_or_insert_default().read(n, t),
-        ),
-        (
-            "jpeg",
-            Line(JpegConfig::rows),
-            "Optimize JPEGs. Its presence turns them on; the attributes tune it.",
-            |c| c.jpeg.as_ref().map_or(Value::Unset, Attributed::values),
-            |c, n, t| c.jpeg.get_or_insert_default().read(n, t),
-        ),
-    ]);
-}
-
-impl Attributed for PngConfig {
-    const ATTRS: Attrs<Self> = Attrs(&[
-        (
-            "level",
-            Number,
-            "Compression effort, 0 to 6. Higher is slower and smaller.",
-            |c| c.level.into(),
-            |c, v, t, s| {
-                c.level = v.bounded(t, s, 0, 6)?;
-                Ok(())
-            },
-        ),
-        (
-            "strip",
-            Choice(PngStrip::names),
-            "Which ancillary chunks to discard.",
-            |c| Value::named(c.strip),
-            |c, v, t, s| {
-                c.strip = v.one::<PngStrip>(t, s)?;
-                Ok(())
-            },
-        ),
-    ]);
-}
-
-impl Attributed for JpegConfig {
-    const ATTRS: Attrs<Self> = Attrs(&[(
-        "quality",
-        Number,
-        "Encoder quality, 1 to 100.",
-        |c| c.quality.into(),
-        |c, v, t, s| {
-            c.quality = v.bounded(t, s, 1, 100)?;
-            Ok(())
-        },
-    )]);
 }

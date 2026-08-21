@@ -6,70 +6,38 @@ pub mod manifest;
 pub mod robots;
 pub mod search;
 
-use crate::config::dispatch::Kind::Block as Nested;
-use crate::config::dispatch::Kind::Flag;
+use dispatch_derive::Table;
+
 use crate::config::dispatch::{Block, Section};
-use crate::config::node::NodeExt;
+use crate::config::vocab::rule;
 use crate::config::{FeedConfig, LlmsConfig, ManifestConfig, RobotsConfig, SearchConfig};
 
 /// Each field is opt-in: either a flag or a block whose presence turns it on.
-#[derive(Debug, Clone, Hash, Default)]
+#[derive(Debug, Clone, Hash, Default, Table)]
 pub struct GenerateConfig {
-    /// Emit `sitemap.xml`, which needs `url` set.
+    /// Write `sitemap.xml`.
+    ///
+    /// Needs `url` set.
+    #[key(flag)]
     pub sitemap: bool,
-    pub robots: RobotsConfig,
-    pub llms: LlmsConfig,
-    pub manifest: ManifestConfig,
-    pub feed: FeedConfig,
-    pub search: SearchConfig,
-}
 
-impl Section for GenerateConfig {
-    const RULES: Block<Self> = Block(&[
-        (
-            "sitemap",
-            Flag,
-            "Write `sitemap.xml`.",
-            |c| c.sitemap.into(),
-            |c, n, t| {
-                c.sitemap = n.boolean(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "robots",
-            Nested(RobotsConfig::rows),
-            "Write `robots.txt`. Its presence turns it on; `#false` turns it off again.",
-            |c| c.robots.values(),
-            |c, n, t| c.robots.fill(n, t),
-        ),
-        (
-            "llms",
-            Nested(LlmsConfig::rows),
-            "Write `llms.txt`. Its presence turns it on; `#false` turns it off again.",
-            |c| c.llms.values(),
-            |c, n, t| c.llms.fill(n, t),
-        ),
-        (
-            "manifest",
-            Nested(ManifestConfig::rows),
-            "Write `manifest.webmanifest`. Its presence turns it on; `#false` turns it off again.",
-            |c| c.manifest.values(),
-            |c, n, t| c.manifest.fill(n, t),
-        ),
-        (
-            "feed",
-            Nested(FeedConfig::rows),
-            "Write syndication feeds.",
-            |c| c.feed.values(),
-            |c, n, t| c.feed.fill(n, t),
-        ),
-        (
-            "search",
-            Nested(SearchConfig::rows),
-            "Write a client-side search index.",
-            |c| c.search.values(),
-            |c, n, t| c.search.fill(n, t),
-        ),
-    ]);
+    /// Write `robots.txt`. Its presence turns it on; `#false` turns it off again.
+    #[key(nested(RobotsConfig))]
+    pub robots: RobotsConfig,
+
+    /// Write `llms.txt`. Its presence turns it on; `#false` turns it off again.
+    #[key(nested(LlmsConfig))]
+    pub llms: LlmsConfig,
+
+    /// Write `manifest.webmanifest`. Its presence turns it on; `#false` turns it off again.
+    #[key(nested(ManifestConfig))]
+    pub manifest: ManifestConfig,
+
+    /// Write syndication feeds.
+    #[key(nested(FeedConfig))]
+    pub feed: FeedConfig,
+
+    /// Write a client-side search index.
+    #[key(nested(SearchConfig))]
+    pub search: SearchConfig,
 }

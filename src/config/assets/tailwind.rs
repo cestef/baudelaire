@@ -2,26 +2,38 @@
 
 use std::path::PathBuf;
 
-use crate::config::dispatch::Kind::{Asset, Flag, Path as PathKind, Texts};
-use crate::config::dispatch::{Block, Section, Switch};
-use crate::config::node::NodeExt;
+use dispatch_derive::Table;
+
+use crate::config::dispatch::{Block, Section};
+use crate::config::vocab::rule;
 
 /// A Tailwind-compatible utility stylesheet, generated from the class names the
 /// site was written with. Enabled by the presence of an
 /// `assets { tailwind { .. } }` block.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, Table)]
+#[table(hook(switch = enabled))]
 pub struct TailwindConfig {
     pub enabled: bool,
+
     /// Where the sheet is served from, relative to the asset root.
+    #[key(asset)]
     pub path: PathBuf,
-    /// What is read to find class names; a directory is read whole. Empty means
-    /// the content and template trees.
+
+    /// The trees and files read to find class names. Unset, the content and template trees.
+    ///
+    /// A directory is read whole.
+    #[key(paths)]
     pub scan: Vec<PathBuf>,
-    /// An encre-css configuration file (TOML), relative to the project root.
-    /// Unset, the generator's own defaults are used.
+
+    /// An encre-css configuration file (TOML): theme, safelist, shortcuts, preflight.
+    ///
+    /// Relative to the project root. Unset, the generator's own defaults are
+    /// used.
+    #[key(opt path)]
     pub config: Option<PathBuf>,
-    /// Whether the sheet opens with a preflight (the reset rules Tailwind puts
-    /// in front of its utilities).
+
+    /// Whether the sheet opens with the reset rules Tailwind puts in front of its utilities.
+    #[key(flag)]
     pub preflight: bool,
 }
 
@@ -42,54 +54,4 @@ impl Default for TailwindConfig {
             preflight: true,
         }
     }
-}
-
-impl Section for TailwindConfig {
-    const SWITCH: Option<Switch<Self>> = Some(Switch {
-        set: |c, on| c.enabled = on,
-        on: |c| c.enabled,
-    });
-
-    const RULES: Block<Self> = Block(&[
-        (
-            "path",
-            Asset,
-            "Where the sheet is served from, relative to the asset root.",
-            |c| c.path.clone().into(),
-            |c, n, t| {
-                c.path = n.asset(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "scan",
-            Texts,
-            "The trees and files read to find class names. Unset, the content and template trees.",
-            |c| c.scan.clone().into(),
-            |c, n, t| {
-                c.scan = n.words(t)?.into_iter().map(PathBuf::from).collect();
-                Ok(())
-            },
-        ),
-        (
-            "config",
-            PathKind,
-            "An encre-css configuration file (TOML): theme, safelist, shortcuts, preflight.",
-            |c| c.config.clone().into(),
-            |c, n, t| {
-                c.config = Some(n.string(t, 0)?.into());
-                Ok(())
-            },
-        ),
-        (
-            "preflight",
-            Flag,
-            "Whether the sheet opens with the reset rules Tailwind puts in front of its utilities.",
-            |c| c.preflight.into(),
-            |c, n, t| {
-                c.preflight = n.boolean(t, 0)?;
-                Ok(())
-            },
-        ),
-    ]);
 }

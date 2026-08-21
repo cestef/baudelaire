@@ -1,23 +1,30 @@
 //! `navigation { speculation { } }`: browser-native prefetch hints.
 
+use dispatch_derive::Table;
+
 use crate::config::Named;
-use crate::config::Value;
-use crate::config::dispatch::Kind::Choice;
-use crate::config::dispatch::{Block, Section, Switch};
-use crate::config::node::NodeExt;
-use crate::config::value::ValueExt;
+use crate::config::dispatch::{Block, Section};
+use crate::config::vocab::rule;
 
 /// Browser-native navigation hints: a `<script type="speculationrules">`
 /// telling the browser to fetch, or fully render, an internal link's target
 /// before it is clicked.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, Table)]
+#[table(hook(switch = enabled))]
 pub struct SpeculationConfig {
     /// Whether to emit the rules.
     pub enabled: bool,
-    /// How eagerly to fetch a link's target (cheap: bytes only).
+
+    /// How eagerly the browser fetches a linked page.
+    ///
+    /// Cheap: bytes only.
+    #[key(choice(Eagerness))]
     pub prefetch: Eagerness,
-    /// How eagerly to render it in full (expensive: a hidden page, its scripts
-    /// running).
+
+    /// How eagerly it renders one ahead of the click.
+    ///
+    /// Expensive: a hidden page, its scripts running.
+    #[key(choice(Eagerness))]
     pub prerender: Eagerness,
 }
 
@@ -56,34 +63,4 @@ impl Default for SpeculationConfig {
             prerender: Eagerness::None,
         }
     }
-}
-
-impl Section for SpeculationConfig {
-    const SWITCH: Option<Switch<Self>> = Some(Switch {
-        set: |c, on| c.enabled = on,
-        on: |c| c.enabled,
-    });
-
-    const RULES: Block<Self> = Block(&[
-        (
-            "prefetch",
-            Choice(Eagerness::names),
-            "How eagerly the browser fetches a linked page.",
-            |c| Value::named(c.prefetch),
-            |c, n, t| {
-                c.prefetch = n.arg(t, 0)?.one::<Eagerness>(t, NodeExt::span(n))?;
-                Ok(())
-            },
-        ),
-        (
-            "prerender",
-            Choice(Eagerness::names),
-            "How eagerly it renders one ahead of the click.",
-            |c| Value::named(c.prerender),
-            |c, n, t| {
-                c.prerender = n.arg(t, 0)?.one::<Eagerness>(t, NodeExt::span(n))?;
-                Ok(())
-            },
-        ),
-    ]);
 }

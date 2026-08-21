@@ -1,18 +1,22 @@
 //! `html { region { } }`: which part of a rendered page is its prose.
 
-use crate::config::dispatch::Kind::{Text, Texts};
+use dispatch_derive::Table;
+
 use crate::config::dispatch::{Block, Section};
-use crate::config::node::NodeExt;
+use crate::config::vocab::rule;
 
 /// The element a page's own prose lives in, and the chrome inside it that is
 /// not prose.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, Table)]
 pub struct RegionConfig {
-    /// The element whose contents are the page's prose, by tag name. Empty
-    /// means the whole document.
+    /// The element whose contents are the page's prose, by tag name. A page without one counts whole.
+    #[key(text)]
     pub element: String,
-    /// Elements dropped wherever they occur inside it, by tag name: the chrome
-    /// a layout puts *inside* its content region.
+
+    /// Elements to leave out of it, by tag name, one word each.
+    ///
+    /// The chrome a layout puts *inside* its content region.
+    #[key(texts)]
     pub ignore: Vec<String>,
 }
 
@@ -29,29 +33,4 @@ impl Default for RegionConfig {
             ignore: Vec::new(),
         }
     }
-}
-
-impl Section for RegionConfig {
-    const RULES: Block<Self> = Block(&[
-        (
-            "element",
-            Text,
-            "The element whose contents are the page's prose, by tag name. A page without one counts whole.",
-            |c| c.element.clone().into(),
-            |c, n, t| {
-                c.element = n.string(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "ignore",
-            Texts,
-            "Elements to leave out of it, by tag name, one word each.",
-            |c| c.ignore.clone().into(),
-            |c, n, t| {
-                c.ignore = n.words(t)?;
-                Ok(())
-            },
-        ),
-    ]);
 }

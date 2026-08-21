@@ -3,17 +3,34 @@
 
 use kdl::KdlNode;
 
-use crate::config::dispatch::Kind::Number;
+use dispatch_derive::Table;
+
 use crate::config::dispatch::{Attributed, Attrs};
-use crate::config::value::ValueExt;
+use crate::config::vocab::attr;
 use crate::error::{ConfigError, Result};
 
 /// One declared redirect: where the old path goes, and what the host is told to
 /// say about it.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, Table)]
+#[table(
+    impl = Attributed,
+    const ATTRS: Attrs<Self> = Attrs,
+    rule = attr,
+    items {
+        /// The target, which [`RedirectConfig::item`] reads before the attributes.
+        const LEADING: usize = 1;
+
+        fn unkeyed(&self) -> Vec<crate::config::Value> {
+            vec![self.target.clone().into()]
+        }
+    },
+)]
 pub struct RedirectConfig {
     /// A path on this site, or an absolute URL.
     pub target: String,
+
+    /// The HTTP status the host answers with, `300` to `399`. Defaults to `301`.
+    #[key(bounded(u16, 300, 399))]
     pub status: u16,
 }
 
@@ -47,24 +64,4 @@ impl RedirectConfig {
     pub fn needs_rules(&self) -> bool {
         self.status != Self::PERMANENT
     }
-}
-
-impl Attributed for RedirectConfig {
-    /// The target, which [`RedirectConfig::item`] reads before the attributes.
-    const LEADING: usize = 1;
-
-    fn unkeyed(&self) -> Vec<crate::config::Value> {
-        vec![self.target.clone().into()]
-    }
-
-    const ATTRS: Attrs<Self> = Attrs(&[(
-        "status",
-        Number,
-        "The HTTP status the host answers with, `300` to `399`. Defaults to `301`.",
-        |c| c.status.into(),
-        |c, v, t, s| {
-            c.status = v.bounded::<u16>(t, s, 300, 399)?;
-            Ok(())
-        },
-    )]);
 }

@@ -2,37 +2,59 @@
 
 use std::path::PathBuf;
 
-use crate::config::dispatch::Kind::{Block as Nested, Flag, Path, Text, Url};
-use crate::config::dispatch::{Block, Section};
-use crate::config::node::NodeExt;
+use dispatch_derive::Table;
 
-#[derive(Debug, Clone, Hash)]
+use crate::config::dispatch::{Block, Section};
+use crate::config::vocab::rule;
+
+#[derive(Debug, Clone, Hash, Table)]
 pub struct StandardConfig {
-    /// Account handle or DID to authenticate as, e.g. `you.bsky.social`.
+    /// The atproto handle the site is announced under.
+    ///
+    /// A handle or DID to authenticate as, e.g. `you.bsky.social`.
+    #[key(text)]
     pub handle: String,
-    /// Repository DID, a stable public identifier and not a secret. When set,
-    /// the build emits the verification artifacts offline rather than resolving
-    /// the handle.
+
+    /// That handle's DID, if it should not be resolved at build time.
+    ///
+    /// A stable public identifier, not a secret. When set, the build emits the
+    /// verification artifacts offline rather than resolving the handle.
+    #[key(opt text)]
     pub did: Option<String>,
-    /// PDS/entryway host to authenticate and write records against.
+
+    /// The personal data server the record is written to.
+    #[key(url)]
     pub pds: String,
-    /// Opt the publication into discovery surfaces.
+
+    /// Show the publication on standard.site's discovery surfaces.
+    #[key(flag)]
     pub discover: bool,
-    /// Publication icon, a path (under the project root) uploaded as a blob.
+
+    /// An icon published with the record.
+    ///
+    /// A path under the project root, uploaded as a blob.
+    #[key(opt path)]
     pub icon: Option<PathBuf>,
-    /// Which build-time verification artifacts to emit (requires `did`).
+
+    /// Which handle-verification artifacts the build emits.
+    ///
+    /// Both require a configured `did`.
+    #[key(nested(VerifyConfig))]
     pub verify: VerifyConfig,
 }
 
 /// Which standard.site domain-verification artifacts the build emits; both
 /// require a configured `did`.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, Table)]
 pub struct VerifyConfig {
-    /// Emit `/.well-known/site.standard.publication`, the publication `at://`
-    /// URI.
+    /// Write `/.well-known/site.standard.publication`, naming the publication record.
+    #[key(flag)]
     pub wellknown: bool,
-    /// Inject a per-page `<link rel="site.standard.document">` into dated
-    /// pages.
+
+    /// Add the verification links to the page head.
+    ///
+    /// A per-page `<link rel="site.standard.document">` on dated pages.
+    #[key(flag)]
     pub links: bool,
 }
 
@@ -56,91 +78,4 @@ impl Default for VerifyConfig {
             links: true,
         }
     }
-}
-
-impl Section for StandardConfig {
-    const RULES: Block<Self> = Block(&[
-        (
-            "handle",
-            Text,
-            "The atproto handle the site is announced under.",
-            |c| c.handle.clone().into(),
-            |c, n, t| {
-                c.handle = n.string(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "did",
-            Text,
-            "That handle's DID, if it should not be resolved at build time.",
-            |c| c.did.clone().into(),
-            |c, n, t| {
-                c.did = Some(n.string(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "pds",
-            Url,
-            "The personal data server the record is written to.",
-            |c| c.pds.clone().into(),
-            |c, n, t| {
-                c.pds = n.url(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "discover",
-            Flag,
-            "Show the publication on standard.site's discovery surfaces.",
-            |c| c.discover.into(),
-            |c, n, t| {
-                c.discover = n.boolean(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "icon",
-            Path,
-            "An icon published with the record.",
-            |c| c.icon.clone().into(),
-            |c, n, t| {
-                c.icon = Some(n.string(t, 0)?.into());
-                Ok(())
-            },
-        ),
-        (
-            "verify",
-            Nested(VerifyConfig::rows),
-            "Which handle-verification artifacts the build emits.",
-            |c| c.verify.values(),
-            |c, n, t| c.verify.fill(n, t),
-        ),
-    ]);
-}
-
-impl Section for VerifyConfig {
-    const RULES: Block<Self> = Block(&[
-        (
-            "wellknown",
-            Flag,
-            "Write `/.well-known/site.standard.publication`, naming the publication record.",
-            |c| c.wellknown.into(),
-            |c, n, t| {
-                c.wellknown = n.boolean(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "links",
-            Flag,
-            "Add the verification links to the page head.",
-            |c| c.links.into(),
-            |c, n, t| {
-                c.links = n.boolean(t, 0)?;
-                Ok(())
-            },
-        ),
-    ]);
 }

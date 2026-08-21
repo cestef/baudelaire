@@ -2,30 +2,52 @@
 
 use std::path::PathBuf;
 
-use crate::config::dispatch::Kind::{Flag, Number, Path, Text};
+use dispatch_derive::Table;
+
 use crate::config::dispatch::{Block, Section};
-use crate::config::node::NodeExt;
+use crate::config::vocab::rule;
 
 /// A host reachable over SSH. Files are reconciled with the remote directory
 /// over SFTP, and change detection runs `sha256sum` on the host so an unchanged
 /// file is never re-sent.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, Table)]
 pub struct SshConfig {
+    /// The host uploaded to.
+    #[key(text)]
     pub host: String,
-    /// Absolute path to the remote directory the build is mirrored into.
+
+    /// The remote directory the site is written into.
+    ///
+    /// Absolute.
+    #[key(text)]
     pub path: String,
+
+    /// The SSH port.
+    #[key(port)]
     pub port: u16,
-    /// User to authenticate as. Defaults to `$USER`.
+
+    /// The user to connect as.
+    ///
+    /// Defaults to `$USER`.
+    #[key(opt text)]
     pub user: Option<String>,
-    /// Path to a private key (absolute, `~`-relative, or under the project
-    /// root). When unset, authentication tries the ssh-agent, then a password
-    /// from the environment/prompt.
+
+    /// The private key to authenticate with. Prefer an ed25519 key.
+    ///
+    /// Absolute, `~`-relative, or under the project root. When unset,
+    /// authentication tries the ssh-agent, then a password from the
+    /// environment or prompt.
+    #[key(opt path)]
     pub key: Option<PathBuf>,
-    /// Verify the server's host key against `~/.ssh/known_hosts`, learning an
-    /// unseen host on first connect and refusing a changed key. Off accepts any
-    /// key.
+
+    /// Verify the host key against `known_hosts`, learning an unseen host on first connect and refusing a changed one.
+    ///
+    /// Off accepts any key.
+    #[key(flag)]
     pub strict: bool,
-    /// Delete remote files under `path` that the build no longer produces.
+
+    /// Delete remote files this build did not produce.
+    #[key(flag)]
     pub delete: bool,
 }
 
@@ -41,79 +63,4 @@ impl Default for SshConfig {
             delete: true,
         }
     }
-}
-
-impl Section for SshConfig {
-    const RULES: Block<Self> = Block(&[
-        (
-            "host",
-            Text,
-            "The host uploaded to.",
-            |c| c.host.clone().into(),
-            |c, n, t| {
-                c.host = n.string(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "path",
-            Text,
-            "The remote directory the site is written into.",
-            |c| c.path.clone().into(),
-            |c, n, t| {
-                c.path = n.string(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "port",
-            Number,
-            "The SSH port.",
-            |c| c.port.into(),
-            |c, n, t| {
-                c.port = n.port(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "user",
-            Text,
-            "The user to connect as.",
-            |c| c.user.clone().into(),
-            |c, n, t| {
-                c.user = Some(n.string(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "key",
-            Path,
-            "The private key to authenticate with. Prefer an ed25519 key.",
-            |c| c.key.clone().into(),
-            |c, n, t| {
-                c.key = Some(n.string(t, 0)?.into());
-                Ok(())
-            },
-        ),
-        (
-            "strict",
-            Flag,
-            "Verify the host key against `known_hosts`, learning an unseen host on first connect and refusing a changed one.",
-            |c| c.strict.into(),
-            |c, n, t| {
-                c.strict = n.boolean(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "delete",
-            Flag,
-            "Delete remote files this build did not produce.",
-            |c| c.delete.into(),
-            |c, n, t| {
-                c.delete = n.boolean(t, 0)?;
-                Ok(())
-            },
-        ),
-    ]);
 }

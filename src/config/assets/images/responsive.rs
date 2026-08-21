@@ -1,27 +1,48 @@
 //! `assets { images { responsive { } } }`: width variants and `srcset`.
 
-use crate::config::dispatch::Kind::{Number, Numbers, Text};
-use crate::config::dispatch::{Block, Section, Switch};
+use dispatch_derive::Table;
+
+use crate::config::dispatch::Kind::Numbers;
+use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
-use crate::config::value::ValueExt;
+use crate::config::vocab::rule;
 
 /// Responsive images: pre-generate downscaled copies of each raster and let
 /// the browser pick the smallest that fits via `srcset`.
 ///
 /// Variants stay in the source format, and a width wider than the source is
 /// skipped, never upscaled.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, Table)]
+#[table(hook(switch = enabled))]
 pub struct ResponsiveConfig {
     pub enabled: bool,
-    /// Target widths in CSS pixels. The source's own width is always the
-    /// largest candidate, so these only add smaller sizes.
+
+    /// The pixel widths to emit a variant at.
+    ///
+    /// The source's own width is always the largest candidate, so these only
+    /// add smaller sizes.
+    #[key(custom(
+        Numbers,
+        |c: &Self| c.widths.clone().into(),
+        |c: &mut Self, n: &kdl::KdlNode, t: &str| {
+            let max_texture_width = 16384;
+            c.widths = n.bounds::<u32>(t, 1, max_texture_width)?;
+            Ok(())
+        },
+    ))]
     pub widths: Vec<u32>,
-    /// JPEG re-encode quality (`1`–`100`) for downscaled variants. PNG variants
-    /// are re-encoded losslessly and ignore this.
+
+    /// Encoder quality for the generated variants, 1 to 100.
+    ///
+    /// JPEG only: PNG variants are re-encoded losslessly and ignore this.
+    #[key(bounded(u8, 1, 100))]
     pub quality: u8,
-    /// The `sizes` attribute for images the author left unsized, as
-    /// `(min-width: 60rem) 640px, 100vw`. `None` emits no attribute, which the
-    /// spec treats as `100vw`.
+
+    /// The `sizes` attribute put on every responsive image.
+    ///
+    /// As `(min-width: 60rem) 640px, 100vw`. `None` emits no attribute, which
+    /// the spec treats as `100vw`.
+    #[key(opt text)]
     pub sizes: Option<String>,
 }
 
@@ -51,45 +72,4 @@ impl Default for ResponsiveConfig {
             sizes: None,
         }
     }
-}
-
-impl Section for ResponsiveConfig {
-    const SWITCH: Option<Switch<Self>> = Some(Switch {
-        set: |c, on| c.enabled = on,
-        on: |c| c.enabled,
-    });
-
-    const RULES: Block<Self> = Block(&[
-        (
-            "widths",
-            Numbers,
-            "The pixel widths to emit a variant at.",
-            |c| c.widths.clone().into(),
-            |c, n, t| {
-                let max_texture_width = 16384;
-                c.widths = n.bounds::<u32>(t, 1, max_texture_width)?;
-                Ok(())
-            },
-        ),
-        (
-            "quality",
-            Number,
-            "Encoder quality for the generated variants, 1 to 100.",
-            |c| c.quality.into(),
-            |c, n, t| {
-                c.quality = n.arg(t, 0)?.bounded(t, NodeExt::span(n), 1, 100)?;
-                Ok(())
-            },
-        ),
-        (
-            "sizes",
-            Text,
-            "The `sizes` attribute put on every responsive image.",
-            |c| c.sizes.clone().into(),
-            |c, n, t| {
-                c.sizes = Some(n.string(t, 0)?);
-                Ok(())
-            },
-        ),
-    ]);
 }

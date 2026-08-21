@@ -3,22 +3,34 @@
 pub mod optimize;
 pub mod responsive;
 
-use crate::config::dispatch::Kind::Block as Nested;
-use crate::config::dispatch::Kind::Flag;
+use dispatch_derive::Table;
+
 use crate::config::dispatch::{Block, Section};
-use crate::config::node::NodeExt;
+use crate::config::vocab::rule;
 use crate::config::{HtmlConfig, OptimizeConfig, ResponsiveConfig};
 
 /// Image handling: markup annotations and build-time optimization.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, Table)]
 pub struct ImagesConfig {
-    /// Add `loading="lazy"` and `decoding="async"` to `<img>` elements.
+    /// Mark images `loading="lazy"`.
+    ///
+    /// Adds `decoding="async"` too.
+    #[key(flag)]
     pub lazy: bool,
-    /// Write each typst-embedded `image()` out as its own file and reference
-    /// it, instead of typst's inline base64 `data:` URI. Forced off while
+
+    /// Write images typst embedded in the page out as their own files.
+    ///
+    /// Instead of typst's inline base64 `data:` URI. Forced off while
     /// `html.embed` is on, which would re-inline it anyway.
+    #[key(flag)]
     pub extract: bool,
+
+    /// Per-format lossless recompression.
+    #[key(nested(OptimizeConfig))]
     pub optimize: OptimizeConfig,
+
+    /// Generate width variants and a `srcset`. Its presence turns them on; `#false` turns them off again.
+    #[key(nested(ResponsiveConfig))]
     pub responsive: ResponsiveConfig,
 }
 
@@ -39,43 +51,4 @@ impl Default for ImagesConfig {
             responsive: ResponsiveConfig::default(),
         }
     }
-}
-
-impl Section for ImagesConfig {
-    const RULES: Block<Self> = Block(&[
-        (
-            "lazy",
-            Flag,
-            "Mark images `loading=\"lazy\"`.",
-            |c| c.lazy.into(),
-            |c, n, t| {
-                c.lazy = n.boolean(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "extract",
-            Flag,
-            "Write images typst embedded in the page out as their own files.",
-            |c| c.extract.into(),
-            |c, n, t| {
-                c.extract = n.boolean(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "optimize",
-            Nested(OptimizeConfig::rows),
-            "Per-format lossless recompression.",
-            |c| c.optimize.values(),
-            |c, n, t| c.optimize.fill(n, t),
-        ),
-        (
-            "responsive",
-            Nested(ResponsiveConfig::rows),
-            "Generate width variants and a `srcset`. Its presence turns them on; `#false` turns them off again.",
-            |c| c.responsive.values(),
-            |c, n, t| c.responsive.fill(n, t),
-        ),
-    ]);
 }

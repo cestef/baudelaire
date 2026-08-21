@@ -1,27 +1,38 @@
 //! `generate { feed { } }`: syndication feeds and their file names.
 
-use crate::config::Value;
-use crate::config::dispatch::Kind::{Block as Nested, Choice, Choices, Flag, Number, Path};
+use dispatch_derive::Table;
+
 use crate::config::dispatch::{Block, Section};
-use crate::config::node::NodeExt;
-use crate::config::value::ValueExt;
+use crate::config::vocab::rule;
 use crate::config::{BaseUrl, Named, Permalink};
 use crate::mime::Mime;
 
 /// Syndication feeds.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, Table)]
 pub struct FeedConfig {
-    /// Formats to emit (requires `url`).
+    /// Which feed formats to write, one word each.
+    ///
+    /// Requires `url`.
+    #[key(choices(FeedKind))]
     pub formats: Vec<FeedKind>,
-    /// Maximum items in a feed.
+
+    /// How many of the newest pages a feed carries.
+    #[key(count)]
     pub limit: usize,
+
+    /// How much of each page an entry carries: its summary, or its prose as well.
+    #[key(choice(Content))]
     pub content: Content,
-    /// Also emit a feed per taxonomy term, beside that term's listing page
-    /// (`/tags/rust/rss.xml`). Follows the term pages, so it needs `listing` on
-    /// the taxonomy.
+
+    /// Also write a feed per taxonomy term.
+    ///
+    /// Beside that term's listing page (`/tags/rust/rss.xml`). Follows the term
+    /// pages, so it needs `listing` on the taxonomy.
+    #[key(flag)]
     pub terms: bool,
-    /// What each format's file is called, when the conventional name is not the
-    /// one a site already publishes under.
+
+    /// What each format's file is called, if not the conventional name.
+    #[key(nested(FeedNames))]
     pub names: FeedNames,
 }
 
@@ -42,10 +53,22 @@ impl Named for Content {
 }
 
 /// Per-format file name overrides for [`FeedConfig`].
-#[derive(Debug, Clone, Default, Hash)]
+///
+/// Each name is a *path* the emitter extends `dist` with, so each is read
+/// through [`NodeExt::contained`](crate::config::node::NodeExt::contained) to
+/// keep `rss "../../pwned.xml"` inside the project.
+#[derive(Debug, Clone, Default, Hash, Table)]
 pub struct FeedNames {
+    /// The RSS file's name, e.g. `index.xml`. Defaults to `rss.xml`.
+    #[key(opt contained)]
     pub rss: Option<String>,
+
+    /// The Atom file's name. Defaults to `atom.xml`.
+    #[key(opt contained)]
     pub atom: Option<String>,
+
+    /// The JSON Feed file's name. Defaults to `feed.json`.
+    #[key(opt contained)]
     pub json: Option<String>,
 }
 
@@ -127,97 +150,6 @@ impl Default for FeedConfig {
             names: crate::config::FeedNames::default(),
         }
     }
-}
-
-impl Section for FeedConfig {
-    const RULES: Block<Self> = Block(&[
-        (
-            "formats",
-            Choices(FeedKind::names),
-            "Which feed formats to write, one word each.",
-            |c| c.formats.iter().copied().map(Value::named).collect(),
-            |c, n, t| {
-                c.formats = n.mapped::<FeedKind>(t)?;
-                Ok(())
-            },
-        ),
-        (
-            "limit",
-            Number,
-            "How many of the newest pages a feed carries.",
-            |c| c.limit.into(),
-            |c, n, t| {
-                c.limit = n.count(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "content",
-            Choice(Content::names),
-            "How much of each page an entry carries: its summary, or its prose as well.",
-            |c| Value::named(c.content),
-            |c, n, t| {
-                c.content = n.arg(t, 0)?.one::<Content>(t, NodeExt::span(n))?;
-                Ok(())
-            },
-        ),
-        (
-            "terms",
-            Flag,
-            "Also write a feed per taxonomy term.",
-            |c| c.terms.into(),
-            |c, n, t| {
-                c.terms = n.boolean(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "names",
-            Nested(FeedNames::rows),
-            "What each format's file is called, if not the conventional name.",
-            |c| c.names.values(),
-            |c, n, t| c.names.fill(n, t),
-        ),
-    ]);
-}
-
-/// The `feed { names { .. } }` section: one key per format, each naming the
-/// file that format is written to and advertised under. Each name is a *path*
-/// the emitter extends `dist` with, so each is read through
-/// [`NodeExt::contained`] to keep `rss "../../pwned.xml"` inside the project.
-impl Section for FeedNames {
-    const RULES: Block<Self> = Block(&[
-        (
-            "rss",
-            Path,
-            "The RSS file's name, e.g. `index.xml`. Defaults to `rss.xml`.",
-            |c| c.rss.clone().into(),
-            |c, n, t| {
-                c.rss = Some(n.contained(t)?);
-                Ok(())
-            },
-        ),
-        (
-            "atom",
-            Path,
-            "The Atom file's name. Defaults to `atom.xml`.",
-            |c| c.atom.clone().into(),
-            |c, n, t| {
-                c.atom = Some(n.contained(t)?);
-                Ok(())
-            },
-        ),
-        (
-            "json",
-            Path,
-            "The JSON Feed file's name. Defaults to `feed.json`.",
-            |c| c.json.clone().into(),
-            |c, n, t| {
-                c.json = Some(n.contained(t)?);
-                Ok(())
-            },
-        ),
-    ]);
 }
 
 #[cfg(test)]

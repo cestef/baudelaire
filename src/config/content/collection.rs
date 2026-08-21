@@ -2,63 +2,82 @@
 
 use kdl::KdlNode;
 
+use dispatch_derive::Table;
+
 use crate::config::Value;
-use crate::config::dispatch::Kind::{Block as Nested, Choice, Flag, Items, Number, Template, Text};
-use crate::config::dispatch::{Attributed, Block, Section, Switch};
+use crate::config::dispatch::Kind::{Items, Number};
+use crate::config::dispatch::{Attributed, Block, Section};
 use crate::config::node::NodeExt;
 use crate::config::value::ValueExt;
+use crate::config::vocab::rule;
 use crate::config::{FieldSchema, Named, Permalink};
 use crate::error::{ConfigError, Result};
 
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, Table)]
+#[table(items {
+    /// The glob, read off the line by [`CollectionConfig::item`].
+    const LEADING: usize = 1;
+})]
 pub struct CollectionConfig {
-    /// Glob selecting members. `None` = convention (top-level dir under
-    /// `content/`).
+    /// Which content files belong to this collection.
+    ///
+    /// `None` is convention: a top-level directory under `content/`.
+    #[key(opt text)]
     pub glob: Option<String>,
+
+    /// What the collection's members are ordered by.
+    #[key(choice(SortKey))]
     pub sort: SortKey,
+
+    /// Reverse that order.
+    #[key(flag)]
     pub reverse: bool,
-    /// Permalink template, e.g. `/posts/{slug}/`.
+
+    /// The URL pattern its pages publish at, e.g. `/{slug}/`.
+    #[key(opt template)]
     pub permalink: Option<String>,
-    /// Default template for the collection's member pages.
+
+    /// The layout its pages render through.
+    #[key(opt text)]
     pub template: Option<String>,
+
+    /// Generate an index over the collection. Its presence turns the index on; `#false` turns it off again.
+    #[key(nested(PaginateConfig))]
     pub paginate: PaginateConfig,
-    /// Also write a feed of this collection's members, beside its index, in
-    /// every configured format.
+
+    /// Also write a feed of this collection's members, beside its index.
+    ///
+    /// In every configured format.
+    #[key(flag)]
     pub feed: bool,
-    /// What every member's frontmatter must declare, in declaration order.
-    /// Empty requires nothing.
+
+    /// What every member's frontmatter must declare, one line per field. A `dict` field takes a block of its own fields.
+    ///
+    /// In declaration order. Empty requires nothing.
+    #[key(custom(
+        Items(FieldSchema::rows),
+        |c: &Self| Value::each(&c.schema, Attributed::values),
+        |c: &mut Self, n: &kdl::KdlNode, t: &str| {
+            c.schema = n.unique(t, "schema field", FieldSchema::item)?;
+            Ok(())
+        },
+    ))]
     pub schema: Vec<(String, FieldSchema)>,
 }
 
-impl CollectionConfig {
-    /// Where this collection's index sits, before localization: the
-    /// `paginate { mount }` if one moves it, else `/{id}/`. Always rooted, or
-    /// an unrooted `mount "blog"` localizes to `/frblog`.
-    pub fn home(&self, id: &str) -> String {
-        match self.paginate.mount.as_deref() {
-            Some(mount) if mount.starts_with('/') => mount.to_owned(),
-            Some(mount) => format!("/{mount}"),
-            None => Permalink::join(&[id]),
+impl Default for CollectionConfig {
+    fn default() -> Self {
+        Self {
+            glob: None,
+            sort: SortKey::Order,
+            reverse: false,
+            permalink: None,
+            template: None,
+            paginate: PaginateConfig::default(),
+            feed: false,
+            schema: Vec::new(),
         }
     }
-}
-
-/// A collection's generated index: whether there is one, how it is chunked, and
-/// where it is served.
-#[derive(Debug, Clone, Hash)]
-pub struct PaginateConfig {
-    /// Whether an index is generated at all: the block's presence.
-    pub enabled: bool,
-    /// Members per page. `None` puts every member on one page.
-    pub size: Option<usize>,
-    /// Template for the generated index pages, as distinct from the
-    /// collection's `template`, which wraps its members.
-    pub template: Option<String>,
-    /// Where page 1 is served. `None` = `/{id}/`.
-    pub mount: Option<String>,
-    /// Path segment before a page number: `/{id}/{prefix}/{n}/`. Defaults to
-    /// `page` (`/blog/page/2/`); empty drops the segment (`/blog/2/`).
-    pub prefix: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -80,17 +99,55 @@ impl Named for SortKey {
     ];
 }
 
-impl Default for CollectionConfig {
-    fn default() -> Self {
-        Self {
-            glob: None,
-            sort: SortKey::Order,
-            reverse: false,
-            permalink: None,
-            template: None,
-            paginate: PaginateConfig::default(),
-            feed: false,
-            schema: Vec::new(),
+/// A collection's generated index: whether there is one, how it is chunked, and
+/// where it is served.
+#[derive(Debug, Clone, Hash, Table)]
+#[table(hook(switch = enabled))]
+pub struct PaginateConfig {
+    /// Whether an index is generated at all: the block's presence.
+    pub enabled: bool,
+
+    /// Pages per index page. Omitted, the index is one page.
+    #[key(custom(
+        Number,
+        |c: &Self| c.size.into(),
+        |c: &mut Self, n: &kdl::KdlNode, t: &str| {
+            let written = n.arg(t, 0)?.integer(t, NodeExt::span(n))?;
+            c.size = Some(Self::size(written, t, NodeExt::span(n))?);
+            Ok(())
+        },
+    ))]
+    pub size: Option<usize>,
+
+    /// The layout the index renders through.
+    ///
+    /// As distinct from the collection's `template`, which wraps its members.
+    #[key(opt text)]
+    pub template: Option<String>,
+
+    /// Where the index publishes, if not at the collection's own path.
+    ///
+    /// `None` is `/{id}/`.
+    #[key(opt segment)]
+    pub mount: Option<String>,
+
+    /// The path segment before a page number, as in `/posts/page/2/`.
+    ///
+    /// `/{id}/{prefix}/{n}/`. Defaults to `page`; empty drops the segment
+    /// (`/blog/2/`).
+    #[key(segment)]
+    pub prefix: String,
+}
+
+impl CollectionConfig {
+    /// Where this collection's index sits, before localization: the
+    /// `paginate { mount }` if one moves it, else `/{id}/`. Always rooted, or
+    /// an unrooted `mount "blog"` localizes to `/frblog`.
+    pub fn home(&self, id: &str) -> String {
+        match self.paginate.mount.as_deref() {
+            Some(mount) if mount.starts_with('/') => mount.to_owned(),
+            Some(mount) => format!("/{mount}"),
+            None => Permalink::join(&[id]),
         }
     }
 }
@@ -135,140 +192,4 @@ impl CollectionConfig {
         }
         Ok((node.name().value().to_owned(), cfg))
     }
-}
-
-impl Section for CollectionConfig {
-    const RULES: Block<Self> = Block(&[
-        (
-            "glob",
-            Text,
-            "Which content files belong to this collection.",
-            |c| c.glob.clone().into(),
-            |c, n, t| {
-                c.glob = Some(n.string(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "sort",
-            Choice(SortKey::names),
-            "What the collection's members are ordered by.",
-            |c| Value::named(c.sort),
-            |c, n, t| {
-                c.sort = n.arg(t, 0)?.one::<SortKey>(t, NodeExt::span(n))?;
-                Ok(())
-            },
-        ),
-        (
-            "reverse",
-            Flag,
-            "Reverse that order.",
-            |c| c.reverse.into(),
-            |c, n, t| {
-                c.reverse = n.boolean(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "permalink",
-            Template,
-            "The URL pattern its pages publish at, e.g. `/{slug}/`.",
-            |c| c.permalink.clone().into(),
-            |c, n, t| {
-                c.permalink = Some(n.template(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "template",
-            Text,
-            "The layout its pages render through.",
-            |c| c.template.clone().into(),
-            |c, n, t| {
-                c.template = Some(n.string(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "paginate",
-            Nested(PaginateConfig::rows),
-            "Generate an index over the collection. Its presence turns the index on; `#false` turns it off again.",
-            |c| c.paginate.values(),
-            |c, n, t| c.paginate.fill(n, t),
-        ),
-        (
-            "feed",
-            Flag,
-            "Also write a feed of this collection's members, beside its index.",
-            |c| c.feed.into(),
-            |c, n, t| {
-                c.feed = n.boolean(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "schema",
-            Items(FieldSchema::rows),
-            "What every member's frontmatter must declare, one line per field. A `dict` field takes a block of its own fields.",
-            |c| Value::each(&c.schema, Attributed::values),
-            |c, n, t| {
-                c.schema = n.unique(t, "schema field", FieldSchema::item)?;
-                Ok(())
-            },
-        ),
-    ]);
-
-    /// The glob, read off the line by [`CollectionConfig::item`].
-    const LEADING: usize = 1;
-}
-
-impl Section for PaginateConfig {
-    const SWITCH: Option<Switch<Self>> = Some(Switch {
-        set: |c, on| c.enabled = on,
-        on: |c| c.enabled,
-    });
-
-    const RULES: Block<Self> = Block(&[
-        (
-            "size",
-            Number,
-            "Pages per index page. Omitted, the index is one page.",
-            |c| c.size.into(),
-            |c, n, t| {
-                let written = n.arg(t, 0)?.integer(t, NodeExt::span(n))?;
-                c.size = Some(Self::size(written, t, NodeExt::span(n))?);
-                Ok(())
-            },
-        ),
-        (
-            "template",
-            Text,
-            "The layout the index renders through.",
-            |c| c.template.clone().into(),
-            |c, n, t| {
-                c.template = Some(n.string(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "mount",
-            Text,
-            "Where the index publishes, if not at the collection's own path.",
-            |c| c.mount.clone().into(),
-            |c, n, t| {
-                c.mount = Some(n.template(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "prefix",
-            Text,
-            "The path segment before a page number, as in `/posts/page/2/`.",
-            |c| c.prefix.clone().into(),
-            |c, n, t| {
-                c.prefix = n.template(t, 0)?;
-                Ok(())
-            },
-        ),
-    ]);
 }

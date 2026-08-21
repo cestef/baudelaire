@@ -1,25 +1,37 @@
 //! `check { budget { } }`: per-page weight limits.
 
-use crate::config::dispatch::Kind::{Flag, Size};
+use dispatch_derive::Table;
+
 use crate::config::dispatch::{Block, Section};
-use crate::config::node::NodeExt;
+use crate::config::vocab::rule;
 use crate::ui::Bytes;
 
 /// Per-page weight limits, in bytes. Each is the ceiling for one class of what
 /// a page ships; `None` is no limit.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, Table)]
 pub struct BudgetConfig {
     /// Fail the build when a page is over. Off, the same report is a warning.
+    #[key(flag)]
     pub strict: bool,
-    /// The page's own markup, as written to `dist`.
+
+    /// The page's own markup, as written to the output directory.
+    #[key(opt size)]
     pub html: Option<Bytes>,
+
     /// Every script the page loads, plus its inline `<script>` bodies.
+    #[key(opt size)]
     pub js: Option<Bytes>,
+
     /// Every stylesheet it loads, plus its inline `<style>` bodies.
+    #[key(opt size)]
     pub css: Option<Bytes>,
-    /// Every image it references, responsive candidates excluded.
+
+    /// Every image it references, responsive alternatives excluded.
+    #[key(opt size)]
     pub images: Option<Bytes>,
-    /// All of the above at once, the page's total transfer weight.
+
+    /// All of the above at once: the page's whole transfer weight.
+    #[key(opt size)]
     pub total: Option<Bytes>,
 }
 
@@ -34,69 +46,4 @@ impl Default for BudgetConfig {
             total: None,
         }
     }
-}
-
-impl Section for BudgetConfig {
-    const RULES: Block<Self> = Block(&[
-        (
-            "strict",
-            Flag,
-            "Fail the build when a page is over. Off, the same report is a warning.",
-            |c| c.strict.into(),
-            |c, n, t| {
-                c.strict = n.boolean(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "html",
-            Size,
-            "The page's own markup, as written to the output directory.",
-            |c| c.html.into(),
-            |c, n, t| {
-                c.html = Some(n.size(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "js",
-            Size,
-            "Every script the page loads, plus its inline `<script>` bodies.",
-            |c| c.js.into(),
-            |c, n, t| {
-                c.js = Some(n.size(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "css",
-            Size,
-            "Every stylesheet it loads, plus its inline `<style>` bodies.",
-            |c| c.css.into(),
-            |c, n, t| {
-                c.css = Some(n.size(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "images",
-            Size,
-            "Every image it references, responsive alternatives excluded.",
-            |c| c.images.into(),
-            |c, n, t| {
-                c.images = Some(n.size(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "total",
-            Size,
-            "All of the above at once: the page's whole transfer weight.",
-            |c| c.total.into(),
-            |c, n, t| {
-                c.total = Some(n.size(t, 0)?);
-                Ok(())
-            },
-        ),
-    ]);
 }

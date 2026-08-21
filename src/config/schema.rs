@@ -9,11 +9,14 @@
 use kdl::KdlNode;
 use miette::SourceSpan;
 
+use dispatch_derive::Table;
+
 use crate::config::Value;
-use crate::config::dispatch::Kind::{Choice, Flag};
+use crate::config::dispatch::Kind::Choice;
 use crate::config::dispatch::{Attributed, Attrs, Keys};
 use crate::config::node::NodeExt;
 use crate::config::value::ValueExt;
+use crate::config::vocab::attr;
 use crate::content::Frontmatter;
 use crate::error::{BaudelaireErrorKind, ConfigError, ConfigErrorKind, Result};
 use crate::ui::markup;
@@ -49,12 +52,48 @@ macro_rules! words {
 ///
 /// Declaring a field *requires* it; a field that may be absent says so with
 /// `optional=#true`.
-#[derive(Debug, Clone, Default, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Hash, PartialEq, Eq, Table)]
+#[table(
+    impl = Attributed,
+    const ATTRS: Attrs<Self> = Attrs,
+    rule = attr,
+    items {
+        /// The type, written as the leading positional.
+        const LEADING: usize = 1;
+
+        /// `item` reads the block as the fields of the dictionary the type ends in.
+        const NESTS: bool = true;
+
+        /// A dictionary's own fields are written in this line's block, so they read
+        /// back as keys of it.
+        fn values(&self) -> crate::config::Value {
+            let keys = self.ty.fields().map_or_else(Vec::new, |fields| {
+                fields
+                    .iter()
+                    .map(|(name, field)| (name.clone(), field.values()))
+                    .collect()
+            });
+            crate::config::Value::nested(self.unkeyed(), Self::ATTRS.values(self), keys)
+        }
+    },
+)]
 pub struct FieldSchema {
-    /// The shape the value must have. [`FieldType::Any`] (the default, and what
-    /// a bare `hero` means) constrains only presence.
+    /// The shape the value must have, also writable as the leading positional: `title "str"`. A list names what it holds: `list<int>`, `list<dict>`.
+    ///
+    /// [`FieldType::Any`] (the default, and what a bare `hero` means)
+    /// constrains only presence.
+    #[key(name = "type", custom(
+        Choice(FieldType::names),
+        |c: &Self| Value::written(&c.ty),
+        |c: &mut Self, v: &kdl::KdlValue, t: &str, s: miette::SourceSpan| {
+            c.ty = v.ty(t, s)?;
+            Ok(())
+        },
+    ))]
     pub ty: FieldType,
-    /// Whether the page may leave the field out.
+
+    /// Let the field be absent. Declaring a field otherwise requires it.
+    #[key(flag)]
     pub optional: bool,
 }
 
@@ -332,49 +371,6 @@ impl FieldSchema {
         }
         Ok((key, field))
     }
-}
-
-impl Attributed for FieldSchema {
-    /// The type, written as the leading positional.
-    const LEADING: usize = 1;
-
-    /// A dictionary's own fields are written in this line's block, so they read
-    /// back as keys of it.
-    fn values(&self) -> crate::config::Value {
-        let keys = self.ty.fields().map_or_else(Vec::new, |fields| {
-            fields
-                .iter()
-                .map(|(name, field)| (name.clone(), field.values()))
-                .collect()
-        });
-        crate::config::Value::nested(self.unkeyed(), Self::ATTRS.values(self), keys)
-    }
-
-    /// `item` reads the block as the fields of the dictionary the type ends in.
-    const NESTS: bool = true;
-
-    const ATTRS: Attrs<Self> = Attrs(&[
-        (
-            "type",
-            Choice(FieldType::names),
-            "The shape the value must have, also writable as the leading positional: `title \"str\"`. A list names what it holds: `list<int>`, `list<dict>`.",
-            |c| Value::written(&c.ty),
-            |c, v, t, s| {
-                c.ty = v.ty(t, s)?;
-                Ok(())
-            },
-        ),
-        (
-            "optional",
-            Flag,
-            "Let the field be absent. Declaring a field otherwise requires it.",
-            |c| c.optional.into(),
-            |c, v, t, s| {
-                c.optional = v.boolean(t, s)?;
-                Ok(())
-            },
-        ),
-    ]);
 }
 
 #[cfg(test)]

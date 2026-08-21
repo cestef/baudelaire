@@ -2,11 +2,10 @@
 
 use kdl::KdlNode;
 
-use crate::config::Value;
-use crate::config::dispatch::Kind::{Choice, Choices, Flag, Text, Texts};
+use dispatch_derive::Table;
+
 use crate::config::dispatch::{Block, Section};
-use crate::config::node::NodeExt;
-use crate::config::value::ValueExt;
+use crate::config::vocab::rule;
 use crate::config::{Named, SortKey};
 use crate::error::Result;
 
@@ -46,23 +45,37 @@ impl BundleFormat {
 
 /// One bundle: which pages it binds, in what order, under what title, and what
 /// it is written as.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, Table)]
 pub struct BundleConfig {
-    /// Collections to bind, in the order written; empty with
-    /// [`site`](Self::site) unset binds nothing.
+    /// Which collections the bundle binds, one word each.
+    ///
+    /// In the order written; empty with [`site`](Self::site) unset binds
+    /// nothing.
+    #[key(texts)]
     pub collections: Vec<String>,
-    /// Bind every page instead, whatever collection it belongs to.
+
+    /// Bind every page in the site rather than named collections.
+    #[key(flag)]
     pub site: bool,
-    /// The document's title. Unset, a single-collection bundle takes that
-    /// collection's title; any other takes the site's.
+
+    /// The document's title. Unset, the bound collection's title, or the site's.
+    #[key(opt text)]
     pub title: Option<String>,
-    /// How the bound pages are ordered. Unset, each collection's own `sort`.
+
+    /// How the bound pages are ordered. Unset, each collection's own sort.
+    #[key(opt choice(SortKey))]
     pub sort: Option<SortKey>,
+
+    /// Reverse the order the pages are bound in.
+    #[key(flag)]
     pub reverse: bool,
-    /// What to write. Empty means `pdf`.
+
+    /// What the bundle is written as. Unset, `pdf`.
+    #[key(choices(BundleFormat))]
     pub formats: Vec<BundleFormat>,
-    /// The paged template the PDF format is laid out with, handed every page at
-    /// once rather than one page's template per page.
+
+    /// The paged typst template the PDF is laid out with.
+    #[key(text)]
     pub template: String,
 }
 
@@ -118,79 +131,4 @@ impl Default for BundleConfig {
             template: "book.typ".into(),
         }
     }
-}
-
-impl Section for BundleConfig {
-    const RULES: Block<Self> = Block(&[
-        (
-            "collections",
-            Texts,
-            "Which collections the bundle binds, one word each.",
-            |c| c.collections.clone().into(),
-            |c, n, t| {
-                c.collections = n.words(t)?;
-                Ok(())
-            },
-        ),
-        (
-            "site",
-            Flag,
-            "Bind every page in the site rather than named collections.",
-            |c| c.site.into(),
-            |c, n, t| {
-                c.site = n.boolean(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "title",
-            Text,
-            "The document's title. Unset, the bound collection's title, or the site's.",
-            |c| c.title.clone().into(),
-            |c, n, t| {
-                c.title = Some(n.string(t, 0)?);
-                Ok(())
-            },
-        ),
-        (
-            "sort",
-            Choice(SortKey::names),
-            "How the bound pages are ordered. Unset, each collection's own sort.",
-            |c| c.sort.map(Value::named).into(),
-            |c, n, t| {
-                c.sort = Some(n.arg(t, 0)?.one::<SortKey>(t, NodeExt::span(n))?);
-                Ok(())
-            },
-        ),
-        (
-            "reverse",
-            Flag,
-            "Reverse the order the pages are bound in.",
-            |c| c.reverse.into(),
-            |c, n, t| {
-                c.reverse = n.boolean(t, 0)?;
-                Ok(())
-            },
-        ),
-        (
-            "formats",
-            Choices(BundleFormat::names),
-            "What the bundle is written as. Unset, `pdf`.",
-            |c| c.formats.iter().copied().map(Value::named).collect(),
-            |c, n, t| {
-                c.formats = n.mapped::<BundleFormat>(t)?;
-                Ok(())
-            },
-        ),
-        (
-            "template",
-            Text,
-            "The paged typst template the PDF is laid out with.",
-            |c| c.template.clone().into(),
-            |c, n, t| {
-                c.template = n.string(t, 0)?;
-                Ok(())
-            },
-        ),
-    ]);
 }
