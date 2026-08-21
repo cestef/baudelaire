@@ -6,7 +6,7 @@ use typst_html::{HtmlDocument, HtmlElement, HtmlNode, attr, tag};
 use crate::config::Config;
 use crate::owned::{Owned, builtin};
 
-use super::{Cx, DocumentExt, Exempt, Transform};
+use super::{Cx, DocumentExt, Exempt, Math, Transform};
 
 /// The [`Transform`] that puts a `<link>` to each owned stylesheet in a page's
 /// `<head>`. Recording the name in `found.owned` is what makes the pipeline
@@ -19,7 +19,7 @@ impl Transform for Sheets {
     }
 
     fn after(&self) -> &'static [&'static str] {
-        &[Exempt::NAME]
+        &[Exempt::NAME, Math::NAME]
     }
 
     fn enabled(&self, config: &Config) -> bool {

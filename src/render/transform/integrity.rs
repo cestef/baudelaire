@@ -7,7 +7,7 @@ use typst_html::{HtmlDocument, HtmlElement, attr, tag};
 use crate::config::Config;
 use crate::render::Emitted;
 
-use super::{Cx, DocumentExt, ElementExt, Embed, Fingerprint, Transform};
+use super::{Cx, DocumentExt, ElementExt, Embed, Fingerprint, Meta, Speculation, Transform};
 
 /// The [`Transform`] that stamps `integrity` and collects inline digests.
 pub(super) struct Integrity;
@@ -18,7 +18,7 @@ impl Transform for Integrity {
     }
 
     fn after(&self) -> &'static [&'static str] {
-        &[Fingerprint::NAME, Embed::NAME]
+        &[Fingerprint::NAME, Embed::NAME, Meta::NAME, Speculation::NAME]
     }
 
     /// Either half is reason enough to walk: a site may stamp integrity without

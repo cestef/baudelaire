@@ -10,7 +10,7 @@ use crate::config::Config;
 use crate::digest::Base64;
 use crate::mime::Mime;
 
-use super::{Cx, DocumentExt, ElementExt, Exempt, Externalize, Sources, Transform};
+use super::{Cx, DocumentExt, ElementExt, Exempt, Externalize, Sheets, Sources, Transform};
 use crate::render::{AssetDeps, AssetMap};
 
 /// The [`Transform`] that rewrites local asset references to `data:` URIs.
@@ -27,7 +27,7 @@ impl Transform for Embed {
     }
 
     fn after(&self) -> &'static [&'static str] {
-        &[Exempt::NAME, Externalize::NAME, Sources::NAME]
+        &[Exempt::NAME, Externalize::NAME, Sources::NAME, Sheets::NAME]
     }
 
     fn enabled(&self, config: &Config) -> bool {
