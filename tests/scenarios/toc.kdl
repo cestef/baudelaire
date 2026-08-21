@@ -1,0 +1,127 @@
+// `@baudelaire/toc`: a table of contents built from the page's own headings.
+//
+// A page's heading set only exists after typst has produced the DOM, so `toc()`
+// emits an empty `<nav>` and a render pass fills it in. The headings it lists
+// are the ones inside `html { region }`, which is what keeps a layout's own
+// chrome out of it.
+
+defaults {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      """#
+    "content/guide.typ" #"""
+      #let frontmatter = (title: "Guide", template: "page.typ",)
+      = First
+      == Deeper
+      = Second
+      """#
+  }
+}
+
+scenario "a table of contents nests the page's headings" {
+  files {
+    "templates/page.typ" #"""
+      #import "@baudelaire/html:0.1.0": h
+      #import "@baudelaire/toc:0.1.0": toc
+
+      #let page(page, body) = {
+        h("aside", h("h2")[On this page], toc(class: "toc"))
+        h("main", body)
+      }
+      """#
+  }
+  expect {
+    ok
+    file "guide/index.html" {
+      // The deeper heading hangs off the entry above it, and the shallow one
+      // after it closes back out to the top-level list.
+      order ##"<nav class="toc">"## "<ul>" ##"<a href="#first">First</a>"## "<ul>" \
+        ##"<a href="#deeper">Deeper</a>"## "</ul>" "</li>" ##"<a href="#second">Second</a>"## \
+        "</ul>" "</nav>"
+      // The aside is outside `main`, so its own heading is not an entry.
+      missing "On this page</a>"
+      // Nothing of the marker survives into the page.
+      missing "data-baudelaire-toc"
+    }
+  }
+}
+
+scenario "a table of contents takes a level range and an ordered list" {
+  files {
+    "templates/page.typ" #"""
+      #import "@baudelaire/html:0.1.0": h
+      #import "@baudelaire/toc:0.1.0": toc
+
+      #let page(page, body) = {
+        h("nav-outer", toc(from: 3, to: 3, ordered: true))
+        h("main", body)
+      }
+      """#
+  }
+  expect {
+    ok
+    file "guide/index.html" {
+      order "<nav>" "<ol>" ##"<a href="#deeper">Deeper</a>"## "</ol>" "</nav>"
+      missing ##"<a href="#first">"##
+      missing "<ul>"
+    }
+  }
+}
+
+scenario "a table of contents leaves out the chrome inside the region" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      html { region { element "main"; ignore "figure" } }
+      """#
+    "templates/page.typ" #"""
+      #import "@baudelaire/html:0.1.0": h
+      #import "@baudelaire/toc:0.1.0": toc
+
+      #let page(page, body) = {
+        h("main", toc(), h("figure", h("h2")[A caption]), body)
+      }
+      """#
+  }
+  expect {
+    ok
+    file "guide/index.html" {
+      contains ##"<a href="#first">First</a>"##
+      missing "A caption</a>"
+    }
+  }
+}
+
+scenario "a page with no heading gets an empty table of contents" {
+  files {
+    "content/guide.typ" #"""
+      #let frontmatter = (title: "Guide", template: "page.typ",)
+      No sections here.
+      """#
+    "templates/page.typ" #"""
+      #import "@baudelaire/html:0.1.0": h
+      #import "@baudelaire/toc:0.1.0": toc
+
+      #let page(page, body) = {
+        h("main", toc(class: "toc"), body)
+      }
+      """#
+  }
+  expect {
+    ok
+    file "guide/index.html" {
+      contains #"<nav class="toc"></nav>"#
+    }
+  }
+}

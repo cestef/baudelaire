@@ -14,6 +14,16 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **A table of contents, built where you put it.** `@baudelaire/toc` exports
+  `toc()`, which emits a `<nav>` that baudelaire fills afterwards with a nested
+  list of links to the page's own headings. `from`/`to` pick the levels,
+  `ordered: true` builds an `<ol>`, and any other named argument lands on the
+  `<nav>` as an attribute. Only headings inside `html { region }` are listed, so
+  a sidebar's own heading never appears in its own contents, and only those
+  carrying an `id`, which is every one unless `html { anchors }` was narrowed.
+  A page's heading set exists only after it compiles, which is why the call
+  returns an empty element rather than the entries.
+
 - **Every shipped theme has a not-found layout.** `templates/not-found.typ`, in
   all four. Bind it from `content/404.typ`, which publishes as the flat
   `404.html` a static host serves for an unmatched URL. It is named for its

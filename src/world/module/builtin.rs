@@ -43,6 +43,41 @@ impl Module for Html {
     }
 }
 
+/// `@baudelaire/toc`: a table of contents, filled in from the page's own
+/// headings once it has compiled.
+pub struct Toc;
+
+impl Toc {
+    /// The transient attribute `toc()` leaves on the element, holding the
+    /// heading levels to list as `<from>-<to>`, removed when [`crate::render`]
+    /// fills the element in.
+    pub(crate) const MARKER: &'static str = "data-baudelaire-toc";
+
+    /// The transient attribute naming the list element to build, `ol` or `ul`.
+    pub(crate) const LIST: &'static str = "data-baudelaire-toc-list";
+
+    /// The bindings `typ/toc.typ` writes those two through.
+    const MARKER_BINDING: &'static str = "_toc-marker";
+    const LIST_BINDING: &'static str = "_toc-list";
+}
+
+impl Module for Toc {
+    fn name(&self) -> &'static str {
+        "toc"
+    }
+
+    fn bindings(&self, _cx: &ModuleCx) -> Vec<(String, Value)> {
+        vec![
+            (Self::MARKER_BINDING.to_owned(), Value::str(Self::MARKER)),
+            (Self::LIST_BINDING.to_owned(), Value::str(Self::LIST)),
+        ]
+    }
+
+    fn body(&self) -> &'static str {
+        include_str!("typ/toc.typ")
+    }
+}
+
 /// `@baudelaire/site`: site identity and build version as typed bindings, so a
 /// template writes `#import "@baudelaire/site": title` and a typo becomes an
 /// import error rather than a silent `none`.

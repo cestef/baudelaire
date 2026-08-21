@@ -23,7 +23,7 @@ pub mod package;
 
 mod builtin;
 
-pub use builtin::Html;
+pub use builtin::{Html, Toc};
 pub use package::{Package, Packages};
 
 use super::generated::Table;
@@ -91,6 +91,7 @@ fn builtin() -> Vec<Box<dyn Module>> {
         Box::new(builtin::Html),
         Box::new(builtin::Site),
         Box::new(builtin::Sources),
+        Box::new(builtin::Toc),
         #[cfg(feature = "markdown")]
         Box::new(builtin::Markdown),
     ]

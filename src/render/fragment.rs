@@ -8,6 +8,7 @@ use typst_html::{HtmlDocument, HtmlElement, HtmlNode, HtmlOptions, HtmlTag, attr
 
 use crate::config::{BaseUrl, RegionConfig};
 
+use super::prose::Prose;
 use super::transform::ElementExt;
 
 /// The doctype [`typst_html::html`] writes ahead of any root element, and the
@@ -142,51 +143,27 @@ impl Syndicated {
         region: &RegionConfig,
         base: Option<&BaseUrl>,
     ) -> SourceResult<Self> {
+        let prose = Prose::from(region);
         let mut doc = doc.clone();
         let root = doc.root_mut();
-        Self::prune(root, &region.ignore);
+        Self::prune(root, &prose);
         root.walk(&mut |element| {
             element.assets(|url| Some(BaseUrl::rebase(base, url)));
         });
-        let found = HtmlTag::intern(&region.element)
-            .ok()
-            .and_then(|element| Self::find(doc.root(), element));
-        let nodes = found
-            .or_else(|| Self::find(doc.root(), tag::body))
-            .unwrap_or_else(|| doc.root().children.to_vec());
+        let nodes = prose.region(doc.root()).children.to_vec();
         Markup::of(&doc, nodes, options).map(Self)
     }
 
-    /// Whether an element is chrome rather than prose, and so goes with its
-    /// contents.
-    fn chrome(element: &HtmlElement, ignore: &[String]) -> bool {
-        element.silent()
-            || ignore
-                .iter()
-                .any(|name| element.tag.resolve().eq_ignore_ascii_case(name))
-    }
-
     /// Drop every chrome element from the tree, depth-first.
-    fn prune(element: &mut HtmlElement, ignore: &[String]) {
+    fn prune(element: &mut HtmlElement, prose: &Prose) {
         element
             .children
-            .retain(|node| !matches!(node, HtmlNode::Element(el) if Self::chrome(el, ignore)));
+            .retain(|node| !matches!(node, HtmlNode::Element(el) if prose.chrome(el)));
         for node in element.children.make_mut() {
             if let HtmlNode::Element(child) = node {
-                Self::prune(child, ignore);
+                Self::prune(child, prose);
             }
         }
-    }
-
-    /// The children of the first `which` element anywhere in the tree.
-    fn find(element: &HtmlElement, which: HtmlTag) -> Option<Vec<HtmlNode>> {
-        if element.tag == which {
-            return Some(element.children.to_vec());
-        }
-        element.children.iter().find_map(|node| match node {
-            HtmlNode::Element(el) => Self::find(el, which),
-            _ => None,
-        })
     }
 }
 

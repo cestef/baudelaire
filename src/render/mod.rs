@@ -10,6 +10,7 @@ mod inline;
 mod links;
 pub mod lint;
 mod origin;
+mod prose;
 mod scope;
 pub mod snippet;
 mod srcset;

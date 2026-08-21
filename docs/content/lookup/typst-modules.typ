@@ -4,7 +4,7 @@
 )
 #import "/templates/theme.typ": callout
 
-Five packages your templates and pages can import without anything existing on
+Seven packages your templates and pages can import without anything existing on
 disk. Nothing is downloaded: typst asks for the package, baudelaire answers it.
 
 ```typ
@@ -24,6 +24,7 @@ disk. Nothing is downloaded: typst asks for the package, baudelaire answers it.
   [`@baudelaire/pages`], [`pages(lang)`], [Every authored page as a row.],
   [`@baudelaire/markdown`], [`md`], [Markdown rendered inside a Typst page.],
   [`@baudelaire/sources`], [one per declaration], [The files `paths { sources }` declared.],
+  [`@baudelaire/toc`], [`toc`], [A table of contents, from the page's own headings.],
 )
 
 They are the Typst counterpart of the #link("js-modules.typ")[`baudelaire:*`
@@ -415,3 +416,63 @@ well as appearing wherever you render it.
   A mirrored copy still resolves in an editor, and a plain `typst compile` of a
   page using it fails at the call saying so.
 ]
+
+== toc
+
+`toc` puts a table of contents where you place it, built from the headings of
+the page it lands on.
+
+```typ
+#import "@baudelaire/toc:0.1.0": toc
+
+#h("aside", class: "sidebar")[
+  #h("h2")[On this page]
+  #toc()
+]
+```
+
+It emits a `<nav>` holding one nested list, each entry a link to a heading's
+`id`:
+
+```html
+<nav>
+  <ul>
+    <li><a href="#install">Install</a>
+      <ul><li><a href="#from-source">From source</a></li></ul>
+    </li>
+    <li><a href="#usage">Usage</a></li>
+  </ul>
+</nav>
+```
+
+#table(
+  columns: 3,
+  align: (left, left, left),
+  table.header([Argument], [Default], [Is]),
+  [`from`], [`2`], [The shallowest heading level listed.],
+  [`to`], [`3`], [The deepest.],
+  [`ordered`], [`false`], [`#true` builds `<ol>` instead of `<ul>`.],
+  [anything else], [], [An attribute on the `<nav>`, exactly as in `h`.],
+)
+
+Typst's `= Section` is an `<h2>`, `== Subsection` an `<h3>`, so the default range
+is the two levels a page written in the usual way has.
+
+#callout(kind: "note")[
+  A page's heading set only exists once it has compiled, so `toc()` cannot return
+  the entries: it writes an empty `<nav>` and baudelaire fills it in afterwards.
+  That is why there is no `page.headings`, and why the call takes no body.
+]
+
+Two things decide what is listed:
+
+- *Where the heading is.* Only headings inside the element
+  `html { region { element } }` names, minus the tags its `ignore` lists. A
+  sidebar's own `On this page` heading sits outside `<main>`, so it never
+  appears in its own table of contents.
+- *Whether it has an `id`.* Nothing can link to a heading without one.
+  `html { anchors }` gives every heading one by default; narrowing its `levels`
+  or turning it off narrows what a table of contents can list too.
+
+A page with no heading in range gets an empty `<nav>`, which `nav:empty { display: none }`
+hides along with nothing else.

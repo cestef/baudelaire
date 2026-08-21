@@ -26,6 +26,7 @@ mod speculation;
 #[cfg(feature = "announce")]
 mod standard;
 mod svg;
+mod toc;
 
 pub use externalize::ImageRef;
 
@@ -62,6 +63,7 @@ use speculation::Speculation;
 #[cfg(feature = "announce")]
 use standard::Verify;
 use svg::Svg;
+use toc::Toc;
 
 /// Per-page context handed to every transform. Transforms run sequentially for
 /// a page, so they share this one mutable accumulator.
@@ -398,6 +400,7 @@ impl Transforms {
             Box::new(Lang),
             Box::new(Anchors),
             Box::new(Footnotes),
+            Box::new(Toc),
             Box::new(Highlight),
             Box::new(Fences),
             Box::new(Spans),
