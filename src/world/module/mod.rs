@@ -68,6 +68,10 @@ trait Module {
     fn name(&self) -> &'static str;
 
     /// The values bound at the top of the module, in emission order.
+    ///
+    /// Every name must be a Typst identifier: a `#let` binds a name rather than
+    /// a string, so no escaping rescues one that is not, and a module whose
+    /// names come from config would otherwise carry whatever it was given.
     fn bindings(&self, cx: &ModuleCx) -> Vec<(String, Value)>;
 
     /// The module's hand-written Typst, appended after the bindings, so a
@@ -78,6 +82,10 @@ trait Module {
     fn source(&self, cx: &ModuleCx) -> String {
         let mut out = String::new();
         for (name, value) in self.bindings(cx) {
+            assert!(
+                crate::codegen::TypstFmt::bindable(&name),
+                "a generated module binds `{name}`, which is not a Typst identifier"
+            );
             let _ = writeln!(out, "{}", Let(&name, &value));
         }
         out.push_str(self.body());

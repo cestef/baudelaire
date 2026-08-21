@@ -496,6 +496,9 @@ impl fmt::Display for Import<'_> {
 
 /// Displays a Typst `let` binding: `#let name = <value>`, with the value
 /// rendered by [`Typst`].
+///
+/// The value is escaped; the name is not, and must be a Typst identifier
+/// ([`TypstFmt::bindable`]), since a `#let` binds a name rather than a string.
 pub struct Let<'a>(pub &'a str, pub &'a Value);
 
 impl fmt::Display for Let<'_> {
