@@ -110,7 +110,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: rust toolchain
-        uses: cestef/actions/rust@bdd5f0ca3212c1d00dd513bafbbeb55167668834
+        uses: cestef/actions/rust@548fe09721b21f2405062c24f835e32c04f1e0f2
 
       - name: fmt
         run: cargo fmt --all --check
@@ -182,17 +182,17 @@ jobs:
         uses: actions/checkout@v7
 
       - name: rust toolchain
-        uses: cestef/actions/rust@bdd5f0ca3212c1d00dd513bafbbeb55167668834
+        uses: cestef/actions/rust@548fe09721b21f2405062c24f835e32c04f1e0f2
       - name: mold linker
-        uses: cestef/actions/mold@bdd5f0ca3212c1d00dd513bafbbeb55167668834
+        uses: cestef/actions/mold@548fe09721b21f2405062c24f835e32c04f1e0f2
         with:
           rustflags: "false"
       - name: restore cargo registry
         id: registry
-        uses: cestef/actions/cargo-cache@bdd5f0ca3212c1d00dd513bafbbeb55167668834
+        uses: cestef/actions/cargo-cache@548fe09721b21f2405062c24f835e32c04f1e0f2
       - name: restore build cache
         id: build-cache
-        uses: cestef/actions/cargo-cache@bdd5f0ca3212c1d00dd513bafbbeb55167668834
+        uses: cestef/actions/cargo-cache@548fe09721b21f2405062c24f835e32c04f1e0f2
         with:
           prefix: target-test-${{ matrix.flavor }}
           toolchain-key: "true"
@@ -210,13 +210,13 @@ jobs:
 
       - name: test
         id: test
-        uses: cestef/actions/nextest@bdd5f0ca3212c1d00dd513bafbbeb55167668834
+        uses: cestef/actions/nextest@548fe09721b21f2405062c24f835e32c04f1e0f2
         with:
           run: "true"
           args: --workspace ${{ matrix.features }} --no-tests warn
 
       - name: memory diagnostics
-        uses: cestef/actions/mem-diagnostics@bdd5f0ca3212c1d00dd513bafbbeb55167668834
+        uses: cestef/actions/mem-diagnostics@548fe09721b21f2405062c24f835e32c04f1e0f2
         if: failure()
 
       # One leg publishes, so the two do not race each other for the badges
@@ -233,7 +233,7 @@ jobs:
 
       - name: badge (tests)
         if: always() && matrix.flavor == 'default'
-        uses: cestef/actions/badge@bdd5f0ca3212c1d00dd513bafbbeb55167668834
+        uses: cestef/actions/badge@548fe09721b21f2405062c24f835e32c04f1e0f2
         with:
           label: tests
           value: ${{ steps.test.outputs.passed }}/${{ steps.test.outputs.total }} passing
@@ -244,7 +244,7 @@ jobs:
 
       - name: badge (typst)
         if: matrix.flavor == 'default'
-        uses: cestef/actions/badge@bdd5f0ca3212c1d00dd513bafbbeb55167668834
+        uses: cestef/actions/badge@548fe09721b21f2405062c24f835e32c04f1e0f2
         with:
           label: typst
           value: ${{ steps.facts.outputs.typst }}
@@ -254,7 +254,7 @@ jobs:
 
       - name: badge (msrv)
         if: matrix.flavor == 'default'
-        uses: cestef/actions/badge@bdd5f0ca3212c1d00dd513bafbbeb55167668834
+        uses: cestef/actions/badge@548fe09721b21f2405062c24f835e32c04f1e0f2
         with:
           label: rust
           value: ${{ steps.facts.outputs.msrv }}+
@@ -269,12 +269,12 @@ jobs:
       # since keys are immutable and every later run would restore it as a hit;
       # `cargo-cache` refuses that itself rather than leaving it to each `if:`.
       - name: save cargo registry
-        uses: cestef/actions/cargo-cache@bdd5f0ca3212c1d00dd513bafbbeb55167668834
+        uses: cestef/actions/cargo-cache@548fe09721b21f2405062c24f835e32c04f1e0f2
         if: ${{ !cancelled() && steps.registry.outputs.hit != 'true' }}
         with:
           mode: save
       - name: save build cache
-        uses: cestef/actions/cargo-cache@bdd5f0ca3212c1d00dd513bafbbeb55167668834
+        uses: cestef/actions/cargo-cache@548fe09721b21f2405062c24f835e32c04f1e0f2
         if: ${{ !cancelled() && steps.build-cache.outputs.hit != 'true' }}
         with:
           mode: save
@@ -312,7 +312,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: rust toolchain
-        uses: cestef/actions/rust@bdd5f0ca3212c1d00dd513bafbbeb55167668834
+        uses: cestef/actions/rust@548fe09721b21f2405062c24f835e32c04f1e0f2
 
       # The workflow-level RUSTFLAGS asks for mold, which is a Linux linker.
       # `-D warnings` is kept: the point of the job is that warnings here are
@@ -339,10 +339,10 @@ jobs:
 
       - name: restore cargo registry
         id: registry
-        uses: cestef/actions/cargo-cache@bdd5f0ca3212c1d00dd513bafbbeb55167668834
+        uses: cestef/actions/cargo-cache@548fe09721b21f2405062c24f835e32c04f1e0f2
       - name: restore build cache
         id: build-cache
-        uses: cestef/actions/cargo-cache@bdd5f0ca3212c1d00dd513bafbbeb55167668834
+        uses: cestef/actions/cargo-cache@548fe09721b21f2405062c24f835e32c04f1e0f2
         with:
           prefix: target-windows-${{ matrix.flavor }}
           toolchain-key: "true"
@@ -353,12 +353,12 @@ jobs:
         run: cargo check --workspace --all-targets --locked ${{ matrix.features }}
 
       - name: save cargo registry
-        uses: cestef/actions/cargo-cache@bdd5f0ca3212c1d00dd513bafbbeb55167668834
+        uses: cestef/actions/cargo-cache@548fe09721b21f2405062c24f835e32c04f1e0f2
         if: ${{ !cancelled() && steps.registry.outputs.hit != 'true' }}
         with:
           mode: save
       - name: save build cache
-        uses: cestef/actions/cargo-cache@bdd5f0ca3212c1d00dd513bafbbeb55167668834
+        uses: cestef/actions/cargo-cache@548fe09721b21f2405062c24f835e32c04f1e0f2
         if: ${{ !cancelled() && steps.build-cache.outputs.hit != 'true' }}
         with:
           mode: save
@@ -393,18 +393,18 @@ jobs:
           echo "RUSTUP_TOOLCHAIN=$msrv" >> "$GITHUB_ENV"
 
       - name: mold linker
-        uses: cestef/actions/mold@bdd5f0ca3212c1d00dd513bafbbeb55167668834
+        uses: cestef/actions/mold@548fe09721b21f2405062c24f835e32c04f1e0f2
         with:
           rustflags: "false"
       - name: restore cargo registry
         id: registry
-        uses: cestef/actions/cargo-cache@bdd5f0ca3212c1d00dd513bafbbeb55167668834
+        uses: cestef/actions/cargo-cache@548fe09721b21f2405062c24f835e32c04f1e0f2
       # `toolchain-key` is what keeps this apart from the stable caches: the key
       # carries the MSRV rustc's version string, so nothing here can be
       # restored into a stable job or the other way round.
       - name: restore build cache
         id: build-cache
-        uses: cestef/actions/cargo-cache@bdd5f0ca3212c1d00dd513bafbbeb55167668834
+        uses: cestef/actions/cargo-cache@548fe09721b21f2405062c24f835e32c04f1e0f2
         with:
           prefix: target-msrv
           toolchain-key: "true"
@@ -427,12 +427,12 @@ jobs:
         run: cargo check --workspace --all-targets --locked --no-default-features
 
       - name: save cargo registry
-        uses: cestef/actions/cargo-cache@bdd5f0ca3212c1d00dd513bafbbeb55167668834
+        uses: cestef/actions/cargo-cache@548fe09721b21f2405062c24f835e32c04f1e0f2
         if: ${{ !cancelled() && steps.registry.outputs.hit != 'true' }}
         with:
           mode: save
       - name: save build cache
-        uses: cestef/actions/cargo-cache@bdd5f0ca3212c1d00dd513bafbbeb55167668834
+        uses: cestef/actions/cargo-cache@548fe09721b21f2405062c24f835e32c04f1e0f2
         if: ${{ !cancelled() && steps.build-cache.outputs.hit != 'true' }}
         with:
           mode: save
@@ -459,22 +459,28 @@ jobs:
         uses: actions/checkout@v7
 
       - name: rust toolchain
-        uses: cestef/actions/rust@bdd5f0ca3212c1d00dd513bafbbeb55167668834
+        uses: cestef/actions/rust@548fe09721b21f2405062c24f835e32c04f1e0f2
         with:
           components: llvm-tools-preview
       - name: mold linker
-        uses: cestef/actions/mold@bdd5f0ca3212c1d00dd513bafbbeb55167668834
+        uses: cestef/actions/mold@548fe09721b21f2405062c24f835e32c04f1e0f2
         with:
           rustflags: "false"
       - name: restore cargo registry
         id: registry
-        uses: cestef/actions/cargo-cache@bdd5f0ca3212c1d00dd513bafbbeb55167668834
+        uses: cestef/actions/cargo-cache@548fe09721b21f2405062c24f835e32c04f1e0f2
       # Instrumented artifacts are not the test job's artifacts: cargo-llvm-cov
       # adds `-C instrument-coverage`, which is part of every fingerprint. Its
       # own prefix, so the two never evict or half-restore each other.
+      #
+      # This is the largest tree any job builds, so it is the one that has to
+      # be held to a ceiling: an oversized save here evicts the caches that
+      # serve every push. `cargo-cache` prunes the raw profiles the e2e suite
+      # leaves behind (one per spawned process, which was 40 GB of the 47 GB
+      # here) and refuses the save outright if anything else grows unwatched.
       - name: restore build cache
         id: build-cache
-        uses: cestef/actions/cargo-cache@bdd5f0ca3212c1d00dd513bafbbeb55167668834
+        uses: cestef/actions/cargo-cache@548fe09721b21f2405062c24f835e32c04f1e0f2
         with:
           prefix: target-coverage
           toolchain-key: "true"
@@ -483,7 +489,7 @@ jobs:
 
       - name: coverage
         id: cov
-        uses: cestef/actions/llvm-cov@bdd5f0ca3212c1d00dd513bafbbeb55167668834
+        uses: cestef/actions/llvm-cov@548fe09721b21f2405062c24f835e32c04f1e0f2
         with:
           args: --workspace
           runner: nextest
@@ -492,7 +498,7 @@ jobs:
           ignore: "benches/"
 
       - name: coverage report
-        uses: cestef/actions/coverage-report@bdd5f0ca3212c1d00dd513bafbbeb55167668834
+        uses: cestef/actions/coverage-report@548fe09721b21f2405062c24f835e32c04f1e0f2
         with:
           file: cobertura.xml
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -507,16 +513,17 @@ jobs:
           path: cobertura.xml
 
       - name: save cargo registry
-        uses: cestef/actions/cargo-cache@bdd5f0ca3212c1d00dd513bafbbeb55167668834
+        uses: cestef/actions/cargo-cache@548fe09721b21f2405062c24f835e32c04f1e0f2
         if: ${{ !cancelled() && steps.registry.outputs.hit != 'true' }}
         with:
           mode: save
       - name: save build cache
-        uses: cestef/actions/cargo-cache@bdd5f0ca3212c1d00dd513bafbbeb55167668834
+        uses: cestef/actions/cargo-cache@548fe09721b21f2405062c24f835e32c04f1e0f2
         if: ${{ !cancelled() && steps.build-cache.outputs.hit != 'true' }}
         with:
           mode: save
           prune: "true"
+          max-size: "3000"
           prefix: target-coverage
           toolchain-key: "true"
           base: "."
