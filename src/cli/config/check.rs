@@ -69,10 +69,9 @@ impl CheckArgs {
         })
     }
 
-    /// Read one config the way a build would, so what fails here is what would
+    /// Check one config the way a build would, so what fails here is what would
     /// fail there.
-    fn checked(&self, path: &Path, cx: &Cx) -> Result<Config> {
-        let text = Self::read(path)?;
+    fn checked(&self, text: &str, path: &Path, cx: &Cx) -> Result<Config> {
         let named = |e: BaudelaireErrorKind| match e {
             BaudelaireErrorKind::Config(config) => {
                 BaudelaireErrorKind::Config(Box::new(config.named(path)))
@@ -80,9 +79,9 @@ impl CheckArgs {
             other => other,
         };
         let config = if self.isolated {
-            Config::parse(&text).map_err(named)?
+            Config::parse(text).map_err(named)?
         } else {
-            Config::load(&text, cx.root.path(), cx.cli.global.theme.as_deref()).map_err(named)?
+            Config::load(text, cx.root.path(), cx.cli.global.theme.as_deref()).map_err(named)?
         };
         match &cx.cli.global.profile {
             Some(profile) => config.with_profile(profile).map_err(named),
@@ -98,16 +97,33 @@ impl Run for CheckArgs {
             "checking {}",
             crate::ui::Text(&Listed(&paths).to_string())
         ));
+        let mut faulted = false;
         for path in &paths {
-            let config = match self.checked(path, cx) {
+            let text = match Self::read(path) {
+                Ok(text) => text,
+                Err(fault) if self.compact => {
+                    Compact::new(path, None, &fault).report();
+                    faulted = true;
+                    continue;
+                }
+                Err(fault) => return Err(fault),
+            };
+            let config = match self.checked(&text, path, cx) {
                 Ok(config) => config,
-                Err(fault) if self.compact => return Err(Compact::new(path, &fault).report()),
+                Err(fault) if self.compact => {
+                    Compact::new(path, Some(&text), &fault).report();
+                    faulted = true;
+                    continue;
+                }
                 Err(fault) => return Err(fault),
             };
             cx.ui.done(format_args!("{}", path.display()));
             for line in Checked(&config).lines() {
                 cx.ui.detail(line);
             }
+        }
+        if faulted {
+            return Err(ConfigError::invalid(&Listed(&paths).to_string()).into());
         }
         Ok(())
     }
@@ -117,19 +133,19 @@ impl Run for CheckArgs {
 /// what is wrong, and nothing else.
 struct Compact<'a> {
     path: &'a Path,
+    /// The text the run actually checked, `None` where it could not be read.
+    /// Carried rather than re-read: `-` is standard input and is gone.
+    text: Option<&'a str>,
     fault: &'a BaudelaireErrorKind,
 }
 
 impl<'a> Compact<'a> {
-    fn new(path: &'a Path, fault: &'a BaudelaireErrorKind) -> Self {
-        Self { path, fault }
+    fn new(path: &'a Path, text: Option<&'a str>, fault: &'a BaudelaireErrorKind) -> Self {
+        Self { path, text, fault }
     }
 
-    /// Write the line and hand back the failure, so the exit code still says
-    /// what happened.
-    fn report(&self) -> BaudelaireErrorKind {
+    fn report(&self) {
         eprintln!("{self}");
-        ConfigError::invalid(&self.path.display().to_string()).into()
     }
 
     /// Where the first label points, one-based, or the top of the file when the
@@ -138,7 +154,7 @@ impl<'a> Compact<'a> {
         let offset = miette::Diagnostic::labels(self.fault)
             .and_then(|mut labels| labels.next())
             .map_or(0, |label| label.offset());
-        let text = crate::fs::read_to_string(self.path).unwrap_or_default();
+        let text = self.text.unwrap_or_default();
         let before = &text[..offset.min(text.len())];
         let line = before.matches('\n').count() + 1;
         let column = before
