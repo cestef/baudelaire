@@ -352,18 +352,20 @@ impl Frontmatter {
     }
 
     /// Read a page's frontmatter from its evaluated module's `frontmatter`
-    /// export, `None` when the module exports none. A module exporting none is
-    /// still held to its collection's schema.
-    pub fn extract(module: &Module, origin: &Origin, config: &Config) -> Result<Option<Self>> {
+    /// export, with `false` where the module exports none.
+    ///
+    /// A module exporting none is read from the empty dict rather than skipped:
+    /// it is held to its collection's schema either way, and the defaults that
+    /// schema declares are what the wrapper lays under the page regardless.
+    pub fn extract(module: &Module, origin: &Origin, config: &Config) -> Result<(Self, bool)> {
         let Some(binding) = module.scope().get(Self::EXPORT) else {
-            Self::validate(&Dict::new(), origin, config)?;
-            return Ok(None);
+            return Ok((Self::from_dict(&Dict::new(), origin, config)?, false));
         };
         let value = binding.read();
         let Value::Dict(dict) = value else {
             return Err(ContentError::frontmatter_not_dict(origin.path, value).into());
         };
-        Self::from_dict(dict, origin, config).map(Some)
+        Ok((Self::from_dict(dict, origin, config)?, true))
     }
 
     /// Interpret the evaluated frontmatter dict. A known key with a wrong-typed

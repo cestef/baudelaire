@@ -719,6 +719,29 @@ scenario "a default that the declared type would refuse is a config error" {
   }
 }
 
+// A default is applied twice, and a page exporting nothing at all takes it on
+// both paths: the wrapper the template reads, and the struct the build reads.
+scenario "a default reaches a page that exports no frontmatter" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog { schema { description "str" default="Straight from the schema" } }
+        }
+      }
+      """#
+    "content/blog/bare.typ" #"""
+      Just a body.
+      """#
+  }
+  expect {
+    ok
+    file "blog/bare/index.html" { contains "Straight from the schema" }
+  }
+}
+
 // The bounds and the pattern are the field's too, and a default is a value the
 // page could have written: one the field would refuse from a page has to be
 // refused where it is declared, since no page's own check ever sees it.

@@ -6,7 +6,6 @@ use std::path::{Path, PathBuf};
 
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use typst::foundations::Module;
 
 use crate::codegen::Value;
 use crate::config::Config;
@@ -143,7 +142,7 @@ impl<'a> DiscoveryCache<'a> {
         let hash = Hash::of_bytes(source.text().as_bytes());
         let (frontmatter, export) = if self.enabled {
             let (module, deps, clock) = project.module_tracked(&source)?;
-            let extracted = Self::interpret(&module, &origin, config)?;
+            let extracted = Frontmatter::extract(&module, &origin, config)?;
             let mut reads = self.analyzer.reads(&source, &deps);
             if clock {
                 reads.insert(Project::clock());
@@ -167,7 +166,7 @@ impl<'a> DiscoveryCache<'a> {
             );
             extracted
         } else {
-            Self::interpret(&project.module(&source)?, &origin, config)?
+            Frontmatter::extract(&project.module(&source)?, &origin, config)?
         };
         Ok((frontmatter, Data::of(export), source.text().to_owned()))
     }
@@ -339,15 +338,6 @@ impl<'a> DiscoveryCache<'a> {
         const BOM: &[u8] = b"\xef\xbb\xbf";
         let rest = bytes.strip_prefix(BOM).unwrap_or(bytes);
         std::str::from_utf8(rest).ok().map(str::to_owned)
-    }
-
-    /// Read the `frontmatter` export from an evaluated module, defaulting when
-    /// the module exports none.
-    fn interpret(module: &Module, origin: &Origin, config: &Config) -> Result<(Frontmatter, bool)> {
-        Frontmatter::extract(module, origin, config)?.map_or_else(
-            || Ok((Frontmatter::default(), false)),
-            |frontmatter| Ok((frontmatter, true)),
-        )
     }
 
     /// Persist the accumulated manifest. A no-op when disabled.
