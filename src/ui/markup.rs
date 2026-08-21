@@ -75,11 +75,18 @@ impl<T: Display> Display for Code<T> {
 }
 
 /// A [`fmt::Write`] that escapes markup on the way through.
+///
+/// Control characters are dropped rather than escaped: an interpolated value is
+/// a page's own text, and one carrying `\x1b[` would otherwise close the span it
+/// sits in and restyle the rest of the terminal.
 struct Escaping<'a, 'b>(&'a mut fmt::Formatter<'b>);
 
 impl fmt::Write for Escaping<'_, '_> {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         for c in s.chars() {
+            if c.is_control() && c != '\n' && c != '\t' {
+                continue;
+            }
             if Kind::is_special(c) {
                 self.0.write_char(ESCAPE)?;
             }
@@ -302,6 +309,13 @@ mod tests {
     fn every_kind_renders_with_a_narrow_reset() {
         assert_eq!(color("*b*"), "\x1b[1mb\x1b[22m");
         assert_eq!(color("`c`"), "\x1b[36mc\x1b[39m");
+    }
+
+    #[test]
+    fn an_interpolated_value_carries_no_control_character_through() {
+        let hostile = "en\u{1b}[41m BREACHED \u{1b}[0m";
+        assert_eq!(Text(hostile).to_string(), "en[41m BREACHED [0m");
+        assert_eq!(Code(hostile).to_string(), "`en[41m BREACHED [0m`");
     }
 
     #[test]
