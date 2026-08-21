@@ -58,6 +58,7 @@ impl<'a> Document<'a> {
             return Ok(bare(source));
         };
         let fence = opened.open;
+        let opens = source.len() - trimmed.len();
         let rest = Self::blank(&trimmed[fence.len()..]);
         let Some(rest) = rest
             .strip_prefix('\n')
@@ -81,11 +82,7 @@ impl<'a> Document<'a> {
                 path: path.to_owned(),
                 fence: fence.to_owned(),
                 src: miette::NamedSource::new(path, source.to_owned()),
-                span: (
-                    start - fence.len() - Self::newline_before(source, start),
-                    fence.len(),
-                )
-                    .into(),
+                span: (opens, fence.len()).into(),
             })?;
 
         let after = Self::blank(&rest[end + fence.len()..]);
@@ -106,12 +103,6 @@ impl<'a> Document<'a> {
     /// what may sit between a fence and the end of its line.
     fn blank(text: &str) -> &str {
         text.trim_start_matches([' ', '\t'])
-    }
-
-    /// The width of the line ending immediately before `at`: 2 for CRLF, 1 for
-    /// LF.
-    fn newline_before(source: &str, at: usize) -> usize {
-        if source[..at].ends_with("\r\n") { 2 } else { 1 }
     }
 
     /// The block this document declares, read in its own dialect; an absent
@@ -212,6 +203,24 @@ mod tests {
             !rendered.contains("--\r"),
             "underlines the fence: {rendered}"
         );
+    }
+
+    /// The fence is where it was written, not where the block after it starts:
+    /// the two are the same distance apart only when nothing sits between.
+    #[test]
+    fn an_unterminated_block_labels_the_fence_whatever_follows_it() {
+        for source in ["---\ntitle: A\n", "--- \ntitle: A\n", "\n\n---\ntitle: A\n"] {
+            let Err(error) = Document::split(source, "a.md") else {
+                panic!("an unterminated block is an error: {source:?}");
+            };
+            let Some(span) = miette::Diagnostic::labels(&error)
+                .and_then(|mut labels| labels.next())
+                .map(|label| label.offset()..label.offset() + label.len())
+            else {
+                panic!("the error carries a label: {source:?}");
+            };
+            assert_eq!(&source[span], "---", "{source:?}");
+        }
     }
 
     #[test]
