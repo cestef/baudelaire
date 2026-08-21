@@ -1,11 +1,9 @@
 //! The themes shipped in `themes/`, built as real sites.
 
-mod common;
-
 use std::fs;
 use std::path::Path;
 
-use common::Site;
+use crate::common::Site;
 
 /// Every theme in `themes/`.
 const THEMES: &[&str] = &["albatros", "spleen", "phares", "paysage"];

@@ -1,10 +1,6 @@
 //! A PDF beside every page.
 
-#![cfg(feature = "pdf")]
-
-mod common;
-
-use common::Site;
+use crate::common::Site;
 
 /// A PDF's own header.
 fn is_pdf(bytes: &[u8]) -> bool {

@@ -1,11 +1,9 @@
 //! In-process full-site build exercising taxonomies, pagination, feeds, robots,
 //! and the sitemap.
 
-mod common;
-
 use baudelaire::engine::{Engine, Mode};
 
-use common::{Site, has_ext, silent};
+use crate::common::{Site, has_ext, silent};
 
 const CONFIG: &str = r#"
 site "T"

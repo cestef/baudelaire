@@ -64,8 +64,6 @@
 //! file "assets/{bg}"
 //! ```
 
-mod common;
-
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -74,10 +72,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use kdl::{KdlNode, KdlValue};
 use miette::Diagnostic;
 
+use crate::common::{Run, Site};
 use baudelaire::config::Config;
 use baudelaire::engine::Mode;
 use baudelaire::ui::Bytes;
-use common::{Run, Site};
 
 /// The cargo features a scenario may name in `requires`, paired with whether
 /// this build has them, read from the binary's own inventory so that a typo is

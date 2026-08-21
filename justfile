@@ -65,14 +65,12 @@ msrv:
 clippy features="":
     cargo clippy --workspace --all-targets {{ features }} -- -D warnings
 
-# Test one flavor with nextest (what CI runs), falling back to `cargo test`.
+# Test one flavor with nextest. Required, not preferred: the integration tests
+# are one binary, and only nextest gives each test its own process. Under
+# `cargo test` they would share one, and the handful that set `HOME` or the
+# working directory would race the rest.
 test features="":
-    #!/usr/bin/env sh
-    if command -v cargo-nextest >/dev/null 2>&1; then
-        cargo nextest run --workspace {{ features }} --no-tests warn
-    else
-        cargo test --workspace {{ features }}
-    fi
+    cargo nextest run --workspace {{ features }} --no-tests warn
 
 # The docs site is a real baudelaire site, so a typst error there fails its own
 # workflow without failing `just ci`. Not a `ci` dependency: different workflow.
@@ -90,7 +88,7 @@ test features="":
 # would couple the two. The test below fails when the file and the tables
 # disagree, so a stale copy cannot ship.
 reference:
-    BLESS=1 cargo nextest run --test reference the_checked_in
+    BLESS=1 cargo nextest run --test suite reference::the_checked_in
 
 # Build the docs site from this checkout: the fast local loop, and what a docs
 # edit should be checked with.

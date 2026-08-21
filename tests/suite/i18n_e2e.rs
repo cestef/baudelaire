@@ -1,9 +1,7 @@
 //! Multi-language sites: a `languages` block turns on i18n, and a `.{code}.typ`
 //! filename or a frontmatter `lang` marks a translation.
 
-mod common;
-
-use common::Site;
+use crate::common::Site;
 
 /// An English (default) site declaring French and German, with a French home
 /// and a French translation of one post.
@@ -304,7 +302,7 @@ fn i18n_module_inlines_languages_and_strings() {
     let bundle = site
         .files("public/assets")
         .into_iter()
-        .find(|f| f.starts_with("main") && common::has_ext(f, "js"))
+        .find(|f| f.starts_with("main") && crate::common::has_ext(f, "js"))
         .expect("bundled main.js");
     let js = site.read(&format!("public/assets/{bundle}"));
     assert!(js.contains("Lire la suite") && js.contains("Français"));

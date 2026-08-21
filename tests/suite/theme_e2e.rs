@@ -1,10 +1,8 @@
 //! Themes: templates, assets, static files, and config defaults a site inherits
 //! and overrides file by file.
 
-mod common;
-
+use crate::common::Site;
 use baudelaire::config::Config;
-use common::Site;
 
 /// A site with a theme in `themes/plume`, carrying a template, a stylesheet, a
 /// static file, and config defaults.

@@ -16,11 +16,16 @@ cargo build
 cargo run -- --help
 ```
 
+Required:
+
+- [`cargo-nextest`](https://nexte.st) to run the tests. Every integration test
+  is one binary, and nextest is what gives each test its own process; under
+  `cargo test` they would share one and the few that set `HOME` or the working
+  directory would race the rest.
+
 Optional, and worth having:
 
 - [`just`](https://github.com/casey/just) to run the same checks CI does
-- [`cargo-nextest`](https://nexte.st) for the test runner CI uses (`just test`
-  falls back to `cargo test` without it)
 - [`cargo-deny`](https://github.com/EmbarkStudios/cargo-deny) for `just audit`
 - [`actionlint`](https://github.com/rhysd/actionlint) for `just workflows`
 

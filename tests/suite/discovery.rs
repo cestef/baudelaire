@@ -1,10 +1,8 @@
-mod common;
-
 use std::fs;
 
 use baudelaire::content::Discovery;
 
-use common::{Site, load_page, project};
+use crate::common::{Site, load_page, project};
 
 fn frontmatter_post(title: &str, slug: &str, date: &str, tags: &[&str]) -> String {
     let tags_str = tags

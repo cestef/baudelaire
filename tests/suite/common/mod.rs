@@ -1,5 +1,5 @@
-//! Shared harness for the integration test binaries.
-// Each binary compiles this module independently and uses only part of it.
+//! Shared harness for the integration tests.
+// A feature-gated suite is the only user of some of these.
 #![allow(dead_code)]
 
 use std::fs;

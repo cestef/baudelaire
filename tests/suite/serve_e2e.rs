@@ -1,10 +1,8 @@
-mod common;
-
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
-use common::{Serve, Site};
+use crate::common::{Serve, Site};
 
 #[test]
 fn serve_responds_with_page() {

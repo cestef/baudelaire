@@ -2,8 +2,6 @@
 //!
 //! Every request goes to a server this test owns, never the public internet.
 
-mod common;
-
 use std::fmt::Write as _;
 use std::io::Cursor;
 use std::net::{SocketAddr, TcpListener};
@@ -13,7 +11,7 @@ use std::thread;
 
 use baudelaire::error::BaudelaireErrorKind;
 
-use common::Site;
+use crate::common::Site;
 
 /// A server that answers `/ok` with 200, `/method` with 405 for HEAD and 200
 /// for GET, and everything else with 404. `/ok` starts answering 404 once

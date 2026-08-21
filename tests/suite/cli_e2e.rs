@@ -1,8 +1,6 @@
-mod common;
-
 use baudelaire::content::Discovery;
 
-use common::{Site, free_port, project, wait_for_port};
+use crate::common::{Site, free_port, project, wait_for_port};
 
 #[test]
 fn root_flag_builds_from_that_directory() {

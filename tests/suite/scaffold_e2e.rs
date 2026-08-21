@@ -1,6 +1,4 @@
-mod common;
-
-use common::Site;
+use crate::common::Site;
 
 #[test]
 fn init_creates_project_skeleton() {

@@ -3,9 +3,7 @@
 //! Externalization, sizing and `srcset` are scenarios, in
 //! `tests/scenarios/images.kdl`.
 
-mod common;
-
-use common::Site;
+use crate::common::Site;
 
 /// A tiny PNG of the given size, its pixels varying with position so two
 /// different sizes never share bytes.

@@ -1,8 +1,6 @@
 //! End-to-end deploy tests: the real backends driven through the public
 //! [`baudelaire::deploy::Deploy::run`], against in-process servers.
 
-mod common;
-
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::io::{BufRead, BufReader, Read, Write};
@@ -15,7 +13,7 @@ use baudelaire::deploy;
 use baudelaire::error::Result as BResult;
 use baudelaire::remote::{Interaction, Options};
 
-use common::{Site, dist, silent};
+use crate::common::{Site, dist, silent};
 
 /// A headless [`Interaction`]: confirms everything, never supplies a secret.
 struct Headless;

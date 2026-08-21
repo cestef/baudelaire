@@ -1,7 +1,5 @@
-mod common;
-
+use crate::common::Site;
 use baudelaire::content::{Frontmatter, Page};
-use common::Site;
 
 /// Load `text` as a page in a site declaring the `tags` and `series`
 /// taxonomies.
@@ -17,7 +15,7 @@ fn try_load_with(text: &str, config: &str) -> baudelaire::error::Result<Page> {
     site.write("config.kdl", config);
     site.write("content/posts/page.typ", text);
     let cfg = site.config();
-    common::load_page("posts", &site.root.join("content/posts/page.typ"), &cfg)
+    crate::common::load_page("posts", &site.root.join("content/posts/page.typ"), &cfg)
 }
 
 fn extract(text: &str) -> Frontmatter {
