@@ -64,7 +64,7 @@ impl Init {
         let settings = Self::packages(ui, &target);
 
         ui.blank();
-        ui.done_plain(format_args!(
+        ui.headline(format_args!(
             "{} project ready in {}",
             template.name,
             Paths(&target.display().to_string())

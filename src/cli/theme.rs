@@ -266,7 +266,7 @@ impl ThemeArgsFor {
 
         let this = self.vendored(cx, says.theme(), &self.name)?;
         let carried = Bundled::find(&self.name).ok();
-        cx.ui.done_plain(this.name.cyan());
+        cx.ui.headline(this.name.cyan());
         if let Some(theme) = carried {
             cx.ui.detail(theme.about);
         }

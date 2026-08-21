@@ -242,17 +242,18 @@ impl Ui {
         let _ = writeln!(s.out, "\n  {} {}", Marker::Section, msg.bold());
     }
 
-    /// A result line: `✓ built 24 pages .. in 132ms`.
+    /// A result line under the current section: `✓ built 24 pages .. in 132ms`.
     pub fn done(&self, msg: impl Display) {
-        self.done_inner(msg, true);
+        self.marked(msg, true);
     }
 
-    /// Like [`done`](Self::done) but flush left.
-    pub fn done_plain(&self, msg: impl Display) {
-        self.done_inner(msg, false);
+    /// The same line at the left margin, heading the `detail` lines under it
+    /// rather than sitting among them.
+    pub fn headline(&self, msg: impl Display) {
+        self.marked(msg, false);
     }
 
-    fn done_inner(&self, msg: impl Display, indent: bool) {
+    fn marked(&self, msg: impl Display, indent: bool) {
         let mut s = self.state.lock();
         if s.level < Level::Quiet {
             return;
