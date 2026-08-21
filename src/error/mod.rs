@@ -177,6 +177,10 @@ pub enum BaudelaireErrorKind {
 
     #[error(transparent)]
     #[diagnostic(transparent)]
+    Reported(#[from] crate::error::cli::Reported),
+
+    #[error(transparent)]
+    #[diagnostic(transparent)]
     CliKey(#[from] crate::error::cli::UnknownKey),
     #[error(transparent)]
     #[diagnostic(transparent)]
@@ -346,6 +350,12 @@ impl BaudelaireErrorKind {
             Self::Config(error) => Self::Config(Box::new(error.named(path))),
             other => other,
         }
+    }
+
+    /// Whether the command has already reported this failure in its own format,
+    /// so nothing further should be rendered for it.
+    pub fn reported(&self) -> bool {
+        matches!(self, Self::Reported(_))
     }
 }
 

@@ -326,6 +326,17 @@ impl Ui {
         );
     }
 
+    /// One line of a command's own output, written as it stands: no marker, no
+    /// indent, and no verbosity to answer to, because it is what the command
+    /// was run for rather than narration about it.
+    pub fn line(&self, msg: impl Display) {
+        let mut s = self.state.lock();
+        if self.tty {
+            let _ = write!(s.out, "{CLEAR_LINE}");
+        }
+        let _ = writeln!(s.out, "{msg}");
+    }
+
     /// A blank line, for vertical grouping.
     pub fn blank(&self) {
         let mut s = self.state.lock();

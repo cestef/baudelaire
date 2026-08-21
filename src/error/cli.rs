@@ -59,6 +59,19 @@ impl Generated {
     }
 }
 
+/// A run that failed and has already said so in its own format.
+///
+/// Rendering a diagnostic after it would put a second renderer in a stream a
+/// tool is reading one line at a time; the message is kept for `--json`, which
+/// records the failure rather than printing it.
+#[derive(Debug, Error, Diagnostic)]
+#[error("{} did not check out", Code(.what))]
+#[diagnostic(code(baudelaire::cli::reported))]
+pub struct Reported {
+    /// What was being checked, as the command names it.
+    pub what: String,
+}
+
 /// A generated document could not be written to stdout, a broken pipe never
 /// reaching here.
 #[derive(Debug, Error, Diagnostic)]

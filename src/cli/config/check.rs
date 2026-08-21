@@ -7,6 +7,7 @@ use clap::Args;
 
 use super::super::{Cx, Run, help};
 use crate::config::Config;
+use crate::error::cli::Reported;
 use crate::error::{BaudelaireErrorKind, ConfigError, Result};
 
 #[derive(Args, Debug, Clone)]
@@ -91,18 +92,23 @@ impl CheckArgs {
 }
 
 impl Run for CheckArgs {
+    /// Under `--compact` the fault lines are the whole output: no banner ahead
+    /// of them, and the failure they add up to is already reported, so nothing
+    /// renders a diagnostic after them.
     fn run(&self, cx: &Cx) -> Result<()> {
         let paths = self.paths(cx);
-        cx.ui.banner(format_args!(
-            "checking {}",
-            crate::ui::Text(&Listed(&paths).to_string())
-        ));
+        if !self.compact {
+            cx.ui.banner(format_args!(
+                "checking {}",
+                crate::ui::Text(&Listed(&paths).to_string())
+            ));
+        }
         let mut faulted = false;
         for path in &paths {
             let text = match Self::read(path) {
                 Ok(text) => text,
                 Err(fault) if self.compact => {
-                    Compact::new(path, None, &fault).report();
+                    cx.ui.line(Compact::new(path, None, &fault));
                     faulted = true;
                     continue;
                 }
@@ -111,7 +117,7 @@ impl Run for CheckArgs {
             let config = match self.checked(&text, path, cx) {
                 Ok(config) => config,
                 Err(fault) if self.compact => {
-                    Compact::new(path, Some(&text), &fault).report();
+                    cx.ui.line(Compact::new(path, Some(&text), &fault));
                     faulted = true;
                     continue;
                 }
@@ -123,7 +129,10 @@ impl Run for CheckArgs {
             }
         }
         if faulted {
-            return Err(ConfigError::invalid(&Listed(&paths).to_string()).into());
+            return Err(Reported {
+                what: Listed(&paths).to_string(),
+            }
+            .into());
         }
         Ok(())
     }
@@ -142,10 +151,6 @@ struct Compact<'a> {
 impl<'a> Compact<'a> {
     fn new(path: &'a Path, text: Option<&'a str>, fault: &'a BaudelaireErrorKind) -> Self {
         Self { path, text, fault }
-    }
-
-    fn report(&self) {
-        eprintln!("{self}");
     }
 
     /// Where the first label points, one-based, or the top of the file when the
