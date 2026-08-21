@@ -3,7 +3,6 @@
 use std::fmt::Write as _;
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use owo_colors::OwoColorize;
 
@@ -292,7 +291,8 @@ impl Details {
     /// wins; what a flag did not supply is prompted for when there is a
     /// terminal to prompt at, and otherwise defaulted.
     fn gather(args: &InitArgs, root: &Root, interactive: bool) -> Result<(PathBuf, Self)> {
-        let git = Self::git_author().unwrap_or_else(|| Self::UNSIGNED.to_owned());
+        let git = crate::git::Repo::author(root.path())
+            .unwrap_or_else(|| Self::UNSIGNED.to_owned());
         let ask = |label: &str, default: &str, given: Option<&String>| -> Result<String> {
             match given {
                 Some(v) => Ok(v.clone()),
@@ -364,15 +364,6 @@ impl Details {
             .map_or_else(|| Self::UNNAMED.to_owned(), str::to_owned)
     }
 
-    /// The user's name from git config, if configured.
-    fn git_author() -> Option<String> {
-        let output = Command::new("git")
-            .args(["config", "user.name"])
-            .output()
-            .ok()?;
-        let name = String::from_utf8(output.stdout).ok()?.trim().to_owned();
-        (!name.is_empty()).then_some(name)
-    }
 }
 
 #[cfg(test)]

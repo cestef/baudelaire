@@ -48,4 +48,12 @@ impl Repo {
     pub fn history(&self, contributors: bool) -> History {
         History::read(&Git::at(&self.dir), contributors)
     }
+
+    /// The name `git config` answers with in `dir`, which needs no repository:
+    /// a directory outside one still reads the user's own configuration.
+    pub fn author(dir: &Path) -> Option<String> {
+        Git::at(dir)
+            .ask(&["config", "user.name"])
+            .filter(|name| !name.is_empty())
+    }
 }
