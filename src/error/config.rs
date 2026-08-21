@@ -416,6 +416,17 @@ impl ConfigError {
         )
     }
 
+    /// A `${VAR}` reference to a variable a credential is passed in.
+    pub fn secret(source: &str, name: &str, span: SourceSpan) -> Self {
+        Self::at(
+            source,
+            ConfigErrorKind::SecretEnv {
+                name: name.to_owned(),
+            },
+            span,
+        )
+    }
+
     pub fn missing_children(source: &str, span: SourceSpan) -> Self {
         Self::at(source, ConfigErrorKind::MissingChildren, span)
     }
@@ -900,6 +911,17 @@ pub enum ConfigErrorKind {
         )
     )]
     MissingEnv { name: String },
+
+    #[error("environment variable {} carries a credential", Code(.name))]
+    #[diagnostic(
+        code(baudelaire::config::secret_env),
+        help(
+            "a config value is read into the built site, so `{}` is never expanded; \
+             leave it to the environment the deploy runs in",
+            Text(.name)
+        )
+    )]
+    SecretEnv { name: String },
 
     #[error(transparent)]
     #[diagnostic(transparent)]

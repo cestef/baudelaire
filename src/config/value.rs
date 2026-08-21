@@ -11,10 +11,14 @@ use crate::config::dispatch::Keys;
 use crate::config::{FieldType, Named};
 use crate::error::{ConfigError, Result};
 
-/// A `${VAR}` reference whose variable is unset and which carries no
-/// `:-default`: the one failure mode of [`Env`] expansion.
+/// Why a `${VAR}` reference did not expand.
 #[derive(Debug)]
-struct MissingVar(String);
+enum Unexpanded {
+    /// The variable is unset and the reference carries no `:-default`.
+    Missing(String),
+    /// The variable carries a credential, which no config value may.
+    Secret(String),
+}
 
 /// A [`KdlValue`] written back as the KDL source that parses to it, for a
 /// diagnostic echoing an author's own value and for the line `config set`
@@ -133,7 +137,7 @@ impl Drop for Structural {
 struct Env;
 
 impl Env {
-    fn expand(raw: &str) -> Result<String, MissingVar> {
+    fn expand(raw: &str) -> Result<String, Unexpanded> {
         Self::expand_with(raw, |name| std::env::var(name).ok(), Structural::mode())
     }
 
@@ -143,7 +147,7 @@ impl Env {
         raw: &str,
         lookup: impl Fn(&str) -> Option<String>,
         unset: Unset,
-    ) -> Result<String, MissingVar> {
+    ) -> Result<String, Unexpanded> {
         let mut out = String::with_capacity(raw.len());
         let mut rest = raw;
         while let Some(start) = rest.find("${") {
@@ -157,10 +161,13 @@ impl Env {
                 Some((name, default)) => (name.trim(), Some(default)),
                 None => (after[..end].trim(), None),
             };
+            if crate::config::Secrets::carried_by(name) {
+                return Err(Unexpanded::Secret(name.to_owned()));
+            }
             let value = lookup(name)
                 .or_else(|| default.map(str::to_owned))
                 .or_else(|| unset.stand_in())
-                .ok_or_else(|| MissingVar(name.to_owned()))?;
+                .ok_or_else(|| Unexpanded::Missing(name.to_owned()))?;
             out.push_str(&value);
             rest = &after[end + 1..];
         }
@@ -201,8 +208,10 @@ impl ValueExt for KdlValue {
         self.as_string().map_or_else(
             || Err(ConfigError::type_mismatch(text, "string", self.kind(), span).into()),
             |s| {
-                Env::expand(s)
-                    .map_err(|MissingVar(name)| ConfigError::env(text, &name, span).into())
+                Env::expand(s).map_err(|why| match why {
+                    Unexpanded::Missing(name) => ConfigError::env(text, &name, span).into(),
+                    Unexpanded::Secret(name) => ConfigError::secret(text, &name, span).into(),
+                })
             },
         )
     }
@@ -280,7 +289,7 @@ impl ValueExt for KdlValue {
 
 #[cfg(test)]
 mod tests {
-    use super::{Env, Kdl, Structural, Unset};
+    use super::{Env, Kdl, Structural, Unexpanded, Unset};
     use kdl::KdlValue;
 
     /// A help that says "write this instead" is copied, so what it prints has
@@ -330,7 +339,22 @@ mod tests {
     fn env_unset_without_default_errors() {
         let env = |_: &str| None;
         let err = Env::expand_with("${MISSING}", env, Unset::Fails).unwrap_err();
-        assert_eq!(err.0, "MISSING");
+        assert!(
+            matches!(&err, Unexpanded::Missing(name) if name == "MISSING"),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn env_refuses_a_variable_holding_a_credential() {
+        let env = |_: &str| Some("hunter2".to_owned());
+        for name in crate::config::Secrets::ALL {
+            let err = Env::expand_with(&format!("${{{name}}}"), env, Unset::Fails).unwrap_err();
+            assert!(
+                matches!(&err, Unexpanded::Secret(got) if got == name),
+                "{err:?}"
+            );
+        }
     }
 
     #[test]

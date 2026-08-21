@@ -291,8 +291,8 @@ impl Details {
     /// wins; what a flag did not supply is prompted for when there is a
     /// terminal to prompt at, and otherwise defaulted.
     fn gather(args: &InitArgs, root: &Root, interactive: bool) -> Result<(PathBuf, Self)> {
-        let git = crate::git::Repo::author(root.path())
-            .unwrap_or_else(|| Self::UNSIGNED.to_owned());
+        let git =
+            crate::git::Repo::author(root.path()).unwrap_or_else(|| Self::UNSIGNED.to_owned());
         let ask = |label: &str, default: &str, given: Option<&String>| -> Result<String> {
             match given {
                 Some(v) => Ok(v.clone()),
@@ -363,7 +363,6 @@ impl Details {
             .filter(|n| !n.is_empty())
             .map_or_else(|| Self::UNNAMED.to_owned(), str::to_owned)
     }
-
 }
 
 #[cfg(test)]

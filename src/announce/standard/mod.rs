@@ -25,7 +25,7 @@ use crate::remote::Options;
 pub use self::record::{DOCUMENT, PUBLICATION};
 
 /// Environment variable holding the app password (never stored in config).
-const PASSWORD_ENV: &str = "BAUDELAIRE_ATPROTO_PASSWORD";
+const PASSWORD_ENV: &str = crate::config::Secrets::ATPROTO_PASSWORD;
 
 /// The standard.site backend, configured from a `announce { standard { .. } }`
 /// block.

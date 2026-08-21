@@ -128,11 +128,11 @@ impl S3 {
 /// AWS's conventional names, so existing CI secrets and `~/.aws` tooling carry
 /// over.
 pub const ACCESS_KEY_ENV: &str = "AWS_ACCESS_KEY_ID";
-pub const SECRET_KEY_ENV: &str = "AWS_SECRET_ACCESS_KEY";
+pub const SECRET_KEY_ENV: &str = crate::config::Secrets::S3_SECRET_KEY;
 
 /// Session token for temporary credentials, without which they produce a
 /// well-formed signature the server rejects as `SignatureDoesNotMatch`.
-pub const SESSION_TOKEN_ENV: &str = "AWS_SESSION_TOKEN";
+pub const SESSION_TOKEN_ENV: &str = crate::config::Secrets::S3_SESSION_TOKEN;
 
 pub struct Bucket {
     agent: ureq::Agent,

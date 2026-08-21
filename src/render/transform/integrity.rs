@@ -18,7 +18,12 @@ impl Transform for Integrity {
     }
 
     fn after(&self) -> &'static [&'static str] {
-        &[Fingerprint::NAME, Embed::NAME, Meta::NAME, Speculation::NAME]
+        &[
+            Fingerprint::NAME,
+            Embed::NAME,
+            Meta::NAME,
+            Speculation::NAME,
+        ]
     }
 
     /// Either half is reason enough to walk: a site may stamp integrity without

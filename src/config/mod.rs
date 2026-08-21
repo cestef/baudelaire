@@ -34,6 +34,7 @@ pub mod prune;
 pub mod redirects;
 pub mod reference;
 pub mod schema;
+pub mod secrets;
 pub mod security;
 pub mod serve;
 #[cfg(test)]
@@ -123,6 +124,7 @@ pub use prune::PruneConfig;
 pub use redirects::RedirectsConfig;
 pub use redirects::rule::RedirectConfig;
 pub use schema::{Bound, FieldSchema, FieldType, TypeError, Words};
+pub use secrets::Secrets;
 pub use security::SecurityConfig;
 pub use security::csp::CspConfig;
 pub use serve::ServeConfig;
