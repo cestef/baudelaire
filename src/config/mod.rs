@@ -473,10 +473,6 @@ impl Config {
     /// is written to: `index` plus [`UrlStyle::PAGE`].
     pub const INDEX: &'static str = "index.html";
 
-    /// The URL segment that climbs a directory, refused wherever a page, a
-    /// redirect or a permalink template names its own output.
-    pub(crate) const PARENT: &'static str = "..";
-
     /// The key holding the profile partials, shared by the top-level rule that
     /// parses it and the guard refusing one *inside* a profile.
     pub(crate) const PROFILES: &'static str = "profiles";
@@ -777,23 +773,36 @@ impl Config {
             .join(format!(".{}.staging", self.asset_name()))
     }
 
-    /// A URL's path segments, joined back with the empty ones dropped.
+    /// A URL's path segments, joined back with everything that is not one
+    /// dropped.
     ///
-    /// `..` segments are dropped here, which is the defense for every URL source
-    /// a permalink template's own check does not cover (a frontmatter slug), so
-    /// no page can be written outside `dist`.
+    /// The last defense for every URL source a permalink template's own check
+    /// does not cover (a frontmatter slug), so no page can be written outside
+    /// `dist`.
     fn segments(url: &str) -> String {
         url.split('/')
-            .filter(|segment| !segment.is_empty() && *segment != Self::PARENT)
+            .filter(|segment| Self::ordinary(segment))
             .collect::<Vec<_>>()
             .join("/")
     }
 
+    /// Whether `segment` names one ordinary entry in a directory: not `.`, not
+    /// `..`, and nothing a filesystem reads as structure of its own.
+    ///
+    /// A backslash is refused on every platform rather than only the one that
+    /// separates with it, since a site that builds on one is served from the
+    /// other and a drive or a UNC prefix would otherwise take a `join` with it.
+    fn ordinary(segment: &str) -> bool {
+        !segment.contains('\\') && crate::fs::Contained::new(segment).is_some()
+    }
+
     /// Whether `url` names a segment that climbs out of the directory it is
-    /// resolved against, which [`Config::segments`] drops and every URL a page
-    /// or a redirect can name is refused for.
+    /// resolved against, or that is not a segment at all, which
+    /// [`Config::segments`] drops and every URL a page or a redirect can name
+    /// is refused for.
     pub(crate) fn traverses(url: &str) -> bool {
-        url.split('/').any(|segment| segment == Self::PARENT)
+        url.split('/')
+            .any(|segment| !segment.is_empty() && !Self::ordinary(segment))
     }
 
     /// The file `url` is written to when it names the not-found page, and
