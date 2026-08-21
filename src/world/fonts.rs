@@ -87,23 +87,22 @@ impl Fonts {
     }
 
     /// Every font file under `dir`, recursively, keyed relative to the project
-    /// root and carrying the hash of its contents; a directory that cannot be
-    /// read contributes nothing rather than failing.
+    /// root and carrying the hash of its contents; a tree that cannot be read
+    /// contributes nothing rather than failing.
+    ///
+    /// Walked through [`crate::fs::Walk`], which enters a directory once by
+    /// canonical path: a site's font directory linking to an ancestor would
+    /// otherwise recurse until the stack ran out.
     ///
     /// Only the extensions the scanner itself loads, so an editor's swap file
     /// or a `.DS_Store` beside a face does not invalidate the site.
     fn walk(&self, dir: &Path, into: &mut Faces) {
         const FACES: [&str; 4] = ["ttf", "ttc", "otf", "otc"];
 
-        let Ok(entries) = std::fs::read_dir(dir) else {
+        let Ok(files) = crate::fs::Walk::new(dir).following().files() else {
             return;
         };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                self.walk(&path, into);
-                continue;
-            }
+        for path in files {
             if !FACES
                 .iter()
                 .any(|ext| crate::config::Config::has_ext(&path, ext))
