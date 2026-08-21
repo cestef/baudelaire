@@ -264,7 +264,7 @@ schema {
   status "one-of<draft|review|published>" default="draft"
   weight "int" min=1 max=10
   title "str" min=2 max=80
-  tags "list" max=5
+  tags "list" max=5 pattern="^[a-z][a-z0-9-]*$"
 }
 //! } } }
 ```
@@ -276,7 +276,13 @@ schema {
   [`min`], [A floor: a number's own value, a string's length, a list's size.], [`int`, `float`, `str`, `list<T>`],
   [`max`], [A ceiling, read the same way.], [the same],
   [`default`], [What the page gets when it writes none, which also lets the field be absent.], [any scalar type],
+  [`pattern`], [A regular expression every string the value carries must match.], [`str`, `list<str>`],
 )
+
+A pattern holds the string itself, or *every* element of a list of them, so the
+fault names the element that broke (`tags.2`). It is unanchored, as a regular
+expression is: write `^..$` to hold the whole of the value rather than a part
+of it. A pattern that does not compile is refused where it is written.
 
 `one-of` is part of the type language rather than a key, so it composes like
 every other type: `list<one-of<draft|published>>` is a list of them, and a

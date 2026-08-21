@@ -359,6 +359,26 @@ mod tests {
         assert_eq!(color(&rendered), "did you mean \x1b[36ma*b\x1b[39m?");
     }
 
+    /// A help built from another crate's error text: the one place a diagnostic
+    /// carries prose this crate did not write, and so the one that has to go
+    /// through [`Text`] rather than be interpolated raw.
+    #[test]
+    fn foreign_text_in_a_help_cannot_restyle_the_line() {
+        let foreign = "regex parse error:\n    *a`b*\n    ^\nerror: repetition operator";
+        let escaped = Text(foreign).to_string();
+
+        assert!(
+            color(foreign).contains('\u{1b}'),
+            "raw foreign text opens a span: {:?}",
+            color(foreign)
+        );
+        assert_eq!(
+            color(&escaped),
+            foreign,
+            "escaped, it renders as itself and styles nothing"
+        );
+    }
+
     #[test]
     fn multibyte_text_around_a_span_keeps_its_boundaries() {
         assert_eq!(color("é `a` ü"), "é \x1b[36ma\x1b[39m ü");

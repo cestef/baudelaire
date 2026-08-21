@@ -159,6 +159,10 @@ parking_lot = "0.12"
 flume = "0.12"
 quick-xml = "0.41"
 wax = "0.7"
+# Linear-time by construction, so a pattern a site declares cannot be made to
+# backtrack: `check { snippets }` reaches a backtracking engine through syntect,
+# and a frontmatter schema must not.
+regex = "1"
 anstream = "1"
 owo-colors = { version = "4", features = ["supports-colors"] }
 rayon = "1"

@@ -136,16 +136,41 @@ impl Check {
     /// the bounds declared beside it, so a bound never complains about a value
     /// whose type was already wrong.
     fn field(&mut self, field: &FieldSchema, value: &Value) -> Option<Fault> {
-        self.value(&field.ty, value).or_else(|| {
-            let bound = field.ty.bound()?;
-            if bound.fits(value, field.min, field.max) {
-                return None;
-            }
-            Some(Fault::Refused {
-                path: self.path.clone(),
-                want: Self::within(bound, field.min, field.max),
-            })
+        self.value(&field.ty, value)
+            .or_else(|| self.bounded(field, value))
+            .or_else(|| self.matching(field.pattern.as_ref()?, value))
+    }
+
+    /// The value against the floor and ceiling the field declares.
+    fn bounded(&self, field: &FieldSchema, value: &Value) -> Option<Fault> {
+        let bound = field.ty.bound()?;
+        if bound.fits(value, field.min, field.max) {
+            return None;
+        }
+        Some(Fault::Refused {
+            path: self.path.clone(),
+            want: Self::within(bound, field.min, field.max),
         })
+    }
+
+    /// Every string the value carries against the pattern the field declares:
+    /// the string itself, or each element of a list of them, so the fault names
+    /// the element that broke.
+    fn matching(&mut self, pattern: &crate::config::Pattern, value: &Value) -> Option<Fault> {
+        match value {
+            Value::Str(text) if pattern.matches(text.as_str()) => None,
+            Value::Str(_) => Some(Fault::Refused {
+                path: self.path.clone(),
+                want: format!("a string matching \"{}\"", pattern.source()),
+            }),
+            Value::Array(items) => items.iter().enumerate().find_map(|(at, item)| {
+                self.path.push(Step::Index(at));
+                let fault = self.matching(pattern, item);
+                self.path.pop();
+                fault
+            }),
+            _ => None,
+        }
     }
 
     /// The bounds a field declares, as a clause reading after "must be".

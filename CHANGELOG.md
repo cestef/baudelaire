@@ -19,8 +19,11 @@ chores are visible in the git history and change nothing for a site.
   `max` hold a number to its own value, a string to its length and a list to its
   size. `default=` gives the page what it did not write, which also lets the
   field be absent; it reaches `page.frontmatter` and every listing, and what the
-  page wrote always wins. A constraint the declared type cannot answer for is a
-  config error where it is written rather than a rule that never fires.
+  page wrote always wins. `pattern=` is a regular expression every string the
+  value carries has to match, the value itself or each element of a list of
+  them; it is unanchored, so `^..$` holds the whole of one. A constraint the
+  declared type cannot answer for is a config error where it is written rather
+  than a rule that never fires.
 
 - **A page knows its own history.** `content { history }` hands each page
   `page.git`: the commit that last touched its file, when, and who made it.

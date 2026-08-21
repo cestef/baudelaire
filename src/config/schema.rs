@@ -16,6 +16,7 @@ use crate::config::dispatch::Kind;
 use crate::config::dispatch::Kind::Choice;
 use crate::config::dispatch::{Attributed, Attrs, Keys};
 use crate::config::node::NodeExt;
+use crate::config::pattern::Pattern;
 use crate::config::value::ValueExt;
 use crate::config::vocab::attr;
 use crate::content::Frontmatter;
@@ -118,6 +119,29 @@ pub struct FieldSchema {
     /// The ceiling, read the same way as `min`.
     #[key(opt int)]
     pub max: Option<i64>,
+
+    /// A regular expression every string the value carries has to match. Unanchored: write `^..$` to hold the whole of it.
+    ///
+    /// The value itself for a `str`, and every element for a list of them.
+    #[key(custom(
+        Kind::Text,
+        |c: &Self| c.pattern.as_ref().map_or(Value::Unset, Value::written),
+        |c: &mut Self, v: &kdl::KdlValue, t: &str, s: miette::SourceSpan| {
+            let source = v.as_str(t, s)?;
+            c.pattern = Some(Pattern::parse(&source).map_err(|why| {
+                ConfigError::at(
+                    t,
+                    ConfigErrorKind::FieldPattern {
+                        pattern: source.clone(),
+                        why: why.to_string(),
+                    },
+                    s,
+                )
+            })?);
+            Ok(())
+        },
+    ))]
+    pub pattern: Option<Pattern>,
 }
 
 /// Written back as the type expression a config line spells.
@@ -272,6 +296,21 @@ impl FieldType {
             Self::OneOf(values) => Some(values),
             _ => None,
         }
+    }
+
+    /// What this type ends in, through however many `list<..>` wrap it: the
+    /// type the values a page actually writes have.
+    pub fn innermost(&self) -> &Self {
+        match self {
+            Self::List(inner) => inner.innermost(),
+            leaf => leaf,
+        }
+    }
+
+    /// Whether a pattern can hold this type: one whose values are strings a
+    /// site chose, rather than strings it enumerated.
+    pub fn matchable(&self) -> bool {
+        matches!(self.innermost(), Self::Str)
     }
 
     /// What a `min` or a `max` on a field of this type holds, or `None` for a
@@ -518,6 +557,12 @@ impl FieldSchema {
                 max: ceiling,
             });
         }
+        if self.pattern.is_some() && !self.ty.matchable() {
+            return refuse(ConfigErrorKind::FieldNotMatched {
+                key: key.to_owned(),
+                declared: self.ty.article(),
+            });
+        }
         if let Some(default) = &self.default {
             let value = typst::foundations::Value::from(default);
             if crate::content::Check::fits(&self.ty, &value) {
@@ -675,6 +720,39 @@ mod tests {
         assert_eq!(bound("date"), None);
         assert_eq!(bound("dict"), None);
         assert_eq!(bound("one-of<a|b>"), None);
+    }
+
+    /// A pattern holds a string, and a list of them through however many lists
+    /// wrap it; a type whose values a site did not choose carries none.
+    #[test]
+    fn a_pattern_holds_the_types_whose_strings_a_site_writes() {
+        let matchable = |src: &str| FieldType::parse(src).expect("a valid type").matchable();
+
+        assert!(matchable("str"));
+        assert!(matchable("list"));
+        assert!(matchable("list<str>"));
+        assert!(matchable("list<list<str>>"));
+        assert!(!matchable("int"));
+        assert!(!matchable("date"));
+        assert!(!matchable("dict"));
+        assert!(!matchable("list<int>"));
+        assert!(
+            !matchable("one-of<a|b>"),
+            "a choice already names what it allows"
+        );
+    }
+
+    #[test]
+    fn a_type_ends_in_what_its_values_actually_are() {
+        let innermost = |src: &str| {
+            FieldType::parse(src)
+                .expect("a valid type")
+                .innermost()
+                .clone()
+        };
+
+        assert_eq!(innermost("str"), FieldType::Str);
+        assert_eq!(innermost("list<list<int>>"), FieldType::Int);
     }
 
     #[test]

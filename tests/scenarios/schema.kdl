@@ -718,3 +718,114 @@ scenario "a default that the declared type would refuse is a config error" {
     fails { code "baudelaire::config::field_default" }
   }
 }
+
+// A pattern holds every string a value carries: the string itself, or each
+// element of a list of them, so the fault names the element that broke.
+scenario "a pattern holds a string and every element of a list of them" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog {
+            schema {
+              code "str" pattern="^[A-Z]{2}-[0-9]+$"
+              tags "list" pattern="^[a-z][a-z-]*$"
+            }
+          }
+        }
+        taxonomies { tags }
+      }
+      """#
+    "content/blog/ok.typ" #"""
+      #let frontmatter = (title: "P", code: "AB-12", tags: ("rust", "static-sites"),)
+      body
+      """#
+  }
+  build { expect { ok; file "blog/ok/index.html" { contains "body" } } }
+  build {
+    files {
+      "content/blog/ok.typ" #"""
+        #let frontmatter = (title: "P", code: "ab-12", tags: ("rust",),)
+        body
+        """#
+    }
+    expect { fails { code "baudelaire::schema::refused" } }
+  }
+  build {
+    files {
+      "content/blog/ok.typ" #"""
+        #let frontmatter = (title: "P", code: "AB-12", tags: ("rust", "Static"),)
+        body
+        """#
+    }
+    expect { fails { code "baudelaire::schema::refused" } }
+  }
+}
+
+// Unanchored, as a regular expression is: a pattern with no `^`/`$` matches
+// anywhere in the value.
+scenario "a pattern matches anywhere until it is anchored" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog { schema { code "str" pattern="[0-9]+" } }
+        }
+      }
+      """#
+    "content/blog/post.typ" #"""
+      #let frontmatter = (title: "P", code: "ab-12-cd",)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "blog/post/index.html" { contains "body" }
+  }
+}
+
+scenario "a pattern on a type that carries no string is a config error" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog { schema { weight "int" pattern="^[0-9]+$" } }
+        }
+      }
+      """#
+    "content/blog/post.typ" #"""
+      #let frontmatter = (title: "P",)
+      body
+      """#
+  }
+  expect {
+    fails { code "baudelaire::config::field_not_matched" }
+  }
+}
+
+scenario "a pattern that is not a regular expression is a config error" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog { schema { code "str" pattern="[a-" } }
+        }
+      }
+      """#
+    "content/blog/post.typ" #"""
+      #let frontmatter = (title: "P",)
+      body
+      """#
+  }
+  expect {
+    fails { code "baudelaire::config::field_pattern" }
+  }
+}

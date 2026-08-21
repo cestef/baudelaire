@@ -710,6 +710,20 @@ pub enum ConfigErrorKind {
     )]
     FieldNotBounded { key: String, declared: String },
 
+    #[error("frontmatter {} is {}, which carries no string to match", Code(.key), Text(.declared))]
+    #[diagnostic(
+        code(baudelaire::config::field_not_matched),
+        help("a pattern holds a `str`, or every element of a list of them")
+    )]
+    FieldNotMatched { key: String, declared: String },
+
+    // `why` is the regex crate's own account of the fault, which points at the
+    // character that broke it. Escaped: it quotes the pattern a site wrote, and
+    // a backtick in one would open a span and restyle the rest of the line.
+    #[error("{} is not a pattern", Code(.pattern))]
+    #[diagnostic(code(baudelaire::config::field_pattern), help("{}", Text(.why)))]
+    FieldPattern { pattern: String, why: String },
+
     #[error(
         "frontmatter {} cannot be at least {} and at most {}",
         Code(.key),
