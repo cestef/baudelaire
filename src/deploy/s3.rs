@@ -218,7 +218,6 @@ impl Bucket {
                 query.push(("continuation-token", token.clone()));
             }
             let body = self.send(
-                Method::Get,
                 &format!("{}/", self.root),
                 &Self::canonical_query(&query),
                 &[],
@@ -258,21 +257,27 @@ impl Bucket {
             .unwrap_or(key)
     }
 
-    /// A signed GET returning the response body; a body that cannot be read is
+    /// A signed read returning the response body; a body that cannot be read is
     /// an error, never an empty listing the sweep would read as a bucket to
     /// empty.
-    fn send(&self, method: Method, uri: &str, query: &str, body: &[u8]) -> Result<String> {
+    ///
+    /// The request is issued with the verb it was signed for: a signature names
+    /// the method, so sending one verb's signature under another is
+    /// `SignatureDoesNotMatch`.
+    fn send(&self, uri: &str, query: &str, body: &[u8]) -> Result<String> {
+        const METHOD: Method = Method::Get;
+
         let url = if query.is_empty() {
             self.url(uri)
         } else {
             format!("{}?{query}", self.url(uri))
         };
-        let auth = self.authorize(method, uri, query, body);
+        let auth = self.authorize(METHOD, uri, query, body);
         let mut response = self
             .signed(self.agent.get(&url), &auth)
             .call()
             .map_err(DeployError::from)?;
-        Self::check(method, uri, response.status().as_u16(), &mut response)?;
+        Self::check(METHOD, uri, response.status().as_u16(), &mut response)?;
         response
             .body_mut()
             .read_to_string()
