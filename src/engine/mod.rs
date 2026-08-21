@@ -1,6 +1,7 @@
 //! Build pipeline: discover -> compile -> render -> write, parallelized via rayon.
 
 pub(crate) mod asset;
+mod build;
 mod check;
 mod compile;
 pub(crate) mod emit;
@@ -28,20 +29,20 @@ use crate::content::{Data, Page, Plan};
 use crate::engine::asset::Assets;
 #[cfg(feature = "js")]
 use crate::engine::asset::JsCtx;
+use crate::engine::build::{Build, Prologue};
 use crate::engine::check::External;
 use crate::engine::check::{Budgets, CheckedPage, Compiled, Links, Lints, Orphans};
 #[cfg(any(feature = "pdf", feature = "epub"))]
 use crate::engine::compile::bundle::Bundle;
 use crate::engine::compile::image::Images;
 use crate::engine::compile::prepare::{Prepare, Prepared};
-use crate::engine::compile::sidecar::{Artifact, Sidecars, Tally};
+use crate::engine::compile::sidecar::{Artifact, Sidecars};
 use crate::engine::emit::{Emitter, Output, Processors, Site};
 use crate::engine::gate::{Gate, Inert};
 use crate::engine::hook::Hooks;
 use crate::engine::links::Graph;
 use crate::engine::pass::{Pass, Rendered, Reused};
 use crate::engine::statics::{Copied, Static};
-use crate::engine::summary::Summary;
 use crate::error::warning::{BacklinksUnstable, FeatureMissing, SettingInert};
 use crate::error::{BaudelaireErrorKind, BuildFailed, ConfigError, Result, TypstSourceDiagnostic};
 use crate::fs;
@@ -78,6 +79,7 @@ struct Bundled {
 }
 
 /// What the post-build processors emitted, for the summary and the prune.
+#[derive(Default)]
 struct Generated {
     count: usize,
     bytes: u64,
@@ -145,22 +147,16 @@ impl Engine {
         self.project.current(&self.config, self.mode)
     }
 
-    /// A build, phase by phase; this is the only place their order is spelled.
+    /// A build: everything the phases need, then the phases.
+    ///
+    /// What is set up here is what a phase cannot own without borrowing from
+    /// its own state; the pipeline itself is [`build::Phase::ORDER`].
     fn run(&self, ui: &Ui) -> Result<Stats> {
         let timer = Timer::start();
         let statics = self.staged(ui)?;
         let planned = self.planned("planned build", ui)?;
         let warned = ui.warnings();
-        for gap in &self.gaps {
-            ui.warn(*gap);
-        }
-        for inert in &self.inert {
-            ui.warn(*inert);
-        }
-        let has_not_found = planned.pages.iter().any(|page| !page.listed(&self.config));
-        if !has_not_found {
-            ui.warn(crate::error::warning::NotFoundMissing);
-        }
+        self.announce(&planned, ui);
         let hooks = Hooks::new(&self.config);
         hooks.before(ui)?;
         let prepare = self.prepared(&planned, ui)?;
@@ -173,76 +169,59 @@ impl Engine {
             modules.ctx(&planned.pages),
         );
         let mut processed = Self::processed(&assets, ui)?;
-        let deferred = std::mem::take(&mut processed.deferred);
-        let (asset_count, asset_bytes) = (processed.count, processed.bytes);
-        let mut emitted = processed.emitted;
-        let mut pass = Pass::new(
+        let pass = Pass::new(
             self,
             &planned,
             prepare,
-            processed.map,
-            processed.srcsets,
-            emitted.clone(),
+            std::mem::take(&mut processed.map),
+            std::mem::take(&mut processed.srcsets),
+            processed.emitted.clone(),
         );
-        let mut cache = self.cached(&pass, &planned, ui)?;
-        if self.config.links.backlinks {
-            pass.prepare.assume(Graph::predicted(
-                &self.project,
-                pass.renderer.maps().links,
-                &cache,
-                &planned.pages,
-                self.config.multilingual(),
-            ));
-        }
-        let (mut rendered, mut cached) = self.incremental(&pass, &mut cache, ui)?;
-        self.relink(&mut pass, &mut cache, &mut rendered, &mut cached, ui)?;
-        let images = self.images(&rendered, &cached, ui)?;
-        emitted.absorb(images.emitted());
-        let owned = assets.requested(&deferred, &Self::owned(&rendered, &cached))?;
-        self.validate(&rendered, &cached, Some(&emitted), false, ui)?;
-        let outputs = Self::outputs(&rendered, &cached);
-        Self::write(&outputs)?;
-        let bundled = self.bundles(&pass, &mut cache, ui)?;
-        let artifacts: Vec<&Artifact> = rendered
-            .iter()
-            .flat_map(|r| &r.artifacts)
-            .chain(bundled.drawn.iter())
-            .collect();
-        Self::artifacts(&artifacts)?;
-        assets.publish()?;
-        let generated = self.generate(&planned, &outputs, &statics, &mut cache, ui)?;
-        cache.save(outputs.iter().map(|out| (out.page, out.html)))?;
-        self.sweep(ui, &outputs, &statics, &generated, &bundled)?;
+        let mut build = Build::start(
+            Prologue {
+                engine: self,
+                planned: &planned,
+                assets: &assets,
+                pass,
+                statics,
+                processed,
+                warned,
+            },
+            ui,
+        )?;
+        build.advance(ui)?;
         hooks.after(ui)?;
+        Ok(build.finish(ui, timer.elapsed()))
+    }
 
-        ui.flush();
-        let total = rendered.len() + cached.len();
-        let sidecars = Tally::of(artifacts.iter().copied());
-        Summary {
-            pages: total,
-            cached: cached.len(),
-            assets: asset_count + images.count() + owned.count,
-            statics: statics.count,
-            generated: generated.count,
-            bytes: outputs.iter().map(|out| out.html.len() as u64).sum::<u64>()
-                + asset_bytes
-                + owned.bytes
-                + images.bytes()
-                + generated.bytes
-                + statics.bytes
-                + sidecars.bytes,
-            sidecars: sidecars.kinds,
-            warnings: ui.warnings() - warned,
-            dist: &self.config.paths.dist,
-            elapsed: timer.elapsed(),
+    /// What the build has to say before it starts: the capabilities it lacks,
+    /// the settings its own config withholds, and a site with nowhere to send
+    /// an unmatched URL.
+    fn announce(&self, planned: &Planned, ui: &Ui) {
+        for gap in &self.gaps {
+            ui.warn(*gap);
         }
-        .report(ui);
-        Ok(Stats {
-            pages: total,
-            cached: cached.len(),
-            generated: generated.count,
-            read: self.outside(cache.read()),
-        })
+        for inert in &self.inert {
+            ui.warn(*inert);
+        }
+        if !planned.pages.iter().any(|page| !page.listed(&self.config)) {
+            ui.warn(crate::error::warning::NotFoundMissing);
+        }
+    }
+
+    /// Compile pass one against the backlinks the last build recorded, which is
+    /// a prediction the repair pass checks against the graph this build makes.
+    fn predict(&self, pass: &mut Pass<'_>, cache: &Cache, planned: &Planned) {
+        if !self.config.links.backlinks {
+            return;
+        }
+        pass.prepare.assume(Graph::predicted(
+            &self.project,
+            pass.renderer.maps().links,
+            cache,
+            &planned.pages,
+            self.config.multilingual(),
+        ));
     }
 
     /// The directories holding `files`, minus anything already inside a source
@@ -444,16 +423,9 @@ impl Engine {
         Ok(())
     }
 
-    /// Copy every page's externalized images into the (freshly regenerated)
-    /// asset directory, for fresh and cache-served pages alike.
-    fn images(&self, rendered: &[Rendered], cached: &[Reused], ui: &Ui) -> Result<Images<'_>> {
-        Images::new(&self.config, self.project.root()).copy(
-            rendered
-                .iter()
-                .flat_map(|r| &r.outputs.images)
-                .chain(cached.iter().flat_map(|(_, _, out)| &out.images)),
-            ui,
-        )
+    /// An empty image copier for this build, which the images phase fills.
+    fn copier(&self) -> Images<'_> {
+        Images::new(&self.config, self.project.root())
     }
 
     /// The build's own assets that any page points at, rendered and cache-served

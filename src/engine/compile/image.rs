@@ -65,16 +65,16 @@ impl<'a> Images<'a> {
     /// collisions. `refs` is sorted first, since "the first source wins" is
     /// only a rule once the order no longer depends on which pages were cached.
     pub fn copy<'r>(
-        mut self,
+        &mut self,
         refs: impl IntoIterator<Item = &'r ImageRef>,
         ui: &Ui,
-    ) -> Result<Self> {
+    ) -> Result<()> {
         let mut refs: Vec<&ImageRef> = refs.into_iter().collect();
         refs.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.source.cmp(&b.source)));
         for image in refs {
             self.add(image, ui)?;
         }
-        Ok(self)
+        Ok(())
     }
 
     /// Copy one image unless another source already claimed its name, and cut
