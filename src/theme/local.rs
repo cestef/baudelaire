@@ -63,11 +63,7 @@ impl Local {
     /// `~` expanded, and the path made absolute, because the record it lands in
     /// is read from wherever the next run happens to be.
     fn resolve(spec: &str) -> PathBuf {
-        let path = spec.strip_prefix("~/").map_or_else(
-            || PathBuf::from(spec),
-            |rest| std::env::home_dir().map_or_else(|| PathBuf::from(spec), |home| home.join(rest)),
-        );
-        crate::fs::canonical(&path)
+        crate::fs::canonical(crate::fs::expanded(spec))
     }
 }
 

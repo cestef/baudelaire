@@ -1,7 +1,7 @@
 //! SSH authentication: a configured private key is used exclusively, and
 //! without one the agent's identities are offered before a password.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use russh::client::AuthResult;
@@ -94,7 +94,7 @@ impl<'a> Auth<'a> {
     /// key turns out to be encrypted.
     fn load(&self) -> Result<PrivateKey> {
         let key = self.config.key.as_ref().expect("key configured");
-        let path = Self::expand(key, std::env::var_os("HOME"));
+        let path = crate::fs::expanded(key);
         match load_secret_key(&path, None) {
             Ok(key) => Ok(key),
             Err(KeyError::IO(why)) => Err(Self::unreadable(&path, why)),
@@ -118,14 +118,6 @@ impl<'a> Auth<'a> {
         .into()
     }
 
-    /// Expand a leading `~` against `home`, leaving other paths untouched, and
-    /// a `~` path unchanged when there is no home to resolve.
-    fn expand(path: &Path, home: Option<std::ffi::OsString>) -> PathBuf {
-        match (path.strip_prefix("~"), home) {
-            (Ok(rest), Some(home)) => PathBuf::from(home).join(rest),
-            _ => path.to_owned(),
-        }
-    }
 }
 
 /// The ssh-agent, and the one thing about reaching it that is not portable:
@@ -187,6 +179,8 @@ impl Agent {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use super::*;
     use crate::error::BaudelaireErrorKind;
 
@@ -208,15 +202,18 @@ mod tests {
 
     #[test]
     fn expand_replaces_leading_tilde_with_home() {
-        let home = Some("/home/test".into());
+        let home = Some(PathBuf::from("/home/test"));
         assert_eq!(
-            Auth::expand(Path::new("~/.ssh/id_ed25519"), home.clone()),
+            crate::fs::under_home(Path::new("~/.ssh/id_ed25519"), home.clone()),
             PathBuf::from("/home/test/.ssh/id_ed25519")
         );
         assert_eq!(
-            Auth::expand(Path::new("/etc/key"), home),
+            crate::fs::under_home(Path::new("/etc/key"), home),
             PathBuf::from("/etc/key")
         );
-        assert_eq!(Auth::expand(Path::new("~/k"), None), PathBuf::from("~/k"));
+        assert_eq!(
+            crate::fs::under_home(Path::new("~/k"), None),
+            PathBuf::from("~/k")
+        );
     }
 }

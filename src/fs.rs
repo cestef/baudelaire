@@ -41,6 +41,23 @@ impl<'a> Contained<'a> {
     }
 }
 
+/// A leading `~` replaced by `home`, and any other path left alone.
+///
+/// `home` is [`std::env::home_dir`] at every call site but a test's; reading
+/// `HOME` directly instead is what left a `~` literal on Windows, where the
+/// variable is normally unset.
+pub fn under_home(path: &Path, home: Option<PathBuf>) -> PathBuf {
+    match (path.strip_prefix("~"), home) {
+        (Ok(rest), Some(home)) => home.join(rest),
+        _ => path.to_owned(),
+    }
+}
+
+/// [`under_home`] against the running user's home directory.
+pub fn expanded(path: impl AsRef<Path>) -> PathBuf {
+    under_home(path.as_ref(), std::env::home_dir())
+}
+
 pub fn read_to_string(path: impl AsRef<Path>) -> Result<String> {
     let path = path.as_ref();
     std::fs::read_to_string(path).map_err(|e| FsError::new(Op::Read, path, e).into())
