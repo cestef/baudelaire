@@ -424,6 +424,37 @@ scenario "a broken yaml block reports yaml" {
   }
 }
 
+// YAML takes the last value for a repeated key, so a page that wrote one twice
+// would otherwise build carrying a value its author cannot see they wrote. The
+// other two dialects already refuse it.
+scenario "a yaml key written twice is refused" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths {
+        content "content"
+        dist "public"
+        templates "templates"
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = html.elem("main", body)
+      """#
+    "content/twice.md" #"""
+      ---
+      title: First
+      title: Second
+      ---
+
+      Body.
+      """#
+  }
+  expect {
+    fails { code "baudelaire::markdown::duplicate_key" }
+  }
+}
+
 scenario "a broken toml block reports toml" {
   requires "markdown"
   files {

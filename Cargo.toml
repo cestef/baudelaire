@@ -224,6 +224,9 @@ pulldown-cmark = { version = "0.13.4", default-features = false, optional = true
 # can publish a `.md` page.
 toml_edit = { version = "0.22", default-features = false, features = ["parse"] }
 saphyr = { version = "0.0.11", default-features = false }
+# The event stream behind `saphyr`, which the loaded document cannot stand in
+# for: a repeated key is already gone by the time there is a mapping to inspect.
+saphyr-parser = { version = "0.0.11", default-features = false }
 
 [dev-dependencies]
 tempfile = "3"

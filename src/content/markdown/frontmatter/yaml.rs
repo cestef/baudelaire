@@ -1,8 +1,10 @@
 //! YAML frontmatter, between `---` fences.
 
+use std::collections::BTreeSet;
 use std::ops::Range;
 
 use saphyr::{AnnotatedMapping, LoadableYamlNode as _, MarkedYaml, Marker, Scalar, YamlData};
+use saphyr_parser::{Event, Parser, Span, SpannedEventReceiver};
 use typst::foundations::{Dict, Value};
 
 use super::{Block, Spans};
@@ -25,6 +27,16 @@ pub fn parse(text: &str, offset: usize, path: &str, source: &str) -> Result<Bloc
     };
     let documents = MarkedYaml::load_from_str(text)
         .map_err(|error| fault(Text(error.info()).to_string(), reader.point(error.marker())))?;
+
+    if let Some((key, at)) = Repeats::scan(text) {
+        return Err(MarkdownError::DuplicateKey {
+            path: path.to_owned(),
+            key,
+            src: miette::NamedSource::new(path, source.to_owned()),
+            span: reader.bytes.spanning(at).into(),
+        }
+        .into());
+    }
 
     let dict = match documents.first() {
         None => Dict::new(),
@@ -155,6 +167,86 @@ impl<'a> Reader<'a> {
     }
 }
 
+/// The first key a mapping in the block wrote twice, found by replaying the
+/// parser's own events.
+///
+/// A second pass, because the loaded document cannot answer: YAML keeps the last
+/// value for a repeated key, so the mapping saphyr hands back holds one entry
+/// where the author wrote two. KDL and TOML both refuse the same mistake, and a
+/// page that silently carries a value its author cannot see they wrote is worse
+/// than one that fails.
+#[derive(Default)]
+struct Repeats {
+    /// One frame per open collection, innermost last; `None` for a sequence,
+    /// which keys nothing.
+    open: Vec<Option<Keyed>>,
+    found: Option<(String, Range<usize>)>,
+}
+
+/// One open mapping: what it has been keyed by, and whether the next node it
+/// takes is another key.
+struct Keyed {
+    seen: BTreeSet<String>,
+    key: bool,
+}
+
+impl Default for Keyed {
+    fn default() -> Self {
+        Self {
+            seen: BTreeSet::new(),
+            key: true,
+        }
+    }
+}
+
+impl Repeats {
+    /// The repeated key and the char-index range of its second spelling, or
+    /// `None` where every mapping keyed each of its entries once.
+    ///
+    /// `text` has already loaded, so a parse that fails here is one this cannot
+    /// speak for and answers nothing rather than a second diagnostic.
+    fn scan(text: &str) -> Option<(String, Range<usize>)> {
+        let mut repeats = Self::default();
+        Parser::new_from_str(text).load(&mut repeats, true).ok()?;
+        repeats.found
+    }
+
+    /// Take one node against the innermost open collection: a mapping alternates
+    /// key and value, and a repeat is a key it already holds.
+    fn took(&mut self, name: Option<&str>, span: Span) {
+        let Some(Some(frame)) = self.open.last_mut() else {
+            return;
+        };
+        let repeated = frame.key && name.is_some_and(|name| !frame.seen.insert(name.to_owned()));
+        frame.key = !frame.key;
+        if repeated && self.found.is_none() {
+            let name = name.unwrap_or_default().to_owned();
+            self.found = Some((name, span.start.index()..span.end.index()));
+        }
+    }
+}
+
+impl<'input> SpannedEventReceiver<'input> for Repeats {
+    fn on_event(&mut self, ev: Event<'input>, span: Span) {
+        match ev {
+            Event::Scalar(value, ..) => self.took(Some(value.as_ref()), span),
+            Event::Alias(_) => self.took(None, span),
+            Event::MappingStart(..) => {
+                self.took(None, span);
+                self.open.push(Some(Keyed::default()));
+            }
+            Event::SequenceStart(..) => {
+                self.took(None, span);
+                self.open.push(None);
+            }
+            Event::MappingEnd | Event::SequenceEnd => {
+                self.open.pop();
+            }
+            _ => {}
+        }
+    }
+}
+
 /// A block's char-index-to-file-offset table, with the block's own offset in
 /// the file folded in.
 ///
@@ -197,6 +289,12 @@ impl Bytes {
     fn point(&self, chars: usize) -> Range<usize> {
         let at = chars.min(self.last);
         self.at(at)..self.at(at + 1)
+    }
+
+    /// A range of character indices as the file offsets it covers.
+    fn spanning(&self, chars: Range<usize>) -> (usize, usize) {
+        let start = self.at(chars.start);
+        (start, self.at(chars.end).saturating_sub(start))
     }
 }
 
@@ -333,6 +431,47 @@ mod tests {
         assert!(span.end <= 4 + text.trim_end().len(), "{span:?}");
         let at = text.find("Café").expect("in the block") + "Caf".len();
         assert_eq!(&source[bytes.point(text[..at].chars().count())], "é");
+    }
+
+    /// YAML keeps the last value for a repeated key, so a page that wrote one
+    /// twice carries a value its author cannot see they wrote.
+    #[test]
+    fn a_key_written_twice_is_an_error() {
+        let source = "---\ntitle: A\ntitle: B\n---\n";
+        let Err(err) = parse("title: A\ntitle: B\n", 4, "a.md", source) else {
+            panic!("a repeated key is not valid frontmatter");
+        };
+        let rendered = format!("{err:?}");
+        assert!(rendered.contains("title"), "{rendered}");
+
+        let Some(label) = miette::Diagnostic::labels(&err)
+            .and_then(|mut labels| labels.next())
+            .map(|label| label.offset()..label.offset() + label.len())
+        else {
+            panic!("the error carries a label");
+        };
+        assert_eq!(&source[label.clone()], "title", "{label:?}");
+        assert!(label.start > source.find("title: B").expect("in the block") - 1);
+    }
+
+    #[test]
+    fn a_key_repeated_inside_a_nested_mapping_is_an_error() {
+        let text = "author:\n  name: a\n  name: b\n";
+        assert!(parse(text, 0, "a.md", text).is_err());
+    }
+
+    /// One key per mapping, not per block: two mappings in a list may each key
+    /// `name`, and a key under one heading does not claim the same word under
+    /// another.
+    #[test]
+    fn the_same_key_in_two_mappings_is_not_a_repeat() {
+        for text in [
+            "authors:\n  - name: a\n  - name: b\n",
+            "author:\n  name: a\nreviewer:\n  name: b\n",
+            "tags:\n  - rust\n  - rust\n",
+        ] {
+            assert!(parse(text, 0, "a.md", text).is_ok(), "{text}");
+        }
     }
 
     #[test]
