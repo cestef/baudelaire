@@ -300,6 +300,23 @@ impl russh_sftp::server::Handler for Sftp {
         self.store.lock().unwrap().remove(&Self::rel(&filename));
         Ok(Self::ok(id))
     }
+
+    /// SSH_FXP_RENAME as the protocol states it: the new path must not exist.
+    async fn rename(
+        &mut self,
+        id: u32,
+        oldpath: String,
+        newpath: String,
+    ) -> Result<Status, StatusCode> {
+        let (old, new) = (Self::rel(&oldpath), Self::rel(&newpath));
+        let mut store = self.store.lock().unwrap();
+        if store.contains_key(&new) {
+            return Err(StatusCode::Failure);
+        }
+        let body = store.remove(&old).ok_or(StatusCode::NoSuchFile)?;
+        store.insert(new, body);
+        Ok(Self::ok(id))
+    }
 }
 
 /// A `sha256sum` line for a remote file the build no longer produces.

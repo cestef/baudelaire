@@ -97,12 +97,29 @@ impl Session {
     }
 
     /// Upload `body` to the file for dist-relative `rel`, creating parents first.
+    ///
+    /// Written beside the target and moved onto it, because `create` truncates:
+    /// a transfer that dies half way would otherwise leave the live file short
+    /// and the host serving it. The rename is the plain SFTP one, which refuses
+    /// an existing target, so the target is unlinked first.
     pub async fn upload(&self, rel: &str, body: &[u8]) -> Result<()> {
         let path = self.remote.path(rel);
+        let staging = format!("{path}.{}.staging", std::process::id());
         self.mkdirs(&path).await;
+        self.write(&staging, body).await?;
+        let _ = self.sftp.remove_file(&path).await;
+        if let Err(e) = self.sftp.rename(&staging, &path).await {
+            let _ = self.sftp.remove_file(&staging).await;
+            return Err(DeployError::transfer(Step::Upload, e).into());
+        }
+        Ok(())
+    }
+
+    /// Write `body` to `path`, creating or truncating it.
+    async fn write(&self, path: &str, body: &[u8]) -> Result<()> {
         let mut file = self
             .sftp
-            .create(&path)
+            .create(path)
             .await
             .map_err(|e| DeployError::transfer(Step::Upload, e))?;
         file.write_all(body)
