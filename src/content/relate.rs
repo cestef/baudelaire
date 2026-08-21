@@ -10,7 +10,7 @@ use super::Page;
 use super::page::{Siblings, Translation};
 
 /// One page's place among its neighbours.
-#[derive(Debug, Default, Clone)]
+#[derive(Hash, Debug, Default, Clone)]
 pub struct Related {
     pub siblings: Siblings,
     /// Every language this page was written in, its own included. Empty on a
@@ -35,7 +35,7 @@ impl Related {
 /// A side table rather than two fields on [`Page`], because neither answer
 /// exists until the whole page set does: a page carries what its source says,
 /// and the plan carries what the page set says.
-#[derive(Debug, Default)]
+#[derive(Hash, Debug, Default)]
 pub struct Relations(BTreeMap<PathBuf, Related>);
 
 /// The answer for a page nothing related: a page compiled outside a plan, or a

@@ -142,6 +142,10 @@ struct Manifest {
     /// keyed by the artifact's id.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     bundles: BTreeMap<String, Compiled>,
+    /// What each whole-site processor last read, keyed by its name, so one
+    /// nothing it reads has changed under writes nothing again.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    emitted: BTreeMap<String, Hash>,
 }
 
 /// What validating any compiled artifact needs: the text typst compiled, and
@@ -438,6 +442,28 @@ impl Cache {
             self.next.bundles.insert(id.to_owned(), entry);
         }
         hit
+    }
+
+    /// Whether a whole-site processor's output can be left as it is: the same
+    /// inputs as last build, and every file it claims still on disk.
+    ///
+    /// The disk check is load-bearing for the same reason a bundle's is, and
+    /// more so: a processor writes only when it runs, so one file deleted
+    /// behind the cache's back would stay missing for good.
+    pub fn reuse_emitted(&mut self, name: &str, inputs: &Hash, claims: &[PathBuf]) -> bool {
+        let hit = self.enabled
+            && self.prev.config.as_ref() == Some(&self.config)
+            && self.prev.emitted.get(name) == Some(inputs)
+            && claims.iter().all(|path| path.exists());
+        if hit {
+            self.next.emitted.insert(name.to_owned(), *inputs);
+        }
+        hit
+    }
+
+    /// Record what a whole-site processor has just run over.
+    pub fn record_emitted(&mut self, name: &str, inputs: Hash) {
+        self.next.emitted.insert(name.to_owned(), inputs);
     }
 
     /// Record a freshly compiled bundle, so the next build can leave it alone.

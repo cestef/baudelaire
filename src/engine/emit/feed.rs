@@ -7,7 +7,7 @@ use time::OffsetDateTime;
 use time::format_description::well_known::{Rfc2822, Rfc3339};
 
 use super::xml::Xml;
-use super::{Emit, Processor, Site, Warn};
+use super::{Emit, Processor, Reads, Site, Warn};
 use crate::config::{BaseUrl, Channel, Config, FeedConfig, FeedKind, Permalink};
 use crate::content::{Page, Taxonomy};
 use crate::error::warning::FeedMounted;
@@ -118,6 +118,12 @@ impl Processor for Feeds {
                     .map(move |file| Site::at(config, &[scope, file]))
             })
             .collect()
+    }
+
+    /// Not while term feeds are on: those sit in directories the page set
+    /// decides, and [`Processor::claims`] names none of them.
+    fn inputs(&self, config: &Config) -> Option<&'static [Reads]> {
+        (!config.generate.feed.terms).then_some(&[Reads::Listing, Reads::Rendered, Reads::Entities])
     }
 
     fn enabled(&self, config: &Config) -> bool {

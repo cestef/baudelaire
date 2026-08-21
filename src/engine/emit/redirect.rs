@@ -7,7 +7,7 @@ use crate::config::Config;
 
 use super::line::Lines;
 use super::xml::Xml;
-use super::{Emit, Processor, Site, WROTE, Warn};
+use super::{Emit, Processor, Reads, Site, WROTE, Warn};
 use crate::content::Strings;
 use crate::error::Result;
 use crate::error::warning::{RedirectCollision, RedirectsShadowed};
@@ -47,6 +47,13 @@ impl Processor for Redirects {
             .then(|| config.paths.dist.join(Self::RULES))
             .into_iter()
             .collect()
+    }
+
+    /// Only when every rule lands in the rules file. With `redirects { file }`
+    /// off, each rule is written as a page of its own at a destination the page
+    /// set decides, and [`Processor::claims`] names none of them.
+    fn inputs(&self, config: &Config) -> Option<&'static [Reads]> {
+        config.redirects.file.then_some(&[Reads::Listing])
     }
 
     /// A rule file and a stub cannot coexist: a host serves a static file in

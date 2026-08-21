@@ -21,7 +21,7 @@ const CLOSE: &str = "</template>";
 ///
 /// Every field defaults, so a manifest written by an older layout still parses
 /// and the cache's own schema decides whether to trust it.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Hash, Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Fragments {
     /// The `<head>` contents.
@@ -129,7 +129,7 @@ impl Markup {
 /// One page's prose as a full-content feed publishes it: the markup of the
 /// region `html { region }` names, with the site's chrome taken out and every
 /// URL made absolute.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Hash, Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Syndicated(pub String);
 
 impl Syndicated {

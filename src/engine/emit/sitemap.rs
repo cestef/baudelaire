@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use super::xml::Xml;
-use super::{Emit, Processor, Site};
+use super::{Emit, Processor, Reads, Site};
 use crate::config::{BaseUrl, Config};
 use crate::content::page::Translation;
 use crate::content::{Generated, Page, Relations};
@@ -71,6 +71,10 @@ impl Processor for SiteMap {
 
     fn claims(&self, config: &Config) -> Vec<PathBuf> {
         vec![config.paths.dist.join(Self::FILE)]
+    }
+
+    fn inputs(&self, _config: &Config) -> Option<&'static [Reads]> {
+        Some(&[Reads::Listing, Reads::Relations])
     }
 
     fn enabled(&self, config: &Config) -> bool {

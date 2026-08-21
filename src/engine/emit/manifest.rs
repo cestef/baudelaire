@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 use serde::Serialize;
 
-use super::{Emit, Processor, Site, Warn};
+use super::{Emit, Processor, Reads, Site, Warn};
 use crate::config::{Config, IconConfig, IconPurpose, ManifestConfig, Named};
 use crate::error::warning::ManifestIcons;
 use crate::error::{Artifact, Result};
@@ -29,6 +29,11 @@ impl Processor for WebManifest {
             .iter()
             .map(|lang| Site::at(config, &[&config.scope(lang, ""), ManifestConfig::FILE]))
             .collect()
+    }
+
+    /// Nothing but the config, which the manifest fingerprints whole.
+    fn inputs(&self, _config: &Config) -> Option<&'static [Reads]> {
+        Some(&[])
     }
 
     fn enabled(&self, config: &Config) -> bool {

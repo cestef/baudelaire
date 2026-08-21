@@ -58,6 +58,9 @@ use crate::world::{PageWorld, Project, Tracked};
 pub struct Stats {
     pub pages: usize,
     pub cached: usize,
+    /// Whole-site files this build wrote. The ones a skipped processor left
+    /// standing are not among them: they were not written.
+    pub generated: usize,
     /// The directories holding files this build read from outside its own source
     /// trees, for the dev server to watch. Directories rather than files, so a
     /// file created beside a tracked one is seen too.
@@ -207,8 +210,8 @@ impl Engine {
             .collect();
         Self::artifacts(&artifacts)?;
         assets.publish()?;
+        let generated = self.generate(&planned, &outputs, &statics, &mut cache, ui)?;
         cache.save(outputs.iter().map(|out| (out.page, out.html)))?;
-        let generated = self.generate(&planned, &outputs, &statics, ui)?;
         self.sweep(ui, &outputs, &statics, &generated, &bundled)?;
         hooks.after(ui)?;
 
@@ -237,6 +240,7 @@ impl Engine {
         Ok(Stats {
             pages: total,
             cached: cached.len(),
+            generated: generated.count,
             read: self.outside(cache.read()),
         })
     }
@@ -556,6 +560,7 @@ impl Engine {
         planned: &Planned,
         outputs: &[Output],
         statics: &Copied,
+        cache: &mut Cache,
         ui: &Ui,
     ) -> Result<Generated> {
         let site = Site {
@@ -566,11 +571,11 @@ impl Engine {
             outputs,
         };
         let mut emitter = Emitter::new(ui, statics.paths.iter().cloned());
-        Processors::builtin().run(&site, &mut emitter)?;
+        Processors::builtin().run(&site, &mut emitter, cache)?;
         Ok(Generated {
             count: emitter.written(),
             bytes: emitter.bytes(),
-            paths: emitter.paths().to_vec(),
+            paths: emitter.paths(),
         })
     }
 
@@ -648,6 +653,7 @@ impl Engine {
         Ok(Stats {
             pages: total,
             cached: cached.len(),
+            generated: 0,
             read: Vec::new(),
         })
     }

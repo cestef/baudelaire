@@ -339,6 +339,7 @@ mod tests {
         Stats {
             pages,
             cached,
+            generated: 0,
             read: Vec::new(),
         }
     }

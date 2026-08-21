@@ -319,3 +319,72 @@ scenario "a changed typst input re-reads the frontmatter that reads it" {
     }
   }
 }
+
+// A whole-site processor whose inputs are unchanged writes nothing on the next
+// build. The file it wrote before still has to be in `dist` afterwards: the
+// sweep deletes everything this build did not produce, so a skip that forgets
+// to keep its own claims is a deletion.
+scenario "a skipped processor's output survives the sweep" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      url "https://example.com"
+      paths { content "content"; dist "public" }
+      generate {
+        sitemap #true
+        feed { formats "atom" }
+        llms
+        robots
+        search
+      }
+      """#
+    "content/posts/a.typ" #"""
+      #let frontmatter = (title: "A", date: datetime(year: 2026, month: 1, day: 2))
+      alpha
+      """#
+    "content/posts/b.typ" #"""
+      #let frontmatter = (title: "B", date: datetime(year: 2026, month: 1, day: 3))
+      beta
+      """#
+  }
+  build {
+    expect {
+      ok
+      file "sitemap.xml" { contains "/posts/a/" }
+      file "robots.txt"
+      file "llms.txt" { contains "[A]" }
+      file "atom.xml" { contains "<title>A</title>" }
+      file "search.json" { contains "alpha" }
+    }
+  }
+  build {
+    expect {
+      ok
+      pages 2
+      cached 2
+      // Every one of them skipped: nothing any of them reads has changed.
+      generated 0
+      file "sitemap.xml" { contains "/posts/a/" }
+      file "robots.txt"
+      file "llms.txt" { contains "[A]" }
+      file "atom.xml" { contains "<title>A</title>" }
+      file "search.json" { contains "alpha" }
+    }
+  }
+  build {
+    files {
+      "content/posts/a.typ" #"""
+        #let frontmatter = (title: "Renamed", date: datetime(year: 2026, month: 1, day: 2))
+        alpha
+        """#
+    }
+    // Renaming a page changes what every listing says, so each of them is
+    // written again rather than kept.
+    expect {
+      ok
+      file "llms.txt" { contains "[Renamed]"; missing "[A]" }
+      file "atom.xml" { contains "<title>Renamed</title>" }
+      file "search.json" { contains "Renamed" }
+    }
+  }
+}

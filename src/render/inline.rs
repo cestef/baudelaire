@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::digest::Digest;
 
 /// One page's inline digests, in the `sha256-..` spelling a policy carries.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Hash, Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Inline {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub scripts: Vec<String>,

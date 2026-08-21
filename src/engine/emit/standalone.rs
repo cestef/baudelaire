@@ -11,7 +11,7 @@ use serde::Serialize;
 use super::script::Script;
 use super::spa::ROUTER;
 use super::xml::Xml;
-use super::{Emit, Processor, Site, Warn};
+use super::{Emit, Processor, Reads, Site, Warn};
 use crate::config::{Config, Named, StandaloneConfig};
 use crate::content::Page;
 use crate::error::warning::{StandaloneEntryMissing, StandaloneLinked};
@@ -28,6 +28,10 @@ impl Processor for Standalone {
 
     fn claims(&self, config: &Config) -> Vec<PathBuf> {
         vec![config.paths.dist.join(&config.navigation.standalone.file)]
+    }
+
+    fn inputs(&self, _config: &Config) -> Option<&'static [Reads]> {
+        Some(&[Reads::Listing, Reads::Rendered])
     }
 
     fn enabled(&self, config: &Config) -> bool {

@@ -50,7 +50,7 @@ impl Data {
 
 /// A link to a neighbouring page, exposed to templates as
 /// `page.nav.prev`/`page.nav.next`.
-#[derive(Debug, Clone, Default)]
+#[derive(Hash, Debug, Clone, Default)]
 pub struct Sibling {
     pub url: String,
     pub title: String,
@@ -58,7 +58,7 @@ pub struct Sibling {
 
 /// The previous and next pages within a page's collection, in the collection's
 /// sort order. Empty for pages with no neighbour and for generated listings.
-#[derive(Debug, Clone, Default)]
+#[derive(Hash, Debug, Clone, Default)]
 pub struct Siblings {
     pub prev: Option<Sibling>,
     pub next: Option<Sibling>,
@@ -67,7 +67,7 @@ pub struct Siblings {
 /// One language edition of a page, for a language switcher
 /// (`page.translations`) and `hreflang` alternates. A page's own edition is
 /// included.
-#[derive(Debug, Clone)]
+#[derive(Hash, Debug, Clone)]
 pub struct Translation {
     pub lang: String,
     pub url: String,

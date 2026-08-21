@@ -46,10 +46,14 @@
 //!   build {
 //!     files { "content/a.typ" #"edited"# }   // written before this run
 //!     remove "content/c.typ"                 // deleted before it
-//!     expect { ok; pages 2; cached 1 }
+//!     expect { ok; pages 2; cached 1; generated 0 }
 //!   }
 //! }
 //! ```
+//!
+//! `pages`, `cached` and `generated` are counts off the run itself: pages built,
+//! pages reused, and whole-site files written (which a processor nothing it
+//! reads changed under does not add to).
 //!
 //! A step also carries the overrides a command line would pass: `drafts`,
 //! `future`, `base "https://.."`, `profile "dev"`, each a toggle.
@@ -690,6 +694,9 @@ struct Expect {
     /// which is a different thing from claiming zero.
     pages: Option<usize>,
     cached: Option<usize>,
+    /// Whole-site files written, which a processor nothing it reads changed
+    /// under does not add to.
+    generated: Option<usize>,
     /// Warning codes the run must have reported. Extra warnings are allowed:
     /// a case names the one it is about, not every one the build may add.
     warns: Vec<String>,
@@ -709,6 +716,7 @@ impl Expect {
             outcome: Outcome::Ok,
             pages: None,
             cached: None,
+            generated: None,
             warns: Vec::new(),
             advises: Vec::new(),
             unwarned: Vec::new(),
@@ -724,7 +732,7 @@ impl Expect {
                 "warns" => expect.warns.push(string_arg(child)?),
                 "advises" => expect.advises.push(string_arg(child)?),
                 "unwarned" => expect.unwarned.push(string_arg(child)?),
-                "pages" | "cached" => {
+                "pages" | "cached" | "generated" => {
                     let count = number(child, "n")
                         .or_else(|| {
                             child
@@ -735,7 +743,8 @@ impl Expect {
                         .ok_or_else(|| format!("`{name}` needs a count"))?;
                     match name {
                         "pages" => expect.pages = Some(count),
-                        _ => expect.cached = Some(count),
+                        "cached" => expect.cached = Some(count),
+                        _ => expect.generated = Some(count),
                     }
                 }
                 _ => {
@@ -784,6 +793,7 @@ impl Expect {
             };
             failures.extend(counted("pages built", self.pages, stats.pages));
             failures.extend(counted("pages reused", self.cached, stats.cached));
+            failures.extend(counted("files generated", self.generated, stats.generated));
         }
         // A build that failed as intended left no output to inspect, and one
         // that failed unintentionally has already said so.

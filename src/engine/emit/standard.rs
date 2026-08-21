@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use super::{Emit, Processor, Site};
+use super::{Emit, Processor, Reads, Site};
 use crate::announce::standard::PUBLICATION;
 use crate::atproto::AtUri;
 use crate::config::Config;
@@ -24,6 +24,11 @@ impl Processor for WellKnown {
 
     fn claims(&self, config: &Config) -> Vec<PathBuf> {
         vec![Site::at(config, &[Self::DIR, PUBLICATION.as_str()])]
+    }
+
+    /// Nothing but the config, which the manifest fingerprints whole.
+    fn inputs(&self, _config: &Config) -> Option<&'static [Reads]> {
+        Some(&[])
     }
 
     fn enabled(&self, config: &Config) -> bool {

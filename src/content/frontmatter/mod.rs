@@ -21,7 +21,7 @@ use crate::config::{Config, FieldType};
 use crate::error::{ContentError, Result, SchemaError};
 
 /// One file a build generates *about* a page, which the page may decline.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Hash, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Generated {
     /// The page's entry in `sitemap.xml`.
     Sitemap,
@@ -222,7 +222,7 @@ const FIELDS: &[(&str, Shape, Field)] = &[
 /// Parsed frontmatter for a single page. `extra` holds arbitrary keys as
 /// [`codegen::Value`] rather than a typst `Value` because only that round-trips
 /// through the discovery cache.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Hash, Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Frontmatter {
     pub title: Option<String>,
     pub date: Option<time::Date>,

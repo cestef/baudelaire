@@ -13,7 +13,7 @@ use crate::content::{Page, Selection};
 use crate::error::{BundleError, Result};
 
 use super::xml::Xml;
-use super::{Emit, Processor, Site};
+use super::{Emit, Processor, Reads, Site};
 use crate::engine::compile::bundle::Bundle;
 
 /// What the format pins: the names and namespaces a reader matches on.
@@ -68,6 +68,11 @@ impl Processor for Epub {
     /// page set decides, so it is claimed with the pages rather than here.
     fn claims(&self, _config: &Config) -> Vec<PathBuf> {
         Vec::new()
+    }
+
+    /// Never: an EPUB is written per bundle, at a path the page set decides.
+    fn inputs(&self, _config: &Config) -> Option<&'static [Reads]> {
+        None
     }
 
     fn enabled(&self, config: &Config) -> bool {

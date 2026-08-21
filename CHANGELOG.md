@@ -70,6 +70,16 @@ chores are visible in the git history and change nothing for a site.
   cannot name a file no pass wrote, under a name config changed, or in the wrong
   language.
 
+### Performance
+
+- **A whole-site file is written only when something it reads changed.** The
+  sitemap, the feeds, `llms.txt`, `_headers`, `robots.txt`, the web manifest,
+  the search index and the single-file export each declare which slices of the
+  site they read, and one whose slices hash the same as the last build's is
+  skipped rather than rebuilt. On an unchanged rebuild that is all of them; on
+  an edited page it is everything that does not read the page's own prose.
+  Editing a template or a stylesheet no longer rewrites the sitemap.
+
 ### Upgrading
 
 - **One cold rebuild.** `page.source` is a new field in the wrapper each page is

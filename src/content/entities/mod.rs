@@ -342,6 +342,43 @@ impl Registry {
 #[derive(Debug, Clone, Default)]
 pub struct Registries(BTreeMap<String, Registry>);
 
+/// Every registry, in id order, as everything reading one sees it.
+impl std::hash::Hash for Registries {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+    }
+}
+
+impl std::hash::Hash for Registry {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let Self {
+            id,
+            shape,
+            slots,
+            unknown,
+            entities,
+            aliases,
+        } = self;
+        (id, shape, slots, unknown, entities, aliases).hash(state);
+    }
+}
+
+impl std::hash::Hash for Entity {
+    /// `from` is left out: where an entity was read is what a diagnostic
+    /// points at, never what it resolves to.
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let Self {
+            id,
+            aliases,
+            fields,
+            from: _,
+            editions,
+            pages,
+        } = self;
+        (id, aliases, fields, editions, pages).hash(state);
+    }
+}
+
 impl Registries {
     /// Build every registry from its sources, after discovery, so a `pages`
     /// source draws its entities from pages the plan has already read.

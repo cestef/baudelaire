@@ -7,7 +7,7 @@ use std::fmt;
 
 use super::csp::{Digests, Policy};
 use super::line::Lines;
-use super::{Emit, Processor, Site};
+use super::{Emit, Processor, Reads, Site};
 use crate::config::Config;
 use crate::error::Result;
 
@@ -30,6 +30,12 @@ impl Processor for Headers {
 
     fn claims(&self, config: &Config) -> Vec<PathBuf> {
         vec![config.paths.dist.join(Self::FILE)]
+    }
+
+    /// The catch-all rule carries the policy this build's own pages were
+    /// assembled into, which is the digests on every output.
+    fn inputs(&self, _config: &Config) -> Option<&'static [Reads]> {
+        Some(&[Reads::Rendered])
     }
 
     /// Needs the file, and something to put in it: an empty rule file says only

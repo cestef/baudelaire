@@ -285,7 +285,7 @@ impl Text {
 ///
 /// Words and not minutes, because the rate is the site's and this is measured
 /// before a page knows its language; [`Reading::minutes`] applies it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Hash, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Reading {
     pub words: usize,
 }

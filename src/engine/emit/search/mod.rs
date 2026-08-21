@@ -20,7 +20,7 @@ use std::path::PathBuf;
 pub(crate) use client::Client;
 use corpus::Corpus;
 
-use super::{Emit, Processor, Site};
+use super::{Emit, Processor, Reads, Site};
 use crate::config::Config;
 use crate::error::Result;
 
@@ -37,6 +37,10 @@ impl Processor for Search {
             .into_iter()
             .map(|emitted| emitted.path(config))
             .collect()
+    }
+
+    fn inputs(&self, _config: &Config) -> Option<&'static [Reads]> {
+        Some(&[Reads::Listing, Reads::Markup])
     }
 
     fn enabled(&self, config: &Config) -> bool {

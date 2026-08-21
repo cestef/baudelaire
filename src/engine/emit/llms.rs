@@ -8,7 +8,7 @@
 use std::path::PathBuf;
 
 use super::line::Lines;
-use super::{Emit, Processor, Site};
+use super::{Emit, Processor, Reads, Site};
 use crate::config::{BaseUrl, Config};
 use crate::content::{Page, ROOT};
 use crate::error::Result;
@@ -28,6 +28,10 @@ impl Processor for Llms {
             .iter()
             .map(|lang| Site::at(config, &[&config.scope(lang, ""), Self::FILE]))
             .collect()
+    }
+
+    fn inputs(&self, _config: &Config) -> Option<&'static [Reads]> {
+        Some(&[Reads::Listing])
     }
 
     fn enabled(&self, config: &Config) -> bool {

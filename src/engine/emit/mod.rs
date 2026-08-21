@@ -11,6 +11,7 @@ mod headers;
 mod line;
 mod llms;
 mod manifest;
+mod reads;
 mod redirect;
 mod robots;
 mod script;
@@ -34,8 +35,12 @@ use crate::config::{BaseUrl, Config};
 use crate::content::Page;
 use crate::error::warning::BaseUrlMissing;
 use crate::error::{Artifact, BaseUrlRequired, Result, SerializeError};
+use crate::graph::{Cache, Hash};
 use crate::render::{Fragments, Syndicated};
 use crate::ui::Ui;
+
+use reads::Digests;
+pub(super) use reads::Reads;
 
 /// One built page: everything the render pass produced for it, whether it was
 /// freshly compiled or served from the cache.
@@ -165,6 +170,11 @@ pub(super) trait Emit {
     /// A warning from a processor, already boxed: the object-safe primitive
     /// [`Warn::warn`] forwards to.
     fn report(&mut self, warning: Box<dyn miette::Diagnostic + Send + Sync>);
+
+    /// Note that `path` is still this site's although the build did not write
+    /// it, so the sweep keeps it. What a skipped processor's claims go
+    /// through, and the only thing standing between a skip and a deletion.
+    fn keep(&mut self, path: &Path);
 }
 
 /// Typed `warn` over any [`Emit`], so a processor names the diagnostic it is
@@ -199,8 +209,42 @@ pub(super) trait Processor {
     /// by the page or bundle that owns the directory it sits in.
     fn claims(&self, config: &Config) -> Vec<PathBuf>;
 
+    /// The slices of the site this processor reads, or `None` for one whose
+    /// inputs cannot be summarized and which therefore runs every build.
+    ///
+    /// Required rather than defaulted, for the same reason as
+    /// [`Processor::claims`]: answering "always run" costs a rebuild and
+    /// answering "never run again" ships a stale file, so neither is a
+    /// decision to reach by forgetting.
+    ///
+    /// Answering `Some` also promises that [`Processor::claims`] names every
+    /// file this processor writes: those are what a skip keeps from the sweep,
+    /// and what it checks are still on disk.
+    fn inputs(&self, config: &Config) -> Option<&'static [Reads]>;
+
     /// Emit output derived from the site, only when [`Processor::enabled`].
     fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()>;
+}
+
+/// Where the fingerprint of what a processor read is kept between builds.
+pub(super) trait Memo {
+    /// Whether `name`'s output can be left alone: its inputs hash the same as
+    /// the last build's and every file it claims is still on disk. A hit
+    /// carries the entry forward, so a processor stays skipped across builds.
+    fn reuse(&mut self, name: &str, inputs: &Hash, claims: &[PathBuf]) -> bool;
+
+    /// Record what `name` has just been run with.
+    fn record(&mut self, name: &str, inputs: Hash);
+}
+
+impl Memo for Cache {
+    fn reuse(&mut self, name: &str, inputs: &Hash, claims: &[PathBuf]) -> bool {
+        self.reuse_emitted(name, inputs, claims)
+    }
+
+    fn record(&mut self, name: &str, inputs: Hash) {
+        self.record_emitted(name, inputs);
+    }
 }
 
 /// The built-in processors, in run order.
@@ -245,11 +289,27 @@ impl Processors {
             .collect()
     }
 
-    pub(super) fn run(&self, site: &Site, out: &mut dyn Emit) -> Result<()> {
+    /// Run each enabled processor in order, skipping the ones nothing they read
+    /// has changed under; the first error stops the build.
+    pub(super) fn run(&self, site: &Site, out: &mut dyn Emit, memo: &mut dyn Memo) -> Result<()> {
+        let mut digests = Digests::default();
         for processor in &self.0 {
-            if processor.enabled(site.config) {
-                processor.run(site, out)?;
+            if !processor.enabled(site.config) {
+                continue;
             }
+            let Some(inputs) = digests.of(site, processor.inputs(site.config)) else {
+                processor.run(site, out)?;
+                continue;
+            };
+            let claims = processor.claims(site.config);
+            if memo.reuse(processor.name(), &inputs, &claims) {
+                for path in &claims {
+                    out.keep(path);
+                }
+                continue;
+            }
+            processor.run(site, out)?;
+            memo.record(processor.name(), inputs);
         }
         Ok(())
     }
@@ -262,6 +322,9 @@ pub(super) struct Emitter<'a> {
     bytes: u64,
     /// Every generated file written this build, so the prune pass keeps them.
     paths: Vec<PathBuf>,
+    /// The files a skipped processor still owns, kept from the sweep without
+    /// counting as written.
+    kept: Vec<PathBuf>,
     /// Destinations the static tree already owns; a processor never overwrites
     /// one, since `static/` is the override escape hatch and processors run
     /// after the static copy.
@@ -274,6 +337,7 @@ impl<'a> Emitter<'a> {
             ui,
             bytes: 0,
             paths: Vec::new(),
+            kept: Vec::new(),
             reserved: reserved.into_iter().collect(),
         }
     }
@@ -286,8 +350,10 @@ impl<'a> Emitter<'a> {
         self.bytes
     }
 
-    pub(super) fn paths(&self) -> &[PathBuf] {
-        &self.paths
+    /// Everything this build leaves in `dist`: what it wrote, and what a
+    /// skipped processor left standing.
+    pub(super) fn paths(&self) -> Vec<PathBuf> {
+        self.paths.iter().chain(&self.kept).cloned().collect()
     }
 }
 
@@ -318,6 +384,10 @@ impl Emit for Emitter<'_> {
     fn report(&mut self, warning: Box<dyn miette::Diagnostic + Send + Sync>) {
         self.ui.report(warning);
     }
+
+    fn keep(&mut self, path: &Path) {
+        self.kept.push(path.to_path_buf());
+    }
 }
 
 /// In-memory [`Emit`] sink capturing everything a processor emits.
@@ -327,6 +397,8 @@ pub(super) struct Recorder {
     pub files: Vec<(PathBuf, String)>,
     pub notes: Vec<String>,
     pub warns: Vec<String>,
+    /// What a skipped processor left standing, which is every path it claims.
+    pub kept: Vec<PathBuf>,
 }
 
 #[cfg(test)]
@@ -355,54 +427,130 @@ impl Emit for Recorder {
     fn report(&mut self, warning: Box<dyn miette::Diagnostic + Send + Sync>) {
         self.warns.push(warning.to_string());
     }
+
+    fn keep(&mut self, path: &Path) {
+        self.kept.push(path.to_path_buf());
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeMap;
 
     /// A processor that records its label when it runs, gated by a fixed flag.
-    struct Marker(&'static str, bool);
+    struct Marker {
+        name: &'static str,
+        enabled: bool,
+        reads: Option<&'static [Reads]>,
+        claims: Vec<PathBuf>,
+    }
+
+    impl Marker {
+        /// One that always runs and summarizes nothing, which is what the
+        /// ordering test needs.
+        fn new(name: &'static str, enabled: bool) -> Self {
+            Self {
+                name,
+                enabled,
+                reads: None,
+                claims: Vec::new(),
+            }
+        }
+    }
 
     impl Processor for Marker {
         fn name(&self) -> &'static str {
-            self.0
+            self.name
         }
 
         fn enabled(&self, _config: &Config) -> bool {
-            self.1
+            self.enabled
         }
 
         fn claims(&self, _config: &Config) -> Vec<PathBuf> {
-            Vec::new()
+            self.claims.clone()
+        }
+
+        fn inputs(&self, _config: &Config) -> Option<&'static [Reads]> {
+            self.reads
         }
 
         fn run(&self, _site: &Site, out: &mut dyn Emit) -> Result<()> {
-            out.note(format_args!("ran {}", self.0));
+            out.note(format_args!("ran {}", self.name));
             Ok(())
+        }
+    }
+
+    /// A memo holding what the previous run recorded, in memory.
+    #[derive(Default)]
+    struct Remembered(BTreeMap<String, Hash>);
+
+    impl Memo for Remembered {
+        fn reuse(&mut self, name: &str, inputs: &Hash, _claims: &[PathBuf]) -> bool {
+            self.0.get(name) == Some(inputs)
+        }
+
+        fn record(&mut self, name: &str, inputs: Hash) {
+            self.0.insert(name.to_owned(), inputs);
+        }
+    }
+
+    fn site(config: &Config) -> Site<'_> {
+        Site {
+            entities: crate::content::Registries::none(),
+            relations: crate::content::Relations::none(),
+            config,
+            pages: &[],
+            outputs: &[],
         }
     }
 
     #[test]
     fn registry_runs_only_enabled_processors_in_order() {
         let config = Config::default();
-        let site = Site {
-            entities: crate::content::Registries::none(),
-            relations: crate::content::Relations::none(),
-            config: &config,
-            pages: &[],
-            outputs: &[],
-        };
         let registry = Processors(vec![
-            Box::new(Marker("first", true)),
-            Box::new(Marker("skipped", false)),
-            Box::new(Marker("last", true)),
+            Box::new(Marker::new("first", true)),
+            Box::new(Marker::new("skipped", false)),
+            Box::new(Marker::new("last", true)),
         ]);
 
         let mut rec = Recorder::default();
-        registry.run(&site, &mut rec).unwrap();
+        registry
+            .run(&site(&config), &mut rec, &mut Remembered::default())
+            .unwrap();
 
         assert_eq!(rec.notes, ["ran first", "ran last"]);
         assert!(rec.warns.is_empty());
+    }
+
+    /// A processor that summarized its inputs runs once and then stops, and the
+    /// files it claims are kept from the sweep every time it does not.
+    #[test]
+    fn a_processor_whose_inputs_are_unchanged_runs_once() {
+        let config = Config::default();
+        let claim = PathBuf::from("public/robots.txt");
+        let registry = Processors(vec![
+            Box::new(Marker {
+                name: "summarized",
+                enabled: true,
+                reads: Some(&[]),
+                claims: vec![claim.clone()],
+            }),
+            Box::new(Marker::new("always", true)),
+        ]);
+        let mut memo = Remembered::default();
+
+        let mut first = Recorder::default();
+        registry.run(&site(&config), &mut first, &mut memo).unwrap();
+        assert_eq!(first.notes, ["ran summarized", "ran always"]);
+        assert!(first.kept.is_empty());
+
+        let mut second = Recorder::default();
+        registry
+            .run(&site(&config), &mut second, &mut memo)
+            .unwrap();
+        assert_eq!(second.notes, ["ran always"], "nothing it reads changed");
+        assert_eq!(second.kept, [claim], "and its output survives the sweep");
     }
 }

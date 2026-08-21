@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 
 use super::script::Script;
-use super::{Emit, Processor, Site};
+use super::{Emit, Processor, Reads, Site};
 use crate::config::{Config, Named, SpaConfig};
 use crate::error::Result;
 
@@ -19,6 +19,11 @@ impl Processor for Spa {
 
     fn claims(&self, config: &Config) -> Vec<PathBuf> {
         vec![config.paths.dist.join(SpaConfig::FILE)]
+    }
+
+    /// Nothing but the config, which the manifest fingerprints whole.
+    fn inputs(&self, _config: &Config) -> Option<&'static [Reads]> {
+        Some(&[])
     }
 
     fn enabled(&self, config: &Config) -> bool {
