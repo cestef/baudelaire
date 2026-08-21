@@ -83,7 +83,9 @@ pub fn write_atomic(path: impl AsRef<Path>, contents: impl AsRef<[u8]>) -> Resul
     ));
     let staging = PathBuf::from(staging);
     write_all(&staging, contents)?;
-    rename(&staging, path)
+    rename(&staging, path).inspect_err(|_| {
+        let _ = std::fs::remove_file(&staging);
+    })
 }
 
 pub fn canonicalize(path: impl AsRef<Path>) -> Result<PathBuf> {
