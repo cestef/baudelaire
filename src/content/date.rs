@@ -85,6 +85,10 @@ impl<'a> Localized<'a> {
         ("day", |d| d.date.day().to_string()),
     ];
 
+    /// How many names a `months` list has to carry to be one: a shorter list
+    /// would name some months and leave the rest in English.
+    const MONTHS: usize = 12;
+
     pub fn new(date: time::Date, strings: &'a Strings<'a>) -> Self {
         Self { date, strings }
     }
@@ -95,6 +99,7 @@ impl<'a> Localized<'a> {
         let number = u8::from(self.date.month()) as usize;
         self.strings
             .list("months")
+            .filter(|months| months.len() == Self::MONTHS)
             .and_then(|months| months.get(number - 1).cloned())
             .unwrap_or_else(|| self.date.month().to_string())
     }
