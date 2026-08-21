@@ -176,6 +176,33 @@ impl Site {
     pub fn output(&self, rel: &str) -> String {
         self.read(&format!("public/{rel}"))
     }
+
+    /// Run a git command in the site root, failing loudly.
+    ///
+    /// Identity comes from the environment rather than the machine's git
+    /// config, so a commit made here says the same thing on every machine and
+    /// on a runner with no identity configured at all.
+    pub fn git(&self, args: &[&str]) {
+        self.git_as("t", "t@example.com", args);
+    }
+
+    /// The same, committing as somebody in particular.
+    pub fn git_as(&self, name: &str, email: &str, args: &[&str]) {
+        let out = std::process::Command::new("git")
+            .args(args)
+            .current_dir(&self.root)
+            .env("GIT_AUTHOR_NAME", name)
+            .env("GIT_AUTHOR_EMAIL", email)
+            .env("GIT_COMMITTER_NAME", name)
+            .env("GIT_COMMITTER_EMAIL", email)
+            .output()
+            .expect("run git");
+        assert!(
+            out.status.success(),
+            "git {args:?} failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
 }
 
 pub fn silent() -> Ui {

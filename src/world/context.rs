@@ -1,13 +1,11 @@
 //! Build metadata: what a page can learn about the build that produced it,
 //! injected at `sys.inputs.baudelaire` and mirrored into the `site` modules.
 
-use std::path::Path;
-use std::process::Command;
-
 use time::OffsetDateTime;
 
 use crate::codegen;
 use crate::config::Config;
+use crate::git::{Head, Repo};
 
 /// How the site is being produced, exposed as `sys.inputs.baudelaire.mode`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -53,23 +51,10 @@ pub struct BuildContext {
     date: String,
     mode: Mode,
     profile: Option<String>,
-    git: Option<GitInfo>,
+    git: Option<Head>,
     site: SiteInfo,
     /// The `client { }` constants, at `sys.inputs.baudelaire.client`.
     client: codegen::Value,
-}
-
-/// Git state of the site repository at build time.
-#[derive(Debug, Clone)]
-struct GitInfo {
-    /// The full commit SHA.
-    hash: String,
-    /// The revision number: how many commits are reachable from HEAD.
-    rev: Option<String>,
-    branch: Option<String>,
-    tag: Option<String>,
-    committed: Option<String>,
-    dirty: bool,
 }
 
 /// A mirror of site identity, so layouts can read it via `sys.inputs` without
@@ -110,22 +95,29 @@ impl BuildContext {
     /// generators that run outside a build and still have to serve what one
     /// would.
     pub fn of(config: &Config) -> Self {
+        let root = crate::fs::canonical(&config.root);
+        let repo = Repo::discover(&root);
         Self::detect(
-            &crate::fs::canonical(&config.root),
+            repo.as_ref(),
             OffsetDateTime::now_utc(),
             config,
             Mode::Build,
         )
     }
 
-    /// Detect build metadata for the site rooted at `root`.
-    pub(super) fn detect(root: &Path, now: OffsetDateTime, config: &Config, mode: Mode) -> Self {
+    /// Detect build metadata for a site in `repo`, or in no repository at all.
+    pub(super) fn detect(
+        repo: Option<&Repo>,
+        now: OffsetDateTime,
+        config: &Config,
+        mode: Mode,
+    ) -> Self {
         Self {
             version: crate::VERSION,
             date: now.date().to_string(),
             mode,
             profile: config.profile.clone(),
-            git: GitInfo::detect(root),
+            git: repo.and_then(Repo::head),
             site: SiteInfo {
                 title: config.site.clone(),
                 url: config.url.clone(),
@@ -181,59 +173,6 @@ impl From<&BuildContext> for codegen::Value {
         }
         fields.push(("site", (&cx.site).into()));
         fields.push(("client", cx.client.clone()));
-        Self::dict(fields)
-    }
-}
-
-impl GitInfo {
-    /// Read git state via the `git` CLI, or `None` outside a repository;
-    /// `describe` deliberately omits `--always`, which reports a bare commit
-    /// hash in a tagless repo and would populate `tag` with a non-tag.
-    fn detect(root: &Path) -> Option<Self> {
-        let head = Self::run(root, &["log", "-1", "--format=%H%n%cI"])?;
-        let (hash, committed) = head.split_once('\n')?;
-        Some(Self {
-            hash: hash.to_owned(),
-            committed: Some(committed.to_owned()),
-            rev: Self::run(root, &["rev-list", "--count", "HEAD"]),
-            branch: Self::run(root, &["rev-parse", "--abbrev-ref", "HEAD"]),
-            tag: Self::run(root, &["describe", "--tags"]),
-            dirty: Self::run(root, &["status", "--porcelain", "--no-renames"]).is_some(),
-        })
-    }
-
-    /// Run a `git` command in `root`, returning its trimmed stdout, or `None`
-    /// if git is absent, the command fails, or the output is empty.
-    fn run(root: &Path, args: &[&str]) -> Option<String> {
-        let output = Command::new("git")
-            .args(args)
-            .current_dir(root)
-            .output()
-            .ok()?;
-        if !output.status.success() {
-            return None;
-        }
-        let text = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-        (!text.is_empty()).then_some(text)
-    }
-}
-
-impl From<&GitInfo> for codegen::Value {
-    fn from(git: &GitInfo) -> Self {
-        let mut fields = vec![("hash", Self::str(&git.hash))];
-        if let Some(rev) = &git.rev {
-            fields.push(("rev", Self::str(rev)));
-        }
-        if let Some(branch) = &git.branch {
-            fields.push(("branch", Self::str(branch)));
-        }
-        if let Some(tag) = &git.tag {
-            fields.push(("tag", Self::str(tag)));
-        }
-        if let Some(committed) = &git.committed {
-            fields.push(("committed", Self::str(committed)));
-        }
-        fields.push(("dirty", Self::Bool(git.dirty)));
         Self::dict(fields)
     }
 }

@@ -51,7 +51,7 @@ Typst's own version comes from typst, at `sys.version`.
   [`hash`], [str], [The full commit SHA. Slice it yourself for a short form.],
   [`dirty`], [bool], [Whether the tree had uncommitted changes.],
   [`rev`], [str], [Commits reachable from HEAD.],
-  [`branch`], [str], [The current branch.],
+  [`branch`], [str], [The branch checked out. Absent on a detached `HEAD`.],
   [`tag`], [str], [The nearest reachable tag.],
   [`committed`], [str], [The commit's date, ISO 8601.],
 )
@@ -65,6 +65,10 @@ git can supply them, so guard those reads:
   Built from #raw(git.hash.slice(0, 7))#if git.dirty [ (dirty)]
 ]
 ```
+
+This is the repository as a whole, at the moment of the build. What a *page*
+knows about its own file is `page.git`, which is a different question and its
+own opt-in: see #link("../write/templates.typ")[templates].
 
 == Your own inputs
 

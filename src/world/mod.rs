@@ -57,6 +57,9 @@ pub struct Project {
     root: PathBuf,
     now: OffsetDateTime,
     context: BuildContext,
+    /// The repository the site sits in, discovered once: every build reads git
+    /// state more than once, and the dev server on every rebuild.
+    repo: Option<Arc<crate::git::Repo>>,
 }
 
 impl Project {
@@ -68,7 +71,8 @@ impl Project {
         let project_root = crate::fs::canonical(&config.root);
 
         let now = OffsetDateTime::now_utc();
-        let context = BuildContext::detect(&project_root, now, config, mode);
+        let repo = crate::git::Repo::discover(&project_root).map(Arc::new);
+        let context = BuildContext::detect(repo.as_deref(), now, config, mode);
         let tree = codegen::Value::from(&context);
         let mut inputs: Dict = config
             .typst
@@ -110,6 +114,7 @@ impl Project {
         rules::Rules::install(&mut library, config);
 
         Ok(Self {
+            repo,
             lib: Arc::new(LazyHash::new(library)),
             fonts: Arc::new(Fonts::of(&config.typst.fonts, &project_root)),
             files: Arc::new(RwLock::new(FileStore::new(Files::new(
@@ -178,7 +183,7 @@ impl Project {
     /// library is built, so a world that has fallen behind cannot be reused.
     pub fn current(&self, config: &Config, mode: Mode) -> bool {
         let now = OffsetDateTime::now_utc();
-        let fresh = BuildContext::detect(&self.root, now, config, mode);
+        let fresh = BuildContext::detect(self.repo.as_deref(), now, config, mode);
         codegen::Value::from(&fresh) == codegen::Value::from(&self.context)
     }
 
@@ -207,6 +212,11 @@ impl Project {
 
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// The repository the site sits in, or `None` outside one.
+    pub fn repo(&self) -> Option<&crate::git::Repo> {
+        self.repo.as_deref()
     }
 
     /// Create a world for compiling a single source file as `main`.

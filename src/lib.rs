@@ -12,6 +12,7 @@ pub mod engine;
 pub mod error;
 pub mod fs;
 pub mod generated;
+pub mod git;
 pub mod graph;
 pub mod mime;
 pub mod mirror;

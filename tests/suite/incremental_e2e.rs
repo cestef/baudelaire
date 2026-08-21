@@ -581,8 +581,8 @@ fn a_page_records_its_own_links_and_not_its_layout_s() {
 #[test]
 fn frontmatter_derived_from_build_metadata_re_derives_when_it_changes() {
     let site = Site::with(CONFIG);
-    git(&site, &["init", "-q"]);
-    git(&site, &["commit", "-q", "--allow-empty", "-m", "one"]);
+    site.git(&["init", "-q"]);
+    site.git(&["commit", "-q", "--allow-empty", "-m", "one"]);
     site.write(
         "content/reader.typ",
         "#let commit = sys.inputs.baudelaire.at(\"git\", default: (:)).at(\"hash\", default: \"none\")\n\
@@ -595,7 +595,7 @@ fn frontmatter_derived_from_build_metadata_re_derives_when_it_changes() {
     assert!(!before.contains("At none"), "no commit hash: {before}");
 
     // The derived value changes, and no file does.
-    git(&site, &["commit", "-q", "--allow-empty", "-m", "two"]);
+    site.git(&["commit", "-q", "--allow-empty", "-m", "two"]);
     site.stats();
 
     assert_ne!(
@@ -879,31 +879,13 @@ fn flat_urls_still_prune_on_rename() {
     );
 }
 
-/// Run a git command in the site root, failing loudly.
-fn git(site: &Site, args: &[&str]) {
-    let out = std::process::Command::new("git")
-        .args(args)
-        .current_dir(&site.root)
-        .env("GIT_AUTHOR_NAME", "t")
-        .env("GIT_AUTHOR_EMAIL", "t@t")
-        .env("GIT_COMMITTER_NAME", "t")
-        .env("GIT_COMMITTER_EMAIL", "t@t")
-        .output()
-        .expect("run git");
-    assert!(
-        out.status.success(),
-        "git {args:?} failed: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-}
-
 #[test]
 fn metadata_change_rebuilds_only_the_pages_that_read_it() {
     // Build metadata is not in the manifest fingerprint, so nothing here
     // forces a whole-site rebuild.
     let site = Site::with(CONFIG);
-    git(&site, &["init", "-q"]);
-    git(&site, &["commit", "-q", "--allow-empty", "-m", "one"]);
+    site.git(&["init", "-q"]);
+    site.git(&["commit", "-q", "--allow-empty", "-m", "one"]);
 
     site.write(
         "content/reader.typ",
@@ -930,7 +912,7 @@ fn metadata_change_rebuilds_only_the_pages_that_read_it() {
     );
 
     // A new commit changes only git.hash, and no page source.
-    git(&site, &["commit", "-q", "--allow-empty", "-m", "two"]);
+    site.git(&["commit", "-q", "--allow-empty", "-m", "two"]);
     let after = site.stats();
 
     assert_eq!(
