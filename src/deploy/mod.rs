@@ -320,7 +320,7 @@ impl Deploy {
         let dist = Dist::scan(&config.paths.dist)?;
         opts.publish(
             "deploy",
-            backends,
+            &backends,
             &dist,
             |dist| Count::files(dist.files.len()).to_string(),
             ui,

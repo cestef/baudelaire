@@ -64,7 +64,7 @@ impl Announce {
         let site = Self::view(config)?;
         opts.publish(
             "announce",
-            backends,
+            &backends,
             &site,
             |site| Count::documents(site.documents.len()).to_string(),
             ui,

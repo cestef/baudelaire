@@ -130,21 +130,31 @@ impl Options<'_> {
     /// Run every configured backend over `payload` in turn, confirming before
     /// each one writes anything. `verb` names the action in the prompt,
     /// `summary` the size of the payload in the section header.
+    ///
+    /// The first failure ends the run, and says which destinations it took with
+    /// it: one error and silence otherwise reads as "only that destination is
+    /// stale".
     pub fn publish<P>(
         &self,
         verb: &str,
-        backends: Vec<Box<dyn Backend<P>>>,
+        backends: &[Box<dyn Backend<P>>],
         payload: &P,
         summary: impl Fn(&P) -> String,
         ui: &Ui,
     ) -> Result<()> {
-        for backend in backends {
+        let names: Vec<&'static str> = backends.iter().map(|backend| backend.name()).collect();
+        for (i, backend) in backends.iter().enumerate() {
             ui.section(format_args!("{} - {}", backend.name(), summary(payload)));
             if !self.dry_run && !self.confirm(&format!("{verb} to {}", backend.name()))? {
                 ui.detail(format_args!("skipped {}", backend.name()));
                 continue;
             }
-            backend.run(payload, self, ui)?;
+            if let Err(why) = backend.run(payload, self, ui) {
+                for unattempted in &names[i + 1..] {
+                    ui.skip(unattempted, "an earlier destination failed");
+                }
+                return Err(why);
+            }
         }
         Ok(())
     }
