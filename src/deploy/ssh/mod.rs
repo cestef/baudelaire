@@ -124,8 +124,9 @@ impl Store for Sftp<'_> {
     }
 
     fn list(&self, ui: &Ui) -> Result<Digests> {
-        let inventory = self.runtime.block_on(self.session.digests())?;
-        Ok(inventory.report(ui, &self.target()))
+        let target = self.target();
+        let inventory = self.runtime.block_on(self.session.digests(ui, &target))?;
+        Ok(inventory.report(ui, &target))
     }
 
     fn upload(&self, key: &str, body: &[u8]) -> Result<()> {

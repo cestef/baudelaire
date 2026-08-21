@@ -79,11 +79,21 @@ impl Session {
         })
     }
 
-    /// The remote files' digests, from the host's `sha256sum`; a missing
-    /// directory or absent tool yields an empty map, so every file reads as new
-    /// rather than being skipped wrongly.
-    pub async fn digests(&self) -> Result<Inventory> {
-        Ok(Remote::parse(&self.exec(&self.remote.command()).await?))
+    /// The remote files' digests, from the host's `sha256sum`; a deploy root
+    /// that is not there yet answers with an empty map, so every file reads as
+    /// new rather than being skipped wrongly.
+    ///
+    /// A host that answered with a failure has listed some of its tree at best,
+    /// which is safe in one direction only (more uploads, fewer deletes) and so
+    /// is warned about rather than passed off as a complete inventory.
+    pub async fn digests(&self, ui: &Ui, target: &str) -> Result<Inventory> {
+        let (out, status) = self.exec(&self.remote.command()).await?;
+        if status != Some(0) {
+            ui.warn(crate::error::warning::RemoteListingPartial {
+                target: target.to_owned(),
+            });
+        }
+        Ok(Remote::parse(&out))
     }
 
     /// Upload `body` to the file for dist-relative `rel`, creating parents first.
@@ -123,10 +133,13 @@ impl Session {
             .await;
     }
 
-    /// Run `command` over an exec channel and collect its stdout, capped: the
-    /// output is the host's own answer, and an endless stream would otherwise
-    /// grow this buffer until the process died.
-    async fn exec(&self, command: &str) -> Result<String> {
+    /// Run `command` over an exec channel and collect its stdout and the status
+    /// it exited with, capped: the output is the host's own answer, and an
+    /// endless stream would otherwise grow this buffer until the process died.
+    ///
+    /// `None` for the status where the channel ended without one, which is a
+    /// transport that died rather than a command that answered.
+    async fn exec(&self, command: &str) -> Result<(String, Option<u32>)> {
         const LIMIT: usize = 64 << 20;
         let mut channel = self
             .handle
@@ -138,6 +151,7 @@ impl Session {
             .await
             .map_err(|e| DeployError::transfer(Step::Exec, e))?;
         let mut out = Vec::new();
+        let mut status = None;
         while let Some(msg) = channel.wait().await {
             match msg {
                 ChannelMsg::Data { data } => {
@@ -152,11 +166,12 @@ impl Session {
                     }
                     out.extend_from_slice(&data);
                 }
-                ChannelMsg::Eof | ChannelMsg::Close => break,
+                ChannelMsg::ExitStatus { exit_status } => status = Some(exit_status),
+                ChannelMsg::Close => break,
                 _ => {}
             }
         }
-        Ok(String::from_utf8_lossy(&out).into_owned())
+        Ok((String::from_utf8_lossy(&out).into_owned(), status))
     }
 
     /// Ensure every ancestor directory of `path` exists, ignoring the
@@ -196,9 +211,12 @@ impl Remote {
     }
 
     /// The shell command that lists the tree with a SHA-256 per file.
+    /// A deploy root that is not there yet is not a failure: it is a first
+    /// deploy, and it answers with nothing rather than with a non-zero status
+    /// the caller would report.
     fn command(&self) -> String {
         format!(
-            "cd {} && find . -type f -exec sha256sum {{}} +",
+            "if cd {} 2>/dev/null; then find . -type f -exec sha256sum {{}} +; fi",
             Self::quote(&self.base)
         )
     }
@@ -245,7 +263,7 @@ mod tests {
     fn command_quotes_the_base() {
         assert_eq!(
             Remote::new("/srv/o'brien").command(),
-            r"cd '/srv/o'\''brien' && find . -type f -exec sha256sum {} +"
+            r"if cd '/srv/o'\''brien' 2>/dev/null; then find . -type f -exec sha256sum {} +; fi"
         );
     }
 

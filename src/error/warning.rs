@@ -527,3 +527,19 @@ pub struct RemotePathsRefused {
     pub count: usize,
     pub target: String,
 }
+
+/// Reported rather than passed off as a complete inventory: what the host did
+/// send stands for its whole tree, and the reconcile acts on that.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("{} could not be listed in full", Code(.target))]
+#[diagnostic(
+    code(baudelaire::deploy::listing),
+    severity(warning),
+    help(
+        "the host answered with a failure, so what it did send stands for the whole tree: files \
+         it did not mention are uploaded again and never deleted. Run with `-v` for the command"
+    )
+)]
+pub struct RemoteListingPartial {
+    pub target: String,
+}
