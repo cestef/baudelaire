@@ -165,14 +165,7 @@ impl<'a> Routes<'a> {
         shared
     }
 
-    /// The route table, safe to nest inside a `<script>`: every `<` is written
-    /// as its JSON escape for U+003C, which a JSON parser reads back as the
-    /// same character and an HTML tokenizer never reads as markup.
-    ///
-    /// Every `<`, not just `</`: `<!--<script` puts the tokenizer in the state
-    /// where the island's own `</script>` no longer closes anything. `<`
-    /// appears in serialized JSON only inside a string, so replacing it
-    /// wholesale cannot touch the structure.
+    /// The route table, safe to nest inside a `<script>`.
     fn json(&self, shared: &[&str]) -> Result<String> {
         let swaps: BTreeMap<&str, Swap> = self
             .0
@@ -180,7 +173,7 @@ impl<'a> Routes<'a> {
             .map(|(url, route)| (url.as_str(), route.swap(shared)))
             .collect();
         let json = Artifact::Standalone.json(&swaps)?;
-        Ok(json.replace('<', "\\u003c"))
+        Ok(crate::codegen::Island(&json).to_string())
     }
 }
 

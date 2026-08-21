@@ -88,6 +88,7 @@ impl Rules {
     /// The rule document as the `<script>` element that carries it.
     fn script(&self) -> HtmlNode {
         let json = serde_json::to_string(self).expect("rules are plain strings");
+        let json = crate::codegen::Island(&json).to_string();
         let mut el = HtmlElement::new(tag::script).with_attr(attr::r#type, "speculationrules");
         el.children
             .push(HtmlNode::Text(json.into(), Span::detached()));

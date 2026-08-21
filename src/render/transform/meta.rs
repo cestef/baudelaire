@@ -167,7 +167,7 @@ impl Card<'_> {
             .map(|(key, value)| (key.to_owned(), value))
             .collect();
         let json = serde_json::to_string(&object).expect("plain strings");
-        let json = json.replace('<', "\\u003c");
+        let json = crate::codegen::Island(&json).to_string();
         let mut el = HtmlElement::new(tag::script).with_attr(attr::r#type, "application/ld+json");
         el.children
             .push(HtmlNode::Text(json.into(), typst::syntax::Span::detached()));

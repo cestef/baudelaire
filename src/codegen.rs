@@ -437,6 +437,30 @@ impl fmt::Display for JsonStr<'_> {
     }
 }
 
+/// Displays serialized JSON as the text of a `<script>` element.
+///
+/// Every `<` is written as its escape for U+003C, which a JSON parser reads back
+/// as the same character and an HTML tokenizer never reads as markup. Every `<`,
+/// not just `</`: `<!--<script` puts the tokenizer in the state where
+/// the island's own `</script>` no longer closes anything. `<` appears in
+/// serialized JSON only inside a string, so replacing it wholesale cannot touch
+/// the structure.
+pub struct Island<'a>(pub &'a str);
+
+impl fmt::Display for Island<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut parts = self.0.split('<');
+        if let Some(first) = parts.next() {
+            f.write_str(first)?;
+        }
+        for part in parts {
+            f.write_str("\\u003c")?;
+            f.write_str(part)?;
+        }
+        Ok(())
+    }
+}
+
 /// Displays a Typst import binding one item under a local alias:
 /// `#import "<path>": <item> as <alias>`.
 ///
