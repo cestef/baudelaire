@@ -54,17 +54,21 @@ jobs:
           fetch-depth: 0
 
       - name: rust toolchain
-        uses: cestef/actions/rust@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
+        uses: cestef/actions/rust@2fa915383fe2224a2faa0604db43419ef4bfa2e8
       - name: mold linker
-        uses: cestef/actions/mold@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
+        uses: cestef/actions/mold@2fa915383fe2224a2faa0604db43419ef4bfa2e8
         with:
           rustflags: "false"
       - name: restore cargo registry
-        uses: cestef/actions/cargo-cache@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
+        uses: cestef/actions/cargo-cache@2fa915383fe2224a2faa0604db43419ef4bfa2e8
+      # CI's default-flavor tree, read-only. Same toolchain, same features and
+      # the same RUSTFLAGS as the job that writes it, which is what makes the
+      # artifacts restorable at all; this workflow never saves under that key,
+      # so nothing here can hand CI a directory CI did not build.
       - name: restore build cache
-        uses: cestef/actions/cargo-cache@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
+        uses: cestef/actions/cargo-cache@2fa915383fe2224a2faa0604db43419ef4bfa2e8
         with:
-          prefix: target-cache
+          prefix: target-test-default
           toolchain-key: "true"
           base: "."
           paths: target
@@ -99,7 +103,7 @@ jobs:
       # possible in the first place.
       - name: deploy to cloudflare pages
         if: github.event_name != 'pull_request'
-        uses: cestef/actions/wrangler@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
+        uses: cestef/actions/wrangler@2fa915383fe2224a2faa0604db43419ef4bfa2e8
         with:
           command: pages deploy public --project-name=baudelaire --branch=main
           working-directory: docs

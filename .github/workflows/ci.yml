@@ -20,15 +20,28 @@ env:
   CARGO_PROFILE_TEST_DEBUG: 0
   CARGO_INCREMENTAL: 0
 
+# Every compiling job below is one (runner, toolchain, feature set) and owns one
+# target cache under its own prefix. Two jobs never share a target directory, so
+# no cache is ever written from a tree another job also compiled into, and each
+# key is narrow enough that a hit means the whole dependency graph is warm.
+
 jobs:
-  guard:
-    name: guard
+  # What this event can possibly have broken. Two questions: does the diff reach
+  # the compiler, and is a nightly looking at a commit it already checked.
+  scope:
+    name: scope
     runs-on: ubuntu-latest
     permissions:
       actions: read
+      contents: read
     outputs:
-      changed: ${{ steps.probe.outputs.changed }}
+      compile: ${{ steps.probe.outputs.compile }}
     steps:
+      - name: checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
       - name: probe
         id: probe
         env:
@@ -37,149 +50,75 @@ jobs:
           REPO: ${{ github.repository }}
           BRANCH: ${{ github.ref_name }}
           SHA: ${{ github.sha }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           set -euo pipefail
-          if [ "$EVENT" != "schedule" ]; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
+          say() { printf '%s=%s\n' "$1" "$2" >> "$GITHUB_OUTPUT"; echo "scope: $1=$2"; }
+
+          # A nightly on the commit last night already passed on is the one case
+          # where the answer is known without looking at a diff.
+          if [ "$EVENT" = schedule ]; then
+            last=$(gh api \
+              "repos/$REPO/actions/workflows/ci.yml/runs?event=schedule&status=success&branch=$BRANCH&per_page=1" \
+              --jq '.workflow_runs[0].head_sha // ""')
+            if [ "$last" = "$SHA" ]; then
+              echo "::notice::$SHA unchanged since the last nightly"
+              say compile false
+            else
+              say compile true
+            fi
             exit 0
           fi
-          last=$(gh api \
-            "repos/$REPO/actions/workflows/ci.yml/runs?event=schedule&status=success&branch=$BRANCH&per_page=1" \
-            --jq '.workflow_runs[0].head_sha // ""')
-          if [ "$last" = "$SHA" ]; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::$SHA unchanged since last nightly, skipping coverage"
-          else
-            echo "changed=true" >> "$GITHUB_OUTPUT"
+
+          # No readable diff (a new branch, a forced push, a manual run) means
+          # assume everything moved.
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            say compile true
+            exit 0
           fi
 
-  check:
-    name: lint & test
+          # The list names what cannot reach the compiler, never what can, so a
+          # directory added to the tree later runs CI by default rather than
+          # silently escaping it.
+          compile=false
+          while IFS= read -r file; do
+            [ -n "$file" ] || continue
+            case "$file" in
+              # First, so no later pattern can claim a path under one of these.
+              # A markdown fixture added to tests/ would otherwise read as prose.
+              src/*|tests/*|benches/*) ;;
+              # Written from the dispatch tables and asserted by tests/reference.rs.
+              docs/generated/*) ;;
+              docs/*|*.md|LICENSE|.gitignore) continue ;;
+              .github/workflows/docs.yml|.github/workflows/release.yml) continue ;;
+            esac
+            echo "scope: compiling for $file"
+            compile=true
+            break
+          done <<< "$(git diff --name-only "$BASE"...HEAD)"
+          say compile "$compile"
+
+  # Everything that needs no dependency graph, in one job rather than three:
+  # each of these is seconds, and a job's own setup costs more than it runs.
+  # It carries no `if`, so a workflow or changelog edit is still linted on the
+  # event that skips every compiling job below.
+  lint:
+    name: lint
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - name: checkout
         uses: actions/checkout@v7
 
       - name: rust toolchain
-        uses: cestef/actions/rust@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
-      - name: mold linker
-        uses: cestef/actions/mold@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
-        with:
-          rustflags: "false"
-      - name: restore cargo registry
-        id: registry
-        uses: cestef/actions/cargo-cache@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
-      - name: restore build cache
-        id: build-cache
-        uses: cestef/actions/cargo-cache@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
-        with:
-          prefix: target-cache
-          toolchain-key: "true"
-          base: "."
-          paths: target
+        uses: cestef/actions/rust@2fa915383fe2224a2faa0604db43419ef4bfa2e8
 
       - name: fmt
         run: cargo fmt --all --check
 
-      - name: clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
-
-      - name: test prerequisites
-        run: |
-          for tool in curl base64 git; do
-            command -v "$tool" >/dev/null || { echo "$tool is required"; exit 1; }
-          done
-
-      - name: test
-        id: test
-        uses: cestef/actions/nextest@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
-        with:
-          run: "true"
-          args: --workspace --no-tests warn
-
-      - name: clippy (slim)
-        run: cargo clippy --workspace --all-targets --no-default-features -- -D warnings
-
-      - name: test (slim)
-        uses: cestef/actions/nextest@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
-        with:
-          run: "true"
-          args: --workspace --no-default-features --no-tests warn
-
-      - name: memory diagnostics
-        uses: cestef/actions/mem-diagnostics@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
-        if: failure()
-
-      - name: facts
-        id: facts
-        run: |
-          set -euo pipefail
-          {
-            echo "typst=$(grep -m1 'typst = {' Cargo.toml | sed -n 's/.*version = "\([^"]*\)".*/\1/p')"
-            echo "msrv=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: badge (tests)
-        if: always()
-        uses: cestef/actions/badge@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
-        with:
-          label: tests
-          value: ${{ steps.test.outputs.passed }}/${{ steps.test.outputs.total }} passing
-          percent: ${{ steps.test.outputs.percent }}
-          thresholds: "100:#3fb950,0:#e5534b"
-          file: tests.svg
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: badge (typst)
-        uses: cestef/actions/badge@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
-        with:
-          label: typst
-          value: ${{ steps.facts.outputs.typst }}
-          color: "#a371f7"
-          file: typst.svg
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: badge (msrv)
-        uses: cestef/actions/badge@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
-        with:
-          label: rust
-          value: ${{ steps.facts.outputs.msrv }}+
-          color: "#8b949e"
-          file: msrv.svg
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: save cargo registry
-        uses: cestef/actions/cargo-cache@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
-        if: always() && steps.registry.outputs.hit != 'true'
-        with:
-          mode: save
-      - name: save build cache
-        uses: cestef/actions/cargo-cache@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
-        if: always() && steps.build-cache.outputs.hit != 'true'
-        with:
-          mode: save
-          prefix: target-cache
-          toolchain-key: "true"
-          base: "."
-          paths: target
-
-  # Three workflows now carry real shell: a packaging function that branches on
-  # archive format, a notes step that reads the changelog, an installer fetch.
-  # None of that is exercised until a release runs, so it is linted instead.
-  #
-  # actionlint hands every `run:` block to shellcheck, which is where most of
-  # the value is: an unquoted expansion in the packaging script would otherwise
-  # surface as a broken release artifact.
-  workflows:
-    name: workflows
-    runs-on: ubuntu-latest
-    steps:
-      - name: checkout
-        uses: actions/checkout@v7
-
-      # shellcheck is already on the runner image; actionlint is not.
+      # shellcheck is already on the runner image; actionlint is not. It hands
+      # every `run:` block to shellcheck, which is where most of the value is:
+      # an unquoted expansion in release.yml's packaging script would otherwise
+      # surface as a broken release artifact.
       - name: actionlint
         env:
           ACTIONLINT_VERSION: "1.7.12"
@@ -192,112 +131,9 @@ jobs:
             | tar xz -C "$RUNNER_TEMP/actionlint" actionlint
           "$RUNNER_TEMP/actionlint/actionlint" -color
 
-  # There is Windows-aware code in the tree (`src/fs.rs`, `src/engine/hook.rs`)
-  # and nothing that compiles it, so it can rot without anyone noticing. This
-  # job is what notices.
-  #
-  # Compilation only, and no release artifact yet. Two reasons to stop here
-  # rather than add a matrix row to `release.yml`: the e2e tests shell out to
-  # `base64`, which Windows runners do not have, and the default feature set
-  # reaches `aws-lc-sys` through `russh`, whose Windows build wants NASM. Both
-  # flavors run so that the slim one, which drops `ssh` and therefore
-  # `aws-lc-sys` entirely, reports separately from the full one; shipping a
-  # Windows binary is a decision to make once this job has been green.
-  windows:
-    name: windows
-    runs-on: windows-latest
-    steps:
-      - name: checkout
-        uses: actions/checkout@v7
-
-      - name: rust toolchain
-        uses: cestef/actions/rust@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
-
-      # The workflow-level RUSTFLAGS asks for mold, which is a Linux linker.
-      # `-D warnings` is kept: the point of the job is that warnings here are
-      # real. The `macos` rows in `release.yml` clear it the same way.
-      - name: system linker
-        shell: bash
-        run: echo "RUSTFLAGS=-D warnings" >> "$GITHUB_ENV"
-
-      # The one job with a PowerShell host, so the one place `install.ps1` can
-      # be held to anything at all. It is shipped as a release asset and served
-      # from the docs site, and a syntax error in it would surface as a broken
-      # install rather than as a failing build.
-      - name: install script parses
-        shell: pwsh
-        run: |
-          $errors = $null
-          [System.Management.Automation.Language.Parser]::ParseFile(
-            (Resolve-Path install.ps1), [ref]$null, [ref]$errors) | Out-Null
-          if ($errors) {
-            $errors | ForEach-Object { Write-Host "$($_.Extent.StartLineNumber): $($_.Message)" }
-            exit 1
-          }
-
-      - name: restore cargo registry
-        uses: cestef/actions/cargo-cache@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
-
-      - name: check
-        run: cargo check --workspace --all-targets --locked
-
-      - name: check (slim)
-        run: cargo check --workspace --all-targets --locked --no-default-features
-
-  msrv:
-    name: msrv
-    runs-on: ubuntu-latest
-    steps:
-      - name: checkout
-        uses: actions/checkout@v7
-
-      # Read from Cargo.toml rather than written here, for the same reason the
-      # badge reads it: `rust-version` is the claim, and a second copy of it is
-      # a second thing to forget. `facts` in the `check` job parses it the same
-      # way.
-      #
-      # Selected through `RUSTUP_TOOLCHAIN`, not `rustup override`: this repo
-      # has a `rust-toolchain.toml` pinning `stable`, and the environment
-      # variable is the one form that unambiguously outranks it.
-      - name: msrv toolchain
-        run: |
-          set -euo pipefail
-          msrv=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)
-          [ -n "$msrv" ] || { echo "Cargo.toml has no rust-version"; exit 1; }
-          rustup toolchain install "$msrv" --profile minimal --no-self-update
-          echo "RUSTUP_TOOLCHAIN=$msrv" >> "$GITHUB_ENV"
-
-      - name: mold linker
-        uses: cestef/actions/mold@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
-        with:
-          rustflags: "false"
-      - name: restore cargo registry
-        uses: cestef/actions/cargo-cache@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
-
-      # `check`, not `clippy`: this job answers "does the declared minimum
-      # actually compile", and clippy's lint set moves between releases, so
-      # linting here would fail on style the MSRV toolchain happens to disagree
-      # about rather than on anything a user would hit.
-      #
-      # Both flavors, because `--no-default-features` compiles a different set
-      # of modules, and `--all-targets` because a contributor on the MSRV builds
-      # the tests too.
-      - name: check
-        run: cargo check --workspace --all-targets --locked
-
-      - name: check (slim)
-        run: cargo check --workspace --all-targets --locked --no-default-features
-
-  audit:
-    name: audit
-    runs-on: ubuntu-latest
-    steps:
-      - name: checkout
-        uses: actions/checkout@v7
-
-      # Fetched as a release binary rather than built from source: this job
-      # needs no toolchain, no registry cache and no `target/`, so it stays a
-      # ~20s check instead of a second full compile.
+      # Fetched as a release binary rather than built from source: this needs no
+      # toolchain, no registry cache and no target/, so it stays a ~20s check
+      # instead of a second full compile.
       - name: cargo-deny
         env:
           DENY_VERSION: "0.20.2"
@@ -321,11 +157,299 @@ jobs:
       - name: cargo deny
         run: cargo deny check
 
+  # The two release flavors compile a different set of modules, so they are two
+  # builds however they are arranged. Running them as a matrix rather than back
+  # to back in one job makes the pair cost the slower of the two instead of
+  # their sum, and gives each its own target cache: a slim tree and a default
+  # tree in one directory is most of what made the old single cache 3 GB.
+  test:
+    name: test (${{ matrix.flavor }})
+    needs: scope
+    if: needs.scope.outputs.compile == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - flavor: default
+            features: ""
+          - flavor: slim
+            features: --no-default-features
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+
+      - name: rust toolchain
+        uses: cestef/actions/rust@2fa915383fe2224a2faa0604db43419ef4bfa2e8
+      - name: mold linker
+        uses: cestef/actions/mold@2fa915383fe2224a2faa0604db43419ef4bfa2e8
+        with:
+          rustflags: "false"
+      - name: restore cargo registry
+        id: registry
+        uses: cestef/actions/cargo-cache@2fa915383fe2224a2faa0604db43419ef4bfa2e8
+      - name: restore build cache
+        id: build-cache
+        uses: cestef/actions/cargo-cache@2fa915383fe2224a2faa0604db43419ef4bfa2e8
+        with:
+          prefix: target-test-${{ matrix.flavor }}
+          toolchain-key: "true"
+          base: "."
+          paths: target
+
+      - name: clippy
+        run: cargo clippy --workspace --all-targets ${{ matrix.features }} -- -D warnings
+
+      - name: test prerequisites
+        run: |
+          for tool in curl base64 git; do
+            command -v "$tool" >/dev/null || { echo "$tool is required"; exit 1; }
+          done
+
+      - name: test
+        id: test
+        uses: cestef/actions/nextest@2fa915383fe2224a2faa0604db43419ef4bfa2e8
+        with:
+          run: "true"
+          args: --workspace ${{ matrix.features }} --no-tests warn
+
+      - name: memory diagnostics
+        uses: cestef/actions/mem-diagnostics@2fa915383fe2224a2faa0604db43419ef4bfa2e8
+        if: failure()
+
+      # One leg publishes, so the two do not race each other for the badges
+      # branch. The default flavor is the one whose test count is the claim.
+      - name: facts
+        id: facts
+        if: matrix.flavor == 'default'
+        run: |
+          set -euo pipefail
+          {
+            echo "typst=$(grep -m1 'typst = {' Cargo.toml | sed -n 's/.*version = "\([^"]*\)".*/\1/p')"
+            echo "msrv=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: badge (tests)
+        if: always() && matrix.flavor == 'default'
+        uses: cestef/actions/badge@2fa915383fe2224a2faa0604db43419ef4bfa2e8
+        with:
+          label: tests
+          value: ${{ steps.test.outputs.passed }}/${{ steps.test.outputs.total }} passing
+          percent: ${{ steps.test.outputs.percent }}
+          thresholds: "100:#3fb950,0:#e5534b"
+          file: tests.svg
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: badge (typst)
+        if: matrix.flavor == 'default'
+        uses: cestef/actions/badge@2fa915383fe2224a2faa0604db43419ef4bfa2e8
+        with:
+          label: typst
+          value: ${{ steps.facts.outputs.typst }}
+          color: "#a371f7"
+          file: typst.svg
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: badge (msrv)
+        if: matrix.flavor == 'default'
+        uses: cestef/actions/badge@2fa915383fe2224a2faa0604db43419ef4bfa2e8
+        with:
+          label: rust
+          value: ${{ steps.facts.outputs.msrv }}+
+          color: "#8b949e"
+          file: msrv.svg
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # `success()`, not `always()`: a cache key is immutable, so a run that
+      # died before compiling would write an empty tree that every later run
+      # restores as a hit and never replaces. A cache is written only by a run
+      # that proved it, and a failed run leaves the previous one restorable
+      # through the fallback key.
+      - name: save cargo registry
+        uses: cestef/actions/cargo-cache@2fa915383fe2224a2faa0604db43419ef4bfa2e8
+        if: success() && steps.registry.outputs.hit != 'true'
+        with:
+          mode: save
+      - name: save build cache
+        uses: cestef/actions/cargo-cache@2fa915383fe2224a2faa0604db43419ef4bfa2e8
+        if: success() && steps.build-cache.outputs.hit != 'true'
+        with:
+          mode: save
+          prune: "true"
+          prefix: target-test-${{ matrix.flavor }}
+          toolchain-key: "true"
+          base: "."
+          paths: target
+
+  # There is Windows-aware code in the tree (`src/fs.rs`, `src/engine/hook.rs`)
+  # and nothing else that compiles it, so it can rot without anyone noticing.
+  #
+  # Compilation only, and no release artifact yet. Two reasons to stop here
+  # rather than add a matrix row to `release.yml`: the e2e tests shell out to
+  # `base64`, which Windows runners do not have, and the default feature set
+  # reaches `aws-lc-sys` through `russh`, whose Windows build wants NASM. Both
+  # flavors run so that the slim one, which drops `ssh` and therefore
+  # `aws-lc-sys` entirely, reports separately from the full one; shipping a
+  # Windows binary is a decision to make once this job has been green.
+  windows:
+    name: windows (${{ matrix.flavor }})
+    needs: scope
+    if: needs.scope.outputs.compile == 'true'
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - flavor: default
+            features: ""
+          - flavor: slim
+            features: --no-default-features
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+
+      - name: rust toolchain
+        uses: cestef/actions/rust@2fa915383fe2224a2faa0604db43419ef4bfa2e8
+
+      # The workflow-level RUSTFLAGS asks for mold, which is a Linux linker.
+      # `-D warnings` is kept: the point of the job is that warnings here are
+      # real. The `macos` rows in `release.yml` clear it the same way.
+      - name: system linker
+        shell: bash
+        run: echo "RUSTFLAGS=-D warnings" >> "$GITHUB_ENV"
+
+      # The one job with a PowerShell host, so the one place `install.ps1` can
+      # be held to anything at all. It is shipped as a release asset and served
+      # from the docs site, and a syntax error in it would surface as a broken
+      # install rather than as a failing build.
+      - name: install script parses
+        if: matrix.flavor == 'default'
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path install.ps1), [ref]$null, [ref]$errors) | Out-Null
+          if ($errors) {
+            $errors | ForEach-Object { Write-Host "$($_.Extent.StartLineNumber): $($_.Message)" }
+            exit 1
+          }
+
+      - name: restore cargo registry
+        id: registry
+        uses: cestef/actions/cargo-cache@2fa915383fe2224a2faa0604db43419ef4bfa2e8
+      - name: restore build cache
+        id: build-cache
+        uses: cestef/actions/cargo-cache@2fa915383fe2224a2faa0604db43419ef4bfa2e8
+        with:
+          prefix: target-windows-${{ matrix.flavor }}
+          toolchain-key: "true"
+          base: "."
+          paths: target
+
+      - name: check
+        run: cargo check --workspace --all-targets --locked ${{ matrix.features }}
+
+      - name: save cargo registry
+        uses: cestef/actions/cargo-cache@2fa915383fe2224a2faa0604db43419ef4bfa2e8
+        if: success() && steps.registry.outputs.hit != 'true'
+        with:
+          mode: save
+      - name: save build cache
+        uses: cestef/actions/cargo-cache@2fa915383fe2224a2faa0604db43419ef4bfa2e8
+        if: success() && steps.build-cache.outputs.hit != 'true'
+        with:
+          mode: save
+          prune: "true"
+          prefix: target-windows-${{ matrix.flavor }}
+          toolchain-key: "true"
+          base: "."
+          paths: target
+
+  msrv:
+    name: msrv
+    needs: scope
+    if: needs.scope.outputs.compile == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+
+      # Read from Cargo.toml rather than written here, for the same reason the
+      # badge reads it: `rust-version` is the claim, and a second copy of it is
+      # a second thing to forget.
+      #
+      # Selected through `RUSTUP_TOOLCHAIN`, not `rustup override`: this repo
+      # has a `rust-toolchain.toml` pinning `stable`, and the environment
+      # variable is the one form that unambiguously outranks it.
+      - name: msrv toolchain
+        run: |
+          set -euo pipefail
+          msrv=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)
+          [ -n "$msrv" ] || { echo "Cargo.toml has no rust-version"; exit 1; }
+          rustup toolchain install "$msrv" --profile minimal --no-self-update
+          echo "RUSTUP_TOOLCHAIN=$msrv" >> "$GITHUB_ENV"
+
+      - name: mold linker
+        uses: cestef/actions/mold@2fa915383fe2224a2faa0604db43419ef4bfa2e8
+        with:
+          rustflags: "false"
+      - name: restore cargo registry
+        id: registry
+        uses: cestef/actions/cargo-cache@2fa915383fe2224a2faa0604db43419ef4bfa2e8
+      # `toolchain-key` is what keeps this apart from the stable caches: the key
+      # carries the MSRV rustc's version string, so nothing here can be
+      # restored into a stable job or the other way round.
+      - name: restore build cache
+        id: build-cache
+        uses: cestef/actions/cargo-cache@2fa915383fe2224a2faa0604db43419ef4bfa2e8
+        with:
+          prefix: target-msrv
+          toolchain-key: "true"
+          base: "."
+          paths: target
+
+      # `check`, not `clippy`: this job answers "does the declared minimum
+      # actually compile", and clippy's lint set moves between releases, so
+      # linting here would fail on style the MSRV toolchain happens to disagree
+      # about rather than on anything a user would hit.
+      #
+      # Both flavors, because `--no-default-features` compiles a different set
+      # of modules, and `--all-targets` because a contributor on the MSRV builds
+      # the tests too. One job rather than a matrix: the second flavor reuses
+      # the first's dependency graph, which costs less than a second restore.
+      - name: check
+        run: cargo check --workspace --all-targets --locked
+
+      - name: check (slim)
+        run: cargo check --workspace --all-targets --locked --no-default-features
+
+      - name: save cargo registry
+        uses: cestef/actions/cargo-cache@2fa915383fe2224a2faa0604db43419ef4bfa2e8
+        if: success() && steps.registry.outputs.hit != 'true'
+        with:
+          mode: save
+      - name: save build cache
+        uses: cestef/actions/cargo-cache@2fa915383fe2224a2faa0604db43419ef4bfa2e8
+        if: success() && steps.build-cache.outputs.hit != 'true'
+        with:
+          mode: save
+          prune: "true"
+          prefix: target-msrv
+          toolchain-key: "true"
+          base: "."
+          paths: target
+
+  # Source-based LLVM instrumentation over the ordinary nextest run, not
+  # tarpaulin. `LLVM_PROFILE_FILE` is inherited across exec, so the `baudelaire`
+  # the e2e suite spawns is counted like any other code; under tarpaulin only
+  # the test binary itself was, which left the whole CLI surface unmeasured.
   coverage:
     name: coverage
+    needs: scope
+    if: github.event_name != 'push' && needs.scope.outputs.compile == 'true'
     runs-on: ubuntu-latest
-    needs: guard
-    if: github.event_name != 'push' && needs.guard.outputs.changed == 'true'
     permissions:
       contents: write
       pull-requests: write
@@ -334,26 +458,40 @@ jobs:
         uses: actions/checkout@v7
 
       - name: rust toolchain
-        uses: cestef/actions/rust@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
+        uses: cestef/actions/rust@2fa915383fe2224a2faa0604db43419ef4bfa2e8
         with:
           components: llvm-tools-preview
       - name: mold linker
-        uses: cestef/actions/mold@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
+        uses: cestef/actions/mold@2fa915383fe2224a2faa0604db43419ef4bfa2e8
         with:
           rustflags: "false"
       - name: restore cargo registry
         id: registry
-        uses: cestef/actions/cargo-cache@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
+        uses: cestef/actions/cargo-cache@2fa915383fe2224a2faa0604db43419ef4bfa2e8
+      # Instrumented artifacts are not the test job's artifacts: cargo-llvm-cov
+      # adds `-C instrument-coverage`, which is part of every fingerprint. Its
+      # own prefix, so the two never evict or half-restore each other.
+      - name: restore build cache
+        id: build-cache
+        uses: cestef/actions/cargo-cache@2fa915383fe2224a2faa0604db43419ef4bfa2e8
+        with:
+          prefix: target-coverage
+          toolchain-key: "true"
+          base: "."
+          paths: target
 
       - name: coverage
         id: cov
-        uses: cestef/actions/tarpaulin@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
+        uses: cestef/actions/llvm-cov@2fa915383fe2224a2faa0604db43419ef4bfa2e8
         with:
-          args: --workspace --exclude-files benches/* --engine llvm
-          out: Stdout Xml
+          args: --workspace
+          runner: nextest
+          format: cobertura
+          output: cobertura.xml
+          ignore: "benches/"
 
       - name: coverage report
-        uses: cestef/actions/coverage-report@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
+        uses: cestef/actions/coverage-report@2fa915383fe2224a2faa0604db43419ef4bfa2e8
         with:
           file: cobertura.xml
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -367,3 +505,18 @@ jobs:
           name: coverage
           path: cobertura.xml
 
+      - name: save cargo registry
+        uses: cestef/actions/cargo-cache@2fa915383fe2224a2faa0604db43419ef4bfa2e8
+        if: success() && steps.registry.outputs.hit != 'true'
+        with:
+          mode: save
+      - name: save build cache
+        uses: cestef/actions/cargo-cache@2fa915383fe2224a2faa0604db43419ef4bfa2e8
+        if: success() && steps.build-cache.outputs.hit != 'true'
+        with:
+          mode: save
+          prune: "true"
+          prefix: target-coverage
+          toolchain-key: "true"
+          base: "."
+          paths: target

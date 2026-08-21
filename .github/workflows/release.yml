@@ -17,6 +17,14 @@ env:
 jobs:
   gate:
     runs-on: ubuntu-latest
+    # The tag names a commit CI has compiled, and `target-test-default` is that
+    # compile. Restoring it needs the flags to match exactly, `-D warnings`
+    # included: RUSTFLAGS is part of every fingerprint, so the workflow-level
+    # value here would rebuild all of it.
+    env:
+      RUSTFLAGS: -D warnings -C link-arg=-fuse-ld=mold
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
     steps:
       - name: checkout
         uses: actions/checkout@v7
@@ -24,11 +32,23 @@ jobs:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: rust toolchain
-        uses: cestef/actions/rust@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
+        uses: cestef/actions/rust@2fa915383fe2224a2faa0604db43419ef4bfa2e8
       - name: mold linker
-        uses: cestef/actions/mold@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
+        uses: cestef/actions/mold@2fa915383fe2224a2faa0604db43419ef4bfa2e8
         with:
           rustflags: "false"
+
+      - name: restore cargo registry
+        uses: cestef/actions/cargo-cache@2fa915383fe2224a2faa0604db43419ef4bfa2e8
+      # Read-only, as in docs.yml: this job proves the tag, it does not own a
+      # cache.
+      - name: restore build cache
+        uses: cestef/actions/cargo-cache@2fa915383fe2224a2faa0604db43419ef4bfa2e8
+        with:
+          prefix: target-test-default
+          toolchain-key: "true"
+          base: "."
+          paths: target
 
       - name: tag matches Cargo.toml
         run: |
@@ -61,7 +81,7 @@ jobs:
         run: cargo clippy --workspace --all-targets --no-default-features -- -D warnings
 
       - name: test
-        uses: cestef/actions/nextest@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
+        uses: cestef/actions/nextest@2fa915383fe2224a2faa0604db43419ef4bfa2e8
         with:
           run: "true"
           args: --workspace --no-tests warn
@@ -115,11 +135,11 @@ jobs:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: rust toolchain
-        uses: cestef/actions/rust@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
+        uses: cestef/actions/rust@2fa915383fe2224a2faa0604db43419ef4bfa2e8
         with:
           targets: ${{ matrix.target }}
       - name: mold linker
-        uses: cestef/actions/mold@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
+        uses: cestef/actions/mold@2fa915383fe2224a2faa0604db43419ef4bfa2e8
         if: ${{ !matrix.macos && !matrix.windows }}
         with:
           rustflags: "false"
@@ -134,11 +154,15 @@ jobs:
         run: echo "RUSTFLAGS=" >> "$GITHUB_ENV"
 
       - name: musl toolchain
-        uses: cestef/actions/musl@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
+        uses: cestef/actions/musl@2fa915383fe2224a2faa0604db43419ef4bfa2e8
         if: matrix.musl
 
+      # Registry only. A release-profile target/ per matrix row would be seven
+      # more caches competing for the repo's ten gigabytes against caches CI
+      # touches many times a day, and a cache used once a week loses that
+      # contest: it would evict the hot ones to arrive cold anyway.
       - name: restore cargo registry
-        uses: cestef/actions/cargo-cache@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
+        uses: cestef/actions/cargo-cache@2fa915383fe2224a2faa0604db43419ef4bfa2e8
 
       - name: build
         shell: bash
@@ -190,7 +214,7 @@ jobs:
           path: baudelaire-${{ matrix.name }}*
 
       - name: save cargo registry
-        uses: cestef/actions/cargo-cache@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
+        uses: cestef/actions/cargo-cache@2fa915383fe2224a2faa0604db43419ef4bfa2e8
         if: always()
         with:
           mode: save
@@ -320,7 +344,7 @@ jobs:
         run: gh workflow run docs.yml --ref main
 
       - name: badge (binary size)
-        uses: cestef/actions/badge@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
+        uses: cestef/actions/badge@2fa915383fe2224a2faa0604db43419ef4bfa2e8
         with:
           label: binary
           value: ${{ steps.notes.outputs.size_full }}
@@ -329,7 +353,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: badge (binary size, slim)
-        uses: cestef/actions/badge@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
+        uses: cestef/actions/badge@2fa915383fe2224a2faa0604db43419ef4bfa2e8
         with:
           label: binary (slim)
           value: ${{ steps.notes.outputs.size_slim }}
@@ -338,7 +362,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: badge (crates.io)
-        uses: cestef/actions/badge@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
+        uses: cestef/actions/badge@2fa915383fe2224a2faa0604db43419ef4bfa2e8
         with:
           label: crates.io
           value: v${{ steps.notes.outputs.version }}
@@ -360,9 +384,9 @@ jobs:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: rust toolchain
-        uses: cestef/actions/rust@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
+        uses: cestef/actions/rust@2fa915383fe2224a2faa0604db43419ef4bfa2e8
       - name: mold linker
-        uses: cestef/actions/mold@2b1d7ad829a284117b64c14ab49f0ba5cb73d59b
+        uses: cestef/actions/mold@2fa915383fe2224a2faa0604db43419ef4bfa2e8
         with:
           rustflags: "false"
 
