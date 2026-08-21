@@ -3,7 +3,7 @@ members = ["macros"]
 
 [package]
 name = "baudelaire"
-version = "0.0.16"
+version = "0.0.17"
 edition = "2024"
 rust-version = "1.95"
 description = "A Typst-native static site generator: write pages in Typst, get incremental builds, live reload, feeds, search, taxonomies, and an asset pipeline."
