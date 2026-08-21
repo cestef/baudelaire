@@ -13,7 +13,7 @@ use super::format::{Entry, Field, Format};
 use super::run::Git;
 
 /// What the walk asks of each commit.
-const COMMIT: Format<4> = Format::new([Field::Hash, Field::Committed, Field::Email, Field::Name]);
+const COMMIT: Format<4> = Format::new([Field::Hash, Field::Committed, Field::Name, Field::Email]);
 
 /// The log as one walk of it, newest commit first, listing the files each one
 /// touched and spelling their paths relative to the site root.
@@ -144,7 +144,7 @@ impl Walk {
     /// and their number is checked where it is written.
     fn entry(&mut self, entry: &Entry<'_, 4>) {
         match entry {
-            Entry::Commit([hash, at, email, name]) => {
+            Entry::Commit([hash, at, name, email]) => {
                 self.open = Some(Commit {
                     hash: (*hash).to_owned(),
                     at: (*at).to_owned(),
@@ -231,7 +231,7 @@ mod tests {
     /// A commit as the walk is handed one, with the fields [`super::COMMIT`]
     /// asks for.
     fn commit<'a>(hash: &'a str, at: &'a str, name: &'a str) -> Entry<'a, 4> {
-        Entry::Commit([hash, at, "who@example.com", name])
+        Entry::Commit([hash, at, name, "who@example.com"])
     }
 
     fn touched(path: &str) -> Entry<'static, 4> {

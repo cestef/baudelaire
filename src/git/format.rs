@@ -30,10 +30,11 @@ pub(super) enum Field {
     Hash,
     /// The committer date, ISO-8601.
     Committed,
-    /// The author's email, through `.mailmap` where the repository has one.
-    Email,
-    /// The author's name, likewise.
+    /// The author's name, through `.mailmap` where the repository has one.
     Name,
+    /// The author's email, likewise. Free text, so it goes last: git forbids a
+    /// newline in an ident but not the field separator.
+    Email,
 }
 
 impl Field {
@@ -41,8 +42,8 @@ impl Field {
         match self {
             Self::Hash => "%H",
             Self::Committed => "%cI",
-            Self::Email => "%aE",
             Self::Name => "%an",
+            Self::Email => "%aE",
         }
     }
 }
