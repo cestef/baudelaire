@@ -505,6 +505,41 @@ mod tests {
         assert!(Gate::missing_for("deploy { carrier-pigeon }").is_none());
     }
 
+    /// A gate and an inert row both name a setting as prose the author would
+    /// recognise, and a diagnostic that names a spelling the parser never
+    /// accepted sends them looking for a key that is not there.
+    #[test]
+    fn every_setting_a_row_names_is_a_config_key() {
+        let named = GATES
+            .iter()
+            .map(|gate| gate.setting)
+            .chain(INERT.iter().flat_map(|inert| [inert.setting, inert.needs]));
+        for setting in named {
+            let Some(key) = dotted(setting) else {
+                continue;
+            };
+            assert!(
+                crate::config::key::Key::new(&key).resolved().is_some(),
+                "`{setting}` reads as `{key}`, which is not a config key"
+            );
+        }
+    }
+
+    /// One `a { b { c } }` setting as the dotted key it names, or `None` for a
+    /// row that describes a shape rather than naming a key.
+    fn dotted(setting: &str) -> Option<String> {
+        if setting.starts_with("a ") || setting.contains('`') {
+            return None;
+        }
+        let key: Vec<&str> = setting
+            .split('{')
+            .map(|part| part.trim_end_matches(['}', ' ']).trim())
+            .filter(|part| !part.is_empty())
+            .map(|part| part.split_whitespace().next().unwrap_or(part))
+            .collect();
+        (!key.is_empty()).then(|| key.join("."))
+    }
+
     #[test]
     fn every_gate_names_a_distinct_setting() {
         for (i, gate) in GATES.iter().enumerate() {
