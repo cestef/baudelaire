@@ -1,13 +1,23 @@
 //! Interactive terminal prompts: the typed single-choice [`Prompt`], the
 //! free-text [`Input`], and the hidden [`Secret`].
 
-use std::io::Write;
+use std::io::{IsTerminal as _, Write};
 
 use console::{Key, Term};
 use owo_colors::OwoColorize;
 
 use crate::error::Result;
 use crate::remote::Interaction;
+
+/// Whether this run can put a question to anyone.
+///
+/// Both halves have to be a terminal: a question is written to stderr and its
+/// answer read from stdin, so a redirect on either side is a prompt nobody sees
+/// or one nobody can answer. Every prompt here falls back to its default when
+/// this is false, and so must every caller deciding whether to ask at all.
+pub fn interactive() -> bool {
+    std::io::stdin().is_terminal() && Term::stderr().is_term()
+}
 
 /// One selectable option: the words that choose it (the first is shown as the
 /// label, all are accepted as input), the value it yields when picked, and an
@@ -70,7 +80,7 @@ impl<'a, T: Clone> Prompt<'a, T> {
     /// interactive terminal it returns the default at once.
     pub fn ask(&self) -> Result<T> {
         let term = Term::stderr();
-        if !term.is_term() {
+        if !interactive() {
             return Ok(self.chosen(self.default));
         }
         let last = self
@@ -188,7 +198,7 @@ impl<'a> Secret<'a> {
     /// terminal to read from or the answer is blank.
     pub fn ask(&self) -> Result<Option<String>> {
         let term = Term::stderr();
-        if !term.is_term() {
+        if !interactive() {
             return Ok(None);
         }
         anstream::eprint!("{} {} ", "?".cyan().bold(), self.question.bold());
@@ -224,6 +234,9 @@ impl<'a> Input<'a> {
     /// line, returning the trimmed answer or the default on an empty line or
     /// EOF.
     pub fn ask(&self) -> Result<String> {
+        if !interactive() {
+            return Ok(self.default.to_owned());
+        }
         if self.default.is_empty() {
             anstream::eprint!("{} {} ", "?".cyan().bold(), self.question.bold());
         } else {
@@ -254,10 +267,8 @@ impl<'a> Input<'a> {
 pub struct Tty;
 
 impl Interaction for Tty {
-    /// Whether a question would reach anyone: the same test [`Prompt::ask`] and
-    /// [`Secret::ask`] make before falling back to their defaults.
     fn interactive(&self) -> bool {
-        Term::stderr().is_term()
+        interactive()
     }
 
     fn confirm(&self, prompt: &str) -> Result<bool> {

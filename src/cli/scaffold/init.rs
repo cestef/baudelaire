@@ -1,7 +1,6 @@
 //! Scaffolding a whole project: what to write, where, and what the answers were.
 
 use std::fmt::Write as _;
-use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 
 use owo_colors::OwoColorize;
@@ -29,7 +28,7 @@ impl Init {
     pub(in crate::cli) fn run(ui: &Ui, root: &Root, args: &InitArgs, config: &Path) -> Result<()> {
         let extras = Extra::resolve(&args.with)?;
         let config = templates::File::config_at(config)?;
-        let interactive = !args.yes && std::io::stdin().is_terminal();
+        let interactive = !args.yes && crate::cli::prompt::interactive();
         let start = Start::gather(args, interactive)?;
         let template = Template::select(start.template.as_deref(), start.theme.is_some(), ui)?;
         let (target, details) = Details::gather(args, root, interactive)?;
