@@ -96,10 +96,17 @@ impl Bundled {
     }
 
     /// [`Bundled::dir`] for a theme this binary does not carry.
+    ///
+    /// A spec that could leave the project names nothing, since the verbs write
+    /// to and delete from the directory this returns.
     pub fn directory(name: &str, configured: Option<&str>) -> PathBuf {
         configured
             .filter(|spec| spec.rsplit('/').next() == Some(name))
-            .map_or_else(|| Path::new(Self::DIR).join(name), PathBuf::from)
+            .and_then(crate::fs::Contained::new)
+            .map_or_else(
+                || Path::new(Self::DIR).join(name),
+                |rel| rel.path().to_path_buf(),
+            )
     }
 
     /// Where `theme add` writes a copy, and the directory a `theme` line names
@@ -189,6 +196,8 @@ mod tests {
         );
         assert_eq!(theme.dir(Some("vendor/spleen")), default);
         assert_eq!(theme.dir(Some("@local/albatros:0.1.0")), default);
+        assert_eq!(theme.dir(Some("../../tmp/albatros")), default);
+        assert_eq!(theme.dir(Some("/tmp/albatros")), default);
     }
 
     #[test]
