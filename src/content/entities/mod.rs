@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 
 use crate::codegen::Value;
 use crate::config::{Config, RegistryConfig, Slots, Unknown};
-use crate::content::frontmatter::check::{Check, Fault, Step};
+use crate::content::frontmatter::check::{Check, Step};
 use crate::content::{Page, Slug};
 use crate::error::{EntityError, Result, entity::Unresolved};
 use crate::ui::Ui;
@@ -242,11 +242,7 @@ impl Registry {
                     .map(|(key, value)| (key.into(), value.into()))
                     .collect();
                 if let Some(fault) = Check::default().dict(&config.fields, &dict) {
-                    let steps = match &fault {
-                        Fault::Missing { .. } => fault.parent(),
-                        Fault::Mismatch { .. } => fault.path(),
-                    };
-                    let snippet = entity.from().snippet(project, steps);
+                    let snippet = entity.from().snippet(project, fault.steps());
                     return Err(EntityError::field(&self.id, entity, &fault, snippet).into());
                 }
             }
@@ -256,11 +252,7 @@ impl Registry {
                 .map(|(key, value)| (key.into(), value.into()))
                 .collect();
             if let Some(fault) = Check::default().dict(&config.fields, &dict) {
-                let steps = match &fault {
-                    Fault::Missing { .. } => fault.parent(),
-                    Fault::Mismatch { .. } => fault.path(),
-                };
-                let snippet = entity.from().snippet(project, steps);
+                let snippet = entity.from().snippet(project, fault.steps());
                 return Err(EntityError::field(&self.id, entity, &fault, snippet).into());
             }
         }

@@ -701,6 +701,36 @@ pub enum ConfigErrorKind {
     )]
     FieldNotDict { key: String, declared: String },
 
+    #[error("frontmatter {} is {}, which has nothing to bound", Code(.key), Text(.declared))]
+    #[diagnostic(
+        code(baudelaire::config::field_not_bounded),
+        help(
+            "`min` and `max` hold a number to its own value, a string to its length, and a list to its size"
+        )
+    )]
+    FieldNotBounded { key: String, declared: String },
+
+    #[error(
+        "frontmatter {} cannot be at least {} and at most {}",
+        Code(.key),
+        Text(&.min.to_string()),
+        Text(&.max.to_string())
+    )]
+    #[diagnostic(
+        code(baudelaire::config::field_bounds_cross),
+        help("no value satisfies both: raise `max` or lower `min`")
+    )]
+    FieldBoundsCross { key: String, min: i64, max: i64 },
+
+    #[error("the default for frontmatter {} is not {}", Code(.key), Text(.declared))]
+    #[diagnostic(
+        code(baudelaire::config::field_default),
+        help(
+            "a default stands in for what the page did not write, so it has to be something the page could have written"
+        )
+    )]
+    FieldDefault { key: String, declared: String },
+
     #[error("{} is not a type", Code(.ty))]
     #[diagnostic(code(baudelaire::config::type_expr))]
     TypeExpr {

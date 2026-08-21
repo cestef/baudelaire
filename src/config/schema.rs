@@ -12,6 +12,7 @@ use miette::SourceSpan;
 use dispatch_derive::Table;
 
 use crate::config::Value;
+use crate::config::dispatch::Kind;
 use crate::config::dispatch::Kind::Choice;
 use crate::config::dispatch::{Attributed, Attrs, Keys};
 use crate::config::node::NodeExt;
@@ -52,7 +53,7 @@ macro_rules! words {
 ///
 /// Declaring a field *requires* it; a field that may be absent says so with
 /// `optional=#true`.
-#[derive(Debug, Clone, Default, Hash, PartialEq, Eq, Table)]
+#[derive(Debug, Clone, Default, Hash, PartialEq, Table)]
 #[table(
     impl = Attributed,
     const ATTRS: Attrs<Self> = Attrs,
@@ -95,6 +96,28 @@ pub struct FieldSchema {
     /// Let the field be absent. Declaring a field otherwise requires it.
     #[key(flag)]
     pub optional: bool,
+
+    /// What the page gets when it writes none, which lets the field be absent.
+    ///
+    /// A scalar of the declared type, so a `list` and a `dict` have none: a
+    /// default nobody can write in one line is one nobody can read either.
+    #[key(custom(
+        Kind::Text,
+        FieldSchema::written,
+        |c: &mut Self, v: &kdl::KdlValue, t: &str, s: miette::SourceSpan| {
+            c.default = Some(v.scalar(t, s)?);
+            Ok(())
+        },
+    ))]
+    pub default: Option<crate::codegen::Value>,
+
+    /// The floor the value is held to: its own for a number, its length for a string, its size for a list.
+    #[key(opt int)]
+    pub min: Option<i64>,
+
+    /// The ceiling, read the same way as `min`.
+    #[key(opt int)]
+    pub max: Option<i64>,
 }
 
 /// Written back as the type expression a config line spells.
@@ -102,9 +125,86 @@ impl std::fmt::Display for FieldType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::List(inner) => write!(f, "{}<{inner}>", Self::LIST),
+            Self::OneOf(values) => {
+                write!(
+                    f,
+                    "{}<{}>",
+                    Self::ONE_OF,
+                    values.join(&Self::OR.to_string())
+                )
+            }
             Self::Dict(_) => f.write_str("dict"),
             leaf => f.write_str(leaf.leaf_name().unwrap_or("any")),
         }
+    }
+}
+
+/// What a field's `min` and `max` hold: the one place a bound's meaning and the
+/// words a diagnostic reports it in are stated.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Bound {
+    /// The number itself.
+    Value,
+    /// How many characters the string has.
+    Length,
+    /// How many elements the list has.
+    Items,
+}
+
+impl Bound {
+    /// What `n` counts, as a clause reads it: `3`, `3 characters`, `3 items`.
+    pub fn counted(self, n: i64) -> String {
+        match self {
+            Self::Value => n.to_string(),
+            Self::Length if n == 1 => format!("{n} character"),
+            Self::Length => format!("{n} characters"),
+            Self::Items if n == 1 => format!("{n} item"),
+            Self::Items => format!("{n} items"),
+        }
+    }
+
+    /// Whether `value` sits between the floor and the ceiling a field declared.
+    ///
+    /// A value this kind of bound does not apply to fits: the type check has
+    /// already refused it, and a second complaint about the same value would
+    /// only bury the first.
+    pub fn fits(
+        self,
+        value: &typst::foundations::Value,
+        min: Option<i64>,
+        max: Option<i64>,
+    ) -> bool {
+        let Some(measured) = self.measure(value) else {
+            return true;
+        };
+        min.is_none_or(|floor| measured >= Self::at(floor))
+            && max.is_none_or(|ceiling| measured <= Self::at(ceiling))
+    }
+
+    /// What `value` measures.
+    ///
+    /// A float measures as itself rather than as its whole part, so `max=1`
+    /// refuses `1.5` instead of truncating it into a number that passes.
+    fn measure(self, value: &typst::foundations::Value) -> Option<f64> {
+        use typst::foundations::Value;
+        match (self, value) {
+            (Self::Value, Value::Int(n)) => Some(Self::at(*n)),
+            (Self::Value, Value::Float(n)) => Some(*n),
+            (Self::Length, Value::Str(text)) => i64::try_from(text.as_str().chars().count())
+                .ok()
+                .map(Self::at),
+            (Self::Items, Value::Array(items)) => i64::try_from(items.len()).ok().map(Self::at),
+            _ => None,
+        }
+    }
+
+    /// A bound on the scale a measurement is compared on.
+    ///
+    /// Exact for every bound a schema can sensibly declare; a length or a count
+    /// beyond 2^53 is not one.
+    #[allow(clippy::cast_precision_loss)]
+    fn at(n: i64) -> f64 {
+        n as f64
     }
 }
 
@@ -113,7 +213,7 @@ impl std::fmt::Display for FieldType {
 /// These are the Typst types a page can write in a frontmatter dict: `date` is
 /// `datetime(..)`, `dict` a dictionary, and `list<T>` an array whose every
 /// element is a `T`.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, PartialEq, Hash, Default)]
 pub enum FieldType {
     /// Any value at all: the field must merely be there.
     #[default]
@@ -124,6 +224,8 @@ pub enum FieldType {
     Float,
     /// A `datetime(..)`, with or without a time of day.
     Date,
+    /// One of a fixed set of strings, in the order they were declared.
+    OneOf(Vec<String>),
     /// An array whose every element has this type. Bare `list` is `list<str>`.
     List(Box<Self>),
     /// A dictionary, and the fields it must carry. Empty (a bare `dict`)
@@ -132,8 +234,13 @@ pub enum FieldType {
 }
 
 impl FieldType {
-    /// The constructor spelling, and the only compound one.
+    /// The two constructor spellings: what a list holds, and what a choice
+    /// allows.
     const LIST: &'static str = "list";
+    const ONE_OF: &'static str = "one-of";
+
+    /// The byte between a choice's values.
+    const OR: char = '|';
 
     /// The leaf types, in the order the reference lists them: what the
     /// innermost name of a type expression may be.
@@ -155,7 +262,29 @@ impl FieldType {
         let mut names: Vec<&'static str> = Self::leaves().into_iter().map(|(n, _)| n).collect();
         names.push(Self::LIST);
         names.push("list<..>");
+        names.push("one-of<..>");
         names
+    }
+
+    /// The values a choice allows, or `None` for a type that is not one.
+    pub fn choices(&self) -> Option<&[String]> {
+        match self {
+            Self::OneOf(values) => Some(values),
+            _ => None,
+        }
+    }
+
+    /// What a `min` or a `max` on a field of this type holds, or `None` for a
+    /// type with nothing to count or compare.
+    pub fn bound(&self) -> Option<Bound> {
+        match self {
+            Self::Int | Self::Float => Some(Bound::Value),
+            Self::Str => Some(Bound::Length),
+            Self::List(_) => Some(Bound::Items),
+            // A choice already enumerates what it allows; bounding the length
+            // of one of its own values says nothing.
+            Self::Any | Self::Bool | Self::Date | Self::OneOf(_) | Self::Dict(_) => None,
+        }
     }
 
     /// The type a config string spells.
@@ -191,6 +320,9 @@ impl FieldType {
     /// One leaf name. A name carrying an angle bracket is a broken expression
     /// rather than an unknown type: `list<int>>` misspells no leaf.
     fn leaf(name: &str, src: &str) -> Result<Self, TypeError> {
+        if let Some(rest) = name.strip_prefix(Self::ONE_OF) {
+            return Self::choice(rest.trim_start(), src);
+        }
         if name.is_empty() || name.contains(['<', '>']) {
             return Err(TypeError::Malformed(src.trim().to_owned()));
         }
@@ -199,6 +331,27 @@ impl FieldType {
             .find(|(known, _)| *known == name)
             .map(|(_, ty)| ty)
             .ok_or_else(|| TypeError::Unknown(name.to_owned()))
+    }
+
+    /// The values a `one-of<a|b>` allows, in the order they were written.
+    ///
+    /// Strings, and only strings: a set of numbers is a range, which is what
+    /// `min` and `max` are for. An empty value, or the same one twice, is a
+    /// broken expression rather than a choice nobody can satisfy.
+    fn choice(rest: &str, src: &str) -> Result<Self, TypeError> {
+        let inside = rest
+            .strip_prefix('<')
+            .and_then(|open| open.strip_suffix('>'))
+            .ok_or_else(|| TypeError::Malformed(src.trim().to_owned()))?;
+        let values: Vec<String> = inside
+            .split(Self::OR)
+            .map(|value| value.trim().to_owned())
+            .collect();
+        let distinct = |value: &String| values.iter().filter(|other| *other == value).count() == 1;
+        if values.iter().any(String::is_empty) || !values.iter().all(distinct) {
+            return Err(TypeError::Malformed(src.trim().to_owned()));
+        }
+        Ok(Self::OneOf(values))
     }
 
     /// The fields the dictionary this type ends in declares, however many
@@ -236,7 +389,8 @@ impl FieldType {
     pub fn words(&self) -> Words {
         match self {
             Self::Any => words!("any value", "values"),
-            Self::Str => words!("a string", "strings"),
+            // A choice is a string that names itself; both read as one.
+            Self::Str | Self::OneOf(_) => words!("a string", "strings"),
             Self::Bool => words!("a boolean", "booleans"),
             Self::Int => words!("an integer", "integers"),
             Self::Float => words!("a float", "floats"),
@@ -250,8 +404,21 @@ impl FieldType {
     pub fn article(&self) -> String {
         match self {
             Self::List(inner) => format!("a list of {}", inner.plural()),
+            Self::OneOf(values) => format!("one of {}", Self::quoted(values)),
             _ => self.words().article.to_owned(),
         }
+    }
+
+    /// A choice's values as a message names them.
+    ///
+    /// Double quotes rather than backticks: a message is styled as markup
+    /// before it is shown, and these values are the site's own text.
+    fn quoted(values: &[String]) -> String {
+        values
+            .iter()
+            .map(|value| format!("\"{value}\""))
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 
     /// How [`article`](Self::article) names this type inside a list, so a nested
@@ -272,6 +439,7 @@ impl FieldType {
             Self::Int => "0".to_owned(),
             Self::Float => "0.0".to_owned(),
             Self::Date => "datetime(year: 2024, month: 1, day: 1)".to_owned(),
+            Self::OneOf(values) => format!("\"{}\"", values.first().map_or("", String::as_str)),
             Self::List(inner) => format!("({},)", inner.example()),
             Self::Dict(fields) => {
                 let required: Vec<String> = fields
@@ -327,6 +495,47 @@ impl TypeError {
 }
 
 impl FieldSchema {
+    /// Refuse a constraint the declared type cannot answer for.
+    ///
+    /// Caught here rather than at the page, where a bound nothing can measure
+    /// would simply never fire and a default of the wrong type would be handed
+    /// to every page that omitted the field.
+    fn constrained(&self, key: &str, node: &KdlNode, text: &str) -> Result<()> {
+        let span = NodeExt::span(node);
+        let refuse = |kind| Err(ConfigError::at(text, kind, span).into());
+        if (self.min.is_some() || self.max.is_some()) && self.ty.bound().is_none() {
+            return refuse(ConfigErrorKind::FieldNotBounded {
+                key: key.to_owned(),
+                declared: self.ty.article(),
+            });
+        }
+        if let (Some(floor), Some(ceiling)) = (self.min, self.max)
+            && floor > ceiling
+        {
+            return refuse(ConfigErrorKind::FieldBoundsCross {
+                key: key.to_owned(),
+                min: floor,
+                max: ceiling,
+            });
+        }
+        if let Some(default) = &self.default {
+            let value = typst::foundations::Value::from(default);
+            if crate::content::Check::fits(&self.ty, &value) {
+                return Ok(());
+            }
+            return refuse(ConfigErrorKind::FieldDefault {
+                key: key.to_owned(),
+                declared: self.ty.article(),
+            });
+        }
+        Ok(())
+    }
+
+    /// The default as the reference reports it, in the shape the config wrote.
+    fn written(&self) -> Value {
+        self.default.as_ref().map_or(Value::Unset, Value::from)
+    }
+
     /// One `title "str" optional=#true` line: the node name is the frontmatter
     /// key it constrains, and an optional leading positional its type.
     ///
@@ -354,6 +563,7 @@ impl FieldSchema {
             };
             *dict = fields;
         }
+        field.constrained(&key, node, text)?;
         if let Some(builtin) = Frontmatter::builtin(&key)
             && field.ty != FieldType::Any
             && field.ty != builtin
@@ -395,6 +605,108 @@ mod tests {
             FieldType::parse(" list< dict > "),
             Ok(list(FieldType::Dict(Vec::new())))
         );
+    }
+
+    #[test]
+    fn parses_a_choice_and_the_lists_that_hold_one() {
+        let draft = || FieldType::OneOf(vec!["draft".to_owned(), "published".to_owned()]);
+        assert_eq!(FieldType::parse("one-of<draft|published>"), Ok(draft()));
+        assert_eq!(
+            FieldType::parse(" one-of< draft | published > "),
+            Ok(draft())
+        );
+        assert_eq!(
+            FieldType::parse("list<one-of<draft|published>>"),
+            Ok(list(draft()))
+        );
+    }
+
+    /// A choice nobody could satisfy, and one that says the same thing twice,
+    /// are both mistakes rather than types.
+    #[test]
+    fn rejects_a_choice_that_names_nothing_or_repeats_itself() {
+        for src in [
+            "one-of<>",
+            "one-of<a|>",
+            "one-of<|a>",
+            "one-of<a|a>",
+            "one-of",
+            "one-of<a",
+        ] {
+            assert!(FieldType::parse(src).is_err(), "{src} should not be a type");
+        }
+    }
+
+    /// The written form round-trips, so the reference and a diagnostic spell a
+    /// type the way the config did.
+    #[test]
+    fn a_type_is_written_back_as_it_was_parsed() {
+        for src in [
+            "str",
+            "list<int>",
+            "list<list<int>>",
+            "one-of<a|b>",
+            "list<one-of<a|b>>",
+        ] {
+            let ty = FieldType::parse(src).expect("a valid type");
+            assert_eq!(ty.to_string(), src);
+        }
+    }
+
+    #[test]
+    fn a_choice_names_its_values_and_offers_the_first() {
+        let ty = FieldType::parse("one-of<draft|published>").expect("a valid type");
+        assert_eq!(ty.article(), r#"one of "draft", "published""#);
+        assert_eq!(ty.example(), r#""draft""#);
+    }
+
+    /// What a bound counts is the type's business, and a type with nothing to
+    /// count declines one.
+    #[test]
+    fn a_bound_counts_what_the_type_has() {
+        use crate::config::Bound;
+        let bound = |src: &str| FieldType::parse(src).expect("a valid type").bound();
+
+        assert_eq!(bound("int"), Some(Bound::Value));
+        assert_eq!(bound("float"), Some(Bound::Value));
+        assert_eq!(bound("str"), Some(Bound::Length));
+        assert_eq!(bound("list<int>"), Some(Bound::Items));
+        assert_eq!(bound("bool"), None);
+        assert_eq!(bound("date"), None);
+        assert_eq!(bound("dict"), None);
+        assert_eq!(bound("one-of<a|b>"), None);
+    }
+
+    #[test]
+    fn a_bound_reads_as_what_it_counts() {
+        use crate::config::Bound;
+        assert_eq!(Bound::Value.counted(3), "3");
+        assert_eq!(Bound::Length.counted(1), "1 character");
+        assert_eq!(Bound::Length.counted(3), "3 characters");
+        assert_eq!(Bound::Items.counted(1), "1 item");
+        assert_eq!(Bound::Items.counted(3), "3 items");
+    }
+
+    /// A float is measured as itself: truncating `1.5` to `1` would let it
+    /// through a `max=1` it does not satisfy.
+    #[test]
+    fn a_float_is_bounded_by_its_whole_value() {
+        use crate::config::Bound;
+        use typst::foundations::Value;
+
+        assert!(Bound::Value.fits(&Value::Float(1.0), None, Some(1)));
+        assert!(!Bound::Value.fits(&Value::Float(1.5), None, Some(1)));
+        assert!(!Bound::Value.fits(&Value::Float(0.5), Some(1), None));
+    }
+
+    /// A value the bound does not apply to fits: the type check has already
+    /// refused it, and a second complaint would bury the first.
+    #[test]
+    fn a_bound_says_nothing_about_a_value_it_cannot_measure() {
+        use crate::config::Bound;
+        use typst::foundations::Value;
+
+        assert!(Bound::Items.fits(&Value::Int(0), Some(5), None));
     }
 
     #[test]
@@ -462,6 +774,7 @@ mod tests {
                 super::FieldSchema {
                     ty: FieldType::Str,
                     optional: true,
+                    ..super::FieldSchema::default()
                 },
             ),
         ];

@@ -86,6 +86,26 @@ pub enum EntityError {
     },
 
     #[error(
+        "{} of {} in the {} registry must be {}",
+        Code(.key),
+        Code(.id),
+        Code(.registry),
+        Text(.want)
+    )]
+    #[diagnostic(code(baudelaire::entity::refused_field), help("{help}"))]
+    RefusedField {
+        registry: String,
+        id: String,
+        key: String,
+        help: String,
+        #[source_code]
+        src: Option<NamedSource<String>>,
+        #[label("must be {want}")]
+        span: Option<SourceSpan>,
+        want: String,
+    },
+
+    #[error(
         "the {} taxonomy resolves its terms in the {} registry, which nothing declares",
         Code(.taxonomy),
         Code(.registry)
@@ -138,6 +158,15 @@ impl EntityError {
                     &at
                 ),
                 want: want.article(),
+                registry,
+                id,
+                key,
+                src,
+                span,
+            },
+            Fault::Refused { want, .. } => Self::RefusedField {
+                help: markup!("declared by `{}`, in {}", source, &at),
+                want: want.clone(),
                 registry,
                 id,
                 key,

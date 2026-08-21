@@ -120,7 +120,7 @@ pub use permalink::{Permalink, PermalinkCtx, PermalinkError};
 pub use prune::PruneConfig;
 pub use redirects::RedirectsConfig;
 pub use redirects::rule::RedirectConfig;
-pub use schema::{FieldSchema, FieldType, TypeError, Words};
+pub use schema::{Bound, FieldSchema, FieldType, TypeError, Words};
 pub use security::SecurityConfig;
 pub use security::csp::CspConfig;
 pub use serve::ServeConfig;

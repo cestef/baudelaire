@@ -5,7 +5,7 @@ use miette::{Diagnostic, LabeledSpan, NamedSource, SourceCode, SourceSpan};
 use thiserror::Error;
 
 use crate::config::FieldType;
-use crate::ui::{Code, markup};
+use crate::ui::{Code, Text, markup};
 
 /// A page whose frontmatter breaks its collection's schema.
 #[derive(Error, Debug)]
@@ -87,6 +87,37 @@ impl SchemaError {
         )
     }
 
+    /// A declared field whose value has the right type and is refused anyway:
+    /// not one of the values a choice allows, or outside the bounds beside it.
+    pub fn refused(
+        page: &std::path::Path,
+        source: &str,
+        span: Option<SourceSpan>,
+        collection: &str,
+        key: &str,
+        want: &str,
+    ) -> Self {
+        // The whole key, not its leaf: what is refused is a value already
+        // written, and a leaf may be a list index, which reads as a name only
+        // in the message that spelled the path down to it.
+        let help = markup!(
+            "give `{}` a value that is {}, or change the `{}` collection's schema",
+            key,
+            want,
+            collection
+        );
+        Self::new(
+            page,
+            source,
+            span,
+            SchemaErrorKind::Refused {
+                help,
+                key: key.to_owned(),
+                want: want.to_owned(),
+            },
+        )
+    }
+
     /// A dotted key as the leaf and whatever contains it, since only the leaf
     /// is ever written as a key.
     fn split(key: &str) -> (&str, Option<&str>) {
@@ -159,6 +190,15 @@ enum SchemaErrorKind {
         #[help]
         help: String,
     },
+
+    #[error("frontmatter {} must be {}", Code(.key), Text(.want))]
+    #[diagnostic(code(baudelaire::schema::refused))]
+    Refused {
+        key: String,
+        want: String,
+        #[help]
+        help: String,
+    },
 }
 
 impl SchemaErrorKind {
@@ -168,6 +208,7 @@ impl SchemaErrorKind {
         match self {
             Self::Missing { .. } => "this frontmatter is missing it",
             Self::Mismatch { .. } => "not the declared type",
+            Self::Refused { .. } => "not what the schema allows",
         }
     }
 }

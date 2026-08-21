@@ -385,25 +385,64 @@ impl Frontmatter {
             .collect();
         let mut fm = Self::default();
         for (key, val) in dict {
-            let key = key.as_str();
-            let at = At::new(origin, key);
-            match FIELDS.iter().find(|(name, ..)| *name == key) {
-                Some((.., parse)) => parse(&mut fm, val, at)?,
-                None if taxonomies.contains(&key) => {
-                    fm.taxonomies.insert(key.to_owned(), val.strings(at)?);
-                }
-                None if declared.contains(&key) => {
-                    fm.extra.insert(key.to_owned(), codegen::Value::from(val));
-                }
-                None => match Self::suggest(key, &taxonomies) {
-                    Some(near) => return Err(at.unknown(&near)),
-                    None => {
-                        fm.extra.insert(key.to_owned(), codegen::Value::from(val));
-                    }
-                },
-            }
+            fm.entry(key.as_str(), val, origin, &taxonomies, &declared)?;
         }
+        fm.defaults(dict, origin, config, &taxonomies, &declared)?;
         Ok(fm)
+    }
+
+    /// One frontmatter entry into its slot: a built-in key through its own
+    /// parser, a configured taxonomy into its terms, anything else into
+    /// `extra`, and a near-miss of a known key into an error.
+    fn entry(
+        &mut self,
+        key: &str,
+        val: &Value,
+        origin: &Origin,
+        taxonomies: &[&str],
+        declared: &[&str],
+    ) -> Result<()> {
+        let at = At::new(origin, key);
+        match FIELDS.iter().find(|(name, ..)| *name == key) {
+            Some((.., parse)) => parse(self, val, at)?,
+            None if taxonomies.contains(&key) => {
+                self.taxonomies.insert(key.to_owned(), val.strings(at)?);
+            }
+            None if declared.contains(&key) => {
+                self.extra.insert(key.to_owned(), codegen::Value::from(val));
+            }
+            None => match Self::suggest(key, taxonomies) {
+                Some(near) => return Err(at.unknown(&near)),
+                None => {
+                    self.extra.insert(key.to_owned(), codegen::Value::from(val));
+                }
+            },
+        }
+        Ok(())
+    }
+
+    /// Fill in every declared field the page left out and the schema gives a
+    /// default, through the same route a written value takes: a default is what
+    /// the page would have written, so it lands where that would have.
+    fn defaults(
+        &mut self,
+        dict: &Dict,
+        origin: &Origin,
+        config: &Config,
+        taxonomies: &[&str],
+        declared: &[&str],
+    ) -> Result<()> {
+        for (key, field) in config.schema(origin.collection) {
+            let Some(default) = &field.default else {
+                continue;
+            };
+            if dict.get(key.as_str()).is_ok() {
+                continue;
+            }
+            let value = Value::from(default);
+            self.entry(key, &value, origin, taxonomies, declared)?;
+        }
+        Ok(())
     }
 
     /// Hold the declared dict to the schema of the collection the page belongs
@@ -413,24 +452,23 @@ impl Frontmatter {
             return Ok(());
         };
         let (source, key) = (origin.text(), fault.key());
+        let span = origin.span(fault.steps());
         let error = match &fault {
-            Fault::Missing { want, .. } => SchemaError::missing(
-                origin.path,
-                source,
-                origin.span(fault.parent()),
-                origin.collection,
-                &key,
-                want,
-            ),
+            Fault::Missing { want, .. } => {
+                SchemaError::missing(origin.path, source, span, origin.collection, &key, want)
+            }
             Fault::Mismatch { want, got, .. } => SchemaError::mismatch(
                 origin.path,
                 source,
-                origin.span(fault.path()),
+                span,
                 origin.collection,
                 &key,
                 want,
                 got,
             ),
+            Fault::Refused { want, .. } => {
+                SchemaError::refused(origin.path, source, span, origin.collection, &key, want)
+            }
         };
         Err(error.into())
     }

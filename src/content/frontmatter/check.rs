@@ -1,7 +1,7 @@
 //! Checking a frontmatter value against a declared schema.
 
 use super::origin::At;
-use crate::config::{FieldSchema, FieldType};
+use crate::config::{Bound, FieldSchema, FieldType};
 use crate::error::Result;
 use typst::foundations::{Datetime, Dict, Value};
 /// Typed accessors over an evaluated frontmatter [`Value`]; the [`At`] each
@@ -55,17 +55,34 @@ pub(crate) enum Fault {
         /// What was there, with its article: see [`Fields::kind`].
         got: String,
     },
+    /// A value of the right type that the field refuses anyway: not one of the
+    /// values a choice allows, or outside the bounds it declares.
+    Refused {
+        path: Vec<Step>,
+        /// What the field asks for, as a clause reading after "must be".
+        want: String,
+    },
 }
 
 impl Fault {
     pub(crate) fn path(&self) -> &[Step] {
-        let (Self::Missing { path, .. } | Self::Mismatch { path, .. }) = self;
+        let (Self::Missing { path, .. } | Self::Mismatch { path, .. } | Self::Refused { path, .. }) =
+            self;
         path
     }
 
     /// The steps to whatever holds it: where a missing field would go.
-    pub(crate) fn parent(&self) -> &[Step] {
+    fn parent(&self) -> &[Step] {
         self.path().split_last().map_or(&[], |(_, rest)| rest)
+    }
+
+    /// What a diagnostic underlines: the value itself, or what should have held
+    /// it, since a field that is missing has no place of its own.
+    pub(crate) fn steps(&self) -> &[Step] {
+        match self {
+            Self::Missing { .. } => self.parent(),
+            Self::Mismatch { .. } | Self::Refused { .. } => self.path(),
+        }
     }
 
     /// How a diagnostic names the field: dotted, as `authors.1.email`.
@@ -87,18 +104,25 @@ pub(crate) struct Check {
 }
 
 impl Check {
+    /// Whether one value satisfies one type, for a caller with no page to name
+    /// and no path to report: the config layer, holding a declared default to
+    /// the type declared beside it.
+    pub(crate) fn fits(ty: &FieldType, value: &Value) -> bool {
+        Self::default().value(ty, value).is_none()
+    }
+
     /// Every field a schema declares, against the dictionary that should carry
     /// them. Keys the schema does not name pass through unchecked.
     pub(crate) fn dict(&mut self, schema: &[(String, FieldSchema)], dict: &Dict) -> Option<Fault> {
         for (key, field) in schema {
             self.path.push(Step::Key(key.clone()));
             let fault = match dict.get(key.as_str()) {
-                Err(_) if field.optional => None,
+                Err(_) if field.optional || field.default.is_some() => None,
                 Err(_) => Some(Fault::Missing {
                     path: self.path.clone(),
                     want: field.ty.clone(),
                 }),
-                Ok(value) => self.value(&field.ty, value),
+                Ok(value) => self.field(field, value),
             };
             self.path.pop();
             if fault.is_some() {
@@ -106,6 +130,36 @@ impl Check {
             }
         }
         None
+    }
+
+    /// One value against everything the field asks of it: its type first, then
+    /// the bounds declared beside it, so a bound never complains about a value
+    /// whose type was already wrong.
+    fn field(&mut self, field: &FieldSchema, value: &Value) -> Option<Fault> {
+        self.value(&field.ty, value).or_else(|| {
+            let bound = field.ty.bound()?;
+            if bound.fits(value, field.min, field.max) {
+                return None;
+            }
+            Some(Fault::Refused {
+                path: self.path.clone(),
+                want: Self::within(bound, field.min, field.max),
+            })
+        })
+    }
+
+    /// The bounds a field declares, as a clause reading after "must be".
+    fn within(bound: Bound, min: Option<i64>, max: Option<i64>) -> String {
+        match (min, max) {
+            (Some(floor), Some(ceiling)) => format!(
+                "at least {} and at most {}",
+                bound.counted(floor),
+                bound.counted(ceiling)
+            ),
+            (Some(floor), None) => format!("at least {}", bound.counted(floor)),
+            (None, Some(ceiling)) => format!("at most {}", bound.counted(ceiling)),
+            (None, None) => String::new(),
+        }
     }
 
     /// One value against one type. Compound types recurse, so the fault names
@@ -125,6 +179,17 @@ impl Check {
                 true
             }
             (FieldType::Dict(fields), Value::Dict(nested)) => return self.dict(fields, nested),
+            // A string that is not one of the values a choice allows is the
+            // right type and the wrong value, and says so rather than claiming
+            // the page wrote the wrong kind of thing.
+            (FieldType::OneOf(values), Value::Str(written))
+                if !values.iter().any(|value| value == written.as_str()) =>
+            {
+                return Some(Fault::Refused {
+                    path: self.path.clone(),
+                    want: ty.article(),
+                });
+            }
             _ => Self::scalar(ty, value),
         };
         (!fits).then(|| Fault::Mismatch {
@@ -142,7 +207,9 @@ impl Check {
     pub(super) fn scalar(ty: &FieldType, value: &Value) -> bool {
         match ty {
             FieldType::Any => true,
-            FieldType::Str => matches!(value, Value::Str(_)),
+            // Which string a choice allows is the field's business, not the
+            // type check's: this only asks whether it is one at all.
+            FieldType::Str | FieldType::OneOf(_) => matches!(value, Value::Str(_)),
             FieldType::Bool => matches!(value, Value::Bool(_)),
             FieldType::Int => matches!(value, Value::Int(_)),
             FieldType::Float => matches!(value, Value::Float(_)),
@@ -166,6 +233,7 @@ mod tests {
         FieldSchema {
             ty,
             optional: false,
+            ..FieldSchema::default()
         }
     }
     fn list(items: Vec<Value>) -> Value {
@@ -214,6 +282,7 @@ mod tests {
                 FieldSchema {
                     ty: FieldType::Int,
                     optional: true,
+                    ..FieldSchema::default()
                 },
             ),
         ];

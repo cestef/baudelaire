@@ -519,3 +519,202 @@ scenario "a date field refuses a string that is not one" {
     fails { code "baudelaire::schema::mismatch" }
   }
 }
+
+// A choice is part of the type language, so it composes: `list<one-of<..>>`
+// holds a list of them. A value of the right type that the choice does not
+// allow is refused as a value, not reported as the wrong kind of thing.
+scenario "a choice allows what it names and nothing else" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog {
+            schema {
+              status "one-of<draft|review|published>"
+            }
+          }
+        }
+      }
+      """#
+    "content/blog/post.typ" #"""
+      #let frontmatter = (title: "P", status: "review",)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "blog/post/index.html" { contains "body" }
+  }
+}
+
+scenario "a value a choice does not name fails the build" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog { schema { status "one-of<draft|published>" } }
+        }
+      }
+      """#
+    "content/blog/post.typ" #"""
+      #let frontmatter = (title: "P", status: "reviewed",)
+      body
+      """#
+  }
+  expect {
+    fails { code "baudelaire::schema::refused" }
+  }
+}
+
+scenario "a bound holds a number to its value and a list to its size" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog {
+            schema {
+              weight "int" min=1 max=10
+              tags "list" max=2
+              title "str" min=2
+            }
+          }
+        }
+        taxonomies { tags }
+      }
+      """#
+    "content/blog/ok.typ" #"""
+      #let frontmatter = (title: "Post", weight: 3, tags: ("a", "b"),)
+      body
+      """#
+  }
+  build { expect { ok; file "blog/ok/index.html" { contains "body" } } }
+  build {
+    files {
+      "content/blog/ok.typ" #"""
+        #let frontmatter = (title: "Post", weight: 30, tags: ("a",),)
+        body
+        """#
+    }
+    expect { fails { code "baudelaire::schema::refused" } }
+  }
+  build {
+    files {
+      "content/blog/ok.typ" #"""
+        #let frontmatter = (title: "Post", weight: 3, tags: ("a", "b", "c"),)
+        body
+        """#
+    }
+    expect { fails { code "baudelaire::schema::refused" } }
+  }
+}
+
+// A bound on a type with nothing to count is refused where it is written, not
+// left to never fire at the page.
+scenario "a bound on a type that cannot carry one is a config error" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog { schema { draft "bool" min=1 } }
+        }
+      }
+      """#
+    "content/blog/post.typ" #"""
+      #let frontmatter = (title: "P",)
+      body
+      """#
+  }
+  expect {
+    fails { code "baudelaire::config::field_not_bounded" }
+  }
+}
+
+scenario "a floor above its own ceiling is a config error" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog { schema { weight "int" min=10 max=1 } }
+        }
+      }
+      """#
+    "content/blog/post.typ" #"""
+      #let frontmatter = (title: "P",)
+      body
+      """#
+  }
+  expect {
+    fails { code "baudelaire::config::field_bounds_cross" }
+  }
+}
+
+// A default stands in for what the page did not write, and reaches the template
+// as if it had. It also lets the field be absent, which is what a default is.
+scenario "a default fills in a field the page left out" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public"; templates "templates" }
+      content {
+        collections {
+          blog {
+            schema {
+              layout "one-of<wide|narrow>" default="narrow"
+              weight "int" default=5
+            }
+          }
+        }
+      }
+      """#
+    "templates/page.typ" #"""
+      #let page(page, body) = {
+        let fm = page.frontmatter
+        html.elem("main", fm.layout + "/" + str(fm.weight))
+      }
+      """#
+    "content/blog/plain.typ" #"""
+      #let frontmatter = (title: "P", template: "page.typ",)
+      body
+      """#
+    "content/blog/wide.typ" #"""
+      #let frontmatter = (title: "W", template: "page.typ", layout: "wide", weight: 1,)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "blog/plain/index.html" { contains "narrow/5" }
+    file "blog/wide/index.html" { contains "wide/1" }
+  }
+}
+
+scenario "a default that the declared type would refuse is a config error" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public" }
+      content {
+        collections {
+          blog { schema { layout "one-of<wide|narrow>" default="huge" } }
+        }
+      }
+      """#
+    "content/blog/post.typ" #"""
+      #let frontmatter = (title: "P",)
+      body
+      """#
+  }
+  expect {
+    fails { code "baudelaire::config::field_default" }
+  }
+}

@@ -269,7 +269,22 @@ impl<'a> Prepare<'a> {
             assets: self.colocated(page),
             source: self.source(page),
             git: self.history(page),
+            defaults: self.defaults(page),
         }
+    }
+
+    /// What this page's collection schema fills in for a field the page left
+    /// out, as a dict the wrapper lays under whatever the page wrote.
+    ///
+    /// Empty where the schema declares none, which leaves the wrapper of every
+    /// page on such a site exactly what it was.
+    fn defaults(&self, page: &Page) -> Value {
+        Value::dict(
+            self.config
+                .schema(&page.collection)
+                .iter()
+                .filter_map(|(key, field)| Some((key.clone(), field.default.clone()?))),
+        )
     }
 
     /// What git knows about this page: the commit that last changed it, and

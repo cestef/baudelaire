@@ -20,15 +20,28 @@ pub(in crate::engine) enum Bind {
 impl Bind {
     /// The expression the `frontmatter` key holds, written after the import
     /// line [`Bind::Import`] needs.
-    fn expr(&self, f: &mut fmt::Formatter<'_>, page: &str) -> Result<Value, fmt::Error> {
-        match self {
+    ///
+    /// `defaults` is what the collection's schema fills in for a field the page
+    /// left out, laid *under* what the page wrote, so what the page wrote wins.
+    /// A schema declaring none leaves the expression exactly what it was.
+    fn expr(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+        page: &str,
+        defaults: &Value,
+    ) -> Result<Value, fmt::Error> {
+        let written = match self {
             Self::Import => {
                 let import = Import::new(page, Frontmatter::EXPORT, Frontmatter::ALIAS);
                 writeln!(f, "{import}")?;
-                Ok(Value::Raw(Frontmatter::ALIAS.to_owned()))
+                Value::Raw(Frontmatter::ALIAS.to_owned())
             }
-            Self::Literal(dict) => Ok(Value::Raw(dict.clone())),
-        }
+            Self::Literal(dict) => Value::Raw(dict.clone()),
+        };
+        Ok(match defaults {
+            Value::Dict(fields) if fields.is_empty() => written,
+            _ => written.over(defaults),
+        })
     }
 }
 
@@ -87,6 +100,9 @@ pub(in crate::engine) struct Context {
     /// What git knows about the page's own file, or `none` where nothing does:
     /// `content { history }` off, a generated listing, an uncommitted page.
     pub git: Value,
+    /// What this page's collection schema fills in for a field the page left
+    /// out. Folded into `frontmatter` rather than handed over on its own.
+    pub defaults: Value,
 }
 
 impl Context {
@@ -110,6 +126,7 @@ impl Context {
             assets,
             source,
             git,
+            defaults: _,
         } = self;
         Value::dict([
             ("frontmatter", frontmatter),
@@ -186,7 +203,10 @@ impl fmt::Display for Layout<'_> {
             "{}",
             Import::new(&self.import(), self.func(), "__layout")
         )?;
-        let frontmatter = self.context.data.expr(f, self.page)?;
+        let frontmatter = self
+            .context
+            .data
+            .expr(f, self.page, &self.context.defaults)?;
         let page = self.context.dict(frontmatter);
         writeln!(f, "#show: __body => __layout({}, __body)", Typst(&page))?;
         match &self.body {
@@ -224,6 +244,7 @@ mod tests {
             assets: raw("(:)"),
             source: Value::str("/content/posts/a.typ"),
             git: Value::None,
+            defaults: Value::dict::<&str>([]),
         }
     }
 

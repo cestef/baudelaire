@@ -223,6 +223,7 @@ system:
   [`date`], [A `datetime(..)`, with or without a time of day.],
   [`list<T>`], [An array whose every element is a `T`. Bare `list` is `list<str>`.],
   [`dict`], [A dictionary, whose own fields a block declares.],
+  [`one-of<a|b>`], [One of the strings it names, and nothing else.],
   [`any`], [Anything: the field must merely be there.],
 )
 
@@ -252,6 +253,55 @@ broke, down to the element:
 ```text
   × frontmatter `reviewers.1.name` must be a string, but is of type `integer`
 ```
+
+== Values, not just shapes
+
+A type says what a field *is*. Three keys beside it say what it may hold.
+
+```kdl
+//! content { collections { posts {
+schema {
+  status "one-of<draft|review|published>" default="draft"
+  weight "int" min=1 max=10
+  title "str" min=2 max=80
+  tags "list" max=5
+}
+//! } } }
+```
+
+#table(
+  columns: 3,
+  align: (left, left, left),
+  table.header([Key], [Holds], [On]),
+  [`min`], [A floor: a number's own value, a string's length, a list's size.], [`int`, `float`, `str`, `list<T>`],
+  [`max`], [A ceiling, read the same way.], [the same],
+  [`default`], [What the page gets when it writes none, which also lets the field be absent.], [any scalar type],
+)
+
+`one-of` is part of the type language rather than a key, so it composes like
+every other type: `list<one-of<draft|published>>` is a list of them, and a
+`dict` field can hold one.
+
+A value of the right type that a field refuses anyway says so as a value:
+
+```text
+  × frontmatter `status` must be one of "draft", "review", "published"
+   ╭─[content/blog/post.typ:3:11]
+ 3 │   status: "reviewed",
+   ·           ─────┬────
+   ·                ╰── not what the schema allows
+   ╰────
+```
+
+A default is what the page would have written, and lands where that would
+have: `page.frontmatter.status` reads `"draft"` on a page that declared none,
+and every listing, feed and card sees it too. What the page wrote always wins.
+
+#callout(kind: "note")[
+  A constraint the type cannot answer for is refused where it is written, not
+  left to never fire: `min` on a `bool`, a floor above its own ceiling, or a
+  `default` the declared type would reject are all config errors.
+]
 
 A recognized key can appear in a schema, to require it. Its type is already
 fixed by the build, so declaring a different one (`title "int"`) is a config

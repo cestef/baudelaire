@@ -14,6 +14,14 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **A frontmatter schema constrains values, not only shapes.** `one-of<draft|published>`
+  is a type like any other, so `list<one-of<..>>` is a list of them. `min` and
+  `max` hold a number to its own value, a string to its length and a list to its
+  size. `default=` gives the page what it did not write, which also lets the
+  field be absent; it reaches `page.frontmatter` and every listing, and what the
+  page wrote always wins. A constraint the declared type cannot answer for is a
+  config error where it is written rather than a rule that never fires.
+
 - **A page knows its own history.** `content { history }` hands each page
   `page.git`: the commit that last touched its file, when, and who made it.
   `contributors #true` gathers every author of the file, most commits first.

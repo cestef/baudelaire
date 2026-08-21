@@ -82,6 +82,15 @@ impl Value {
         Self::Dict(pairs.into_iter().map(|(k, v)| (k.into(), v)).collect())
     }
 
+    /// This dictionary laid over `base`, as Typst spells a merge: a key both
+    /// carry is this one's.
+    ///
+    /// [`Raw`](Self::Raw), because a merge is an expression rather than a
+    /// value: what either side holds is only known once the page compiles.
+    pub fn over(self, base: &Self) -> Self {
+        Self::Raw(format!("{} + {}", Typst(base), Typst(&self)))
+    }
+
     /// The string content, and `None` for any other variant.
     pub fn as_str(&self) -> Option<&str> {
         match self {

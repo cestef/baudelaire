@@ -56,6 +56,7 @@ impl Shape {
                     FieldSchema {
                         ty: ty(),
                         optional: true,
+                        ..FieldSchema::default()
                     },
                 )
             })
