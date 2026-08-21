@@ -490,10 +490,11 @@ impl Config {
     const SECURITY: &'static str = "security";
     const CHECK: &'static str = "check";
     const CLIENT: &'static str = "client";
+    const CACHE: &'static str = "cache";
 
     /// The sections a site owns outright, and so the ones a theme's `theme.kdl`
     /// may not carry; `Config::floor` says why.
-    pub const OWNED: [&'static str; 10] = [
+    pub const OWNED: [&'static str; 11] = [
         Self::PATHS,
         Self::HOOKS,
         Self::ANNOUNCE,
@@ -504,6 +505,7 @@ impl Config {
         Self::SECURITY,
         Self::CHECK,
         Self::CLIENT,
+        Self::CACHE,
     ];
 
     /// Whether this build needs the site's link graph at all; the one gate the
@@ -1096,7 +1098,7 @@ pub enum Scratch {
 impl Scratch {
     pub const fn dir(self) -> &'static str {
         match self {
-            Self::Cache => "cache",
+            Self::Cache => Config::CACHE,
             Self::Announce => "announce",
             Self::Generated => "generated",
             Self::Links => "links",
