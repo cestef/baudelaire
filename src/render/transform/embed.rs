@@ -10,13 +10,26 @@ use crate::config::Config;
 use crate::digest::Base64;
 use crate::mime::Mime;
 
-use super::{Cx, DocumentExt, ElementExt, Transform};
+use super::{Cx, DocumentExt, ElementExt, Exempt, Externalize, Sources, Transform};
 use crate::render::{AssetDeps, AssetMap};
 
 /// The [`Transform`] that rewrites local asset references to `data:` URIs.
 pub(super) struct Embed;
 
+impl Embed {
+    /// How [`Transform::after`] names this pass.
+    pub(super) const NAME: &'static str = "embed";
+}
+
 impl Transform for Embed {
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+
+    fn after(&self) -> &'static [&'static str] {
+        &[Exempt::NAME, Externalize::NAME, Sources::NAME]
+    }
+
     fn enabled(&self, config: &Config) -> bool {
         config.html.embed
     }

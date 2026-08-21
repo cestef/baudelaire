@@ -9,12 +9,20 @@ use typst_html::{HtmlDocument, HtmlElement, tag};
 use crate::config::Config;
 use crate::render::snippet::Snippet;
 
-use super::{Cx, DocumentExt, Transform};
+use super::{Cx, DocumentExt, Exempt, Highlight, Transform};
 
 /// The [`Transform`] that collects fences and hides their marked lines.
 pub(super) struct Fences;
 
 impl Transform for Fences {
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+
+    fn after(&self) -> &'static [&'static str] {
+        &[Exempt::NAME, Highlight::NAME]
+    }
+
     /// Runs for the languages `check { snippets { } }` names, which is where a
     /// hidden marker is declared and what the lint has to be handed.
     fn enabled(&self, config: &Config) -> bool {
@@ -35,6 +43,9 @@ impl Transform for Fences {
 }
 
 impl Fences {
+    /// How [`Transform::after`] names this pass.
+    pub(super) const NAME: &'static str = "fences";
+
     /// The fence `element` is, hidden lines already taken out of it.
     fn gather(element: &mut HtmlElement, config: &Config) -> Option<Snippet> {
         let lang = element.attrs.get(crate::world::rules::LANG)?;

@@ -7,12 +7,20 @@ use typst_html::{HtmlDocument, HtmlElement, attr, tag};
 use crate::config::Config;
 use crate::render::Emitted;
 
-use super::{Cx, DocumentExt, ElementExt, Transform};
+use super::{Cx, DocumentExt, ElementExt, Embed, Fingerprint, Transform};
 
 /// The [`Transform`] that stamps `integrity` and collects inline digests.
 pub(super) struct Integrity;
 
 impl Transform for Integrity {
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+
+    fn after(&self) -> &'static [&'static str] {
+        &[Fingerprint::NAME, Embed::NAME]
+    }
+
     /// Either half is reason enough to walk: a site may stamp integrity without
     /// generating a policy, or generate one without stamping anything.
     fn enabled(&self, config: &Config) -> bool {
@@ -46,6 +54,9 @@ impl Transform for Integrity {
 }
 
 impl Integrity {
+    /// How [`Transform::after`] names this pass.
+    pub(super) const NAME: &'static str = "integrity";
+
     /// Stamp the digest of the file `key` points at, if this build wrote it and
     /// the author has not already pinned an `integrity`.
     fn stamp(element: &mut HtmlElement, key: typst_html::HtmlAttr, emitted: &Emitted) {

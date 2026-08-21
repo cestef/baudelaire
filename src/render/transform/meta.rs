@@ -8,13 +8,26 @@ use crate::config::{BaseUrl, Config, ManifestConfig};
 use crate::content::entities::{Attribution, Byline, Credit, Vocabulary};
 use crate::content::{Iso, Page};
 
-use super::{Cx, DocumentExt, PROPERTY, Transform};
+use super::{Cx, DocumentExt, Exempt, PROPERTY, Transform};
 use crate::render::{AssetDeps, AssetMap};
 
 /// The [`Transform`] that appends meta tags to `<head>`.
 pub(super) struct Meta;
 
+impl Meta {
+    /// How [`Transform::after`] names this pass.
+    pub(super) const NAME: &'static str = "meta";
+}
+
 impl Transform for Meta {
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+
+    fn after(&self) -> &'static [&'static str] {
+        &[Exempt::NAME]
+    }
+
     fn enabled(&self, config: &Config) -> bool {
         config.html.meta.enabled
     }

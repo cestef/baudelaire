@@ -7,13 +7,26 @@ use crate::announce::standard::DOCUMENT;
 use crate::atproto::AtUri;
 use crate::config::Config;
 
-use super::{Cx, DocumentExt, Transform};
+use super::{Cx, DocumentExt, Exempt, Transform};
 
 /// The transform that adds each dated page's `site.standard.document` backlink;
 /// only dated pages are documents.
 pub(super) struct Verify;
 
+impl Verify {
+    /// How [`Transform::after`] names this pass.
+    pub(super) const NAME: &'static str = "verify";
+}
+
 impl Transform for Verify {
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+
+    fn after(&self) -> &'static [&'static str] {
+        &[Exempt::NAME]
+    }
+
     fn enabled(&self, config: &Config) -> bool {
         config.verify_did(|v| v.links).is_some()
     }

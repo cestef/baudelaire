@@ -5,12 +5,25 @@ use typst_html::{HtmlDocument, attr, tag};
 
 use crate::config::Config;
 
-use super::{Cx, DocumentExt, Transform};
+use super::{Cx, DocumentExt, Exempt, Transform};
 
 /// The [`Transform`] that annotates images for lazy, async loading.
 pub(super) struct Images;
 
+impl Images {
+    /// How [`Transform::after`] names this pass.
+    pub(super) const NAME: &'static str = "images";
+}
+
 impl Transform for Images {
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+
+    fn after(&self) -> &'static [&'static str] {
+        &[Exempt::NAME]
+    }
+
     fn enabled(&self, config: &Config) -> bool {
         config.assets.images.lazy
     }

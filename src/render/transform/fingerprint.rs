@@ -4,13 +4,38 @@ use typst_html::HtmlDocument;
 
 use crate::config::Config;
 
-use super::{Cx, DocumentExt, Transform};
+use super::{
+    Cx, DocumentExt, Embed, Exempt, Externalize, Links, Math, Meta, Sheets, Sources, Svg, Transform,
+};
 
 /// The [`Transform`] that swaps mapped asset references for their fingerprinted
 /// URLs, leaving anything the map does not name untouched.
 pub(super) struct Fingerprint;
 
+impl Fingerprint {
+    /// How [`Transform::after`] names this pass.
+    pub(super) const NAME: &'static str = "fingerprint";
+}
+
 impl Transform for Fingerprint {
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+
+    fn after(&self) -> &'static [&'static str] {
+        &[
+            Exempt::NAME,
+            Links::NAME,
+            Svg::NAME,
+            Meta::NAME,
+            Math::NAME,
+            Sheets::NAME,
+            Externalize::NAME,
+            Sources::NAME,
+            Embed::NAME,
+        ]
+    }
+
     fn enabled(&self, config: &Config) -> bool {
         config.assets.fingerprint
     }

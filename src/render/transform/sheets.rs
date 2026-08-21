@@ -6,7 +6,7 @@ use typst_html::{HtmlDocument, HtmlElement, HtmlNode, attr, tag};
 use crate::config::Config;
 use crate::owned::{Owned, builtin};
 
-use super::{Cx, DocumentExt, Transform};
+use super::{Cx, DocumentExt, Exempt, Transform};
 
 /// The [`Transform`] that puts a `<link>` to each owned stylesheet in a page's
 /// `<head>`. Recording the name in `found.owned` is what makes the pipeline
@@ -14,6 +14,14 @@ use super::{Cx, DocumentExt, Transform};
 pub(super) struct Sheets;
 
 impl Transform for Sheets {
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+
+    fn after(&self) -> &'static [&'static str] {
+        &[Exempt::NAME]
+    }
+
     fn enabled(&self, config: &Config) -> bool {
         builtin().iter().any(|asset| asset.serves(config))
     }
@@ -38,6 +46,9 @@ impl Transform for Sheets {
 }
 
 impl Sheets {
+    /// How [`Transform::after`] names this pass.
+    pub(super) const NAME: &'static str = "sheets";
+
     /// Whether this page gets `asset`: every page, unless it is one a page has
     /// to ask for, in which case an earlier pass recorded its name.
     fn wanted(asset: &dyn Owned, cx: &Cx<'_>) -> bool {

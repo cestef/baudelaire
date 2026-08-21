@@ -5,7 +5,7 @@ use typst_html::{HtmlDocument, HtmlElement, HtmlNode, HtmlTag, attr, tag};
 
 use crate::config::Config;
 
-use super::{Cx, Transform};
+use super::{Cx, Exempt, Transform};
 
 /// The `role` Typst marks the footnote list with, and the only thing this pass
 /// matches on.
@@ -15,6 +15,14 @@ const ENDNOTES: &str = "doc-endnotes";
 pub(super) struct Footnotes;
 
 impl Transform for Footnotes {
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+
+    fn after(&self) -> &'static [&'static str] {
+        &[Exempt::NAME]
+    }
+
     /// Naming no element is Typst's own placement, so there is nothing to do.
     fn enabled(&self, config: &Config) -> bool {
         !config.html.footnotes.disabled()
@@ -42,6 +50,9 @@ impl Transform for Footnotes {
 }
 
 impl Footnotes {
+    /// How [`Transform::after`] names this pass.
+    pub(super) const NAME: &'static str = "footnotes";
+
     /// The document's `<body>`, the only subtree this pass touches.
     fn body(root: &mut HtmlElement) -> Option<&mut HtmlElement> {
         root.children

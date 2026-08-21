@@ -14,7 +14,7 @@ use crate::fs::Contained;
 use crate::graph::AssetName;
 use crate::render::Candidate;
 
-use super::{Cx, DocumentExt, ElementExt, Transform};
+use super::{Cx, DocumentExt, ElementExt, Exempt, Transform};
 use crate::world::rules::MARKER;
 
 /// A typst-embedded image lifted out to a file, recorded per page so a cache
@@ -36,7 +36,20 @@ pub struct ImageRef {
 /// sandbox.
 pub(super) struct Externalize;
 
+impl Externalize {
+    /// How [`Transform::after`] names this pass.
+    pub(super) const NAME: &'static str = "externalize";
+}
+
 impl Transform for Externalize {
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+
+    fn after(&self) -> &'static [&'static str] {
+        &[Exempt::NAME]
+    }
+
     fn enabled(&self, config: &Config) -> bool {
         config.assets.images.externalize(&config.html)
     }

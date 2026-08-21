@@ -12,7 +12,7 @@ use crate::config::{Config, RegionConfig};
 use crate::render::prose::Prose;
 use crate::world::module::Toc as Marked;
 
-use super::{AttrsExt, Cx, DocumentExt, ElementExt, Transform};
+use super::{Anchors, AttrsExt, Cx, DocumentExt, ElementExt, Exempt, Transform};
 
 static MARKER: LazyLock<HtmlAttr> =
     LazyLock::new(|| HtmlAttr::intern(Marked::MARKER).expect("marker is a valid attribute name"));
@@ -52,6 +52,14 @@ struct Entry {
 pub(super) struct Toc;
 
 impl Transform for Toc {
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+
+    fn after(&self) -> &'static [&'static str] {
+        &[Exempt::NAME, Anchors::NAME]
+    }
+
     /// Always on: importing `toc()` is itself the opt-in.
     fn enabled(&self, _config: &Config) -> bool {
         true
@@ -82,6 +90,9 @@ impl Transform for Toc {
 }
 
 impl Toc {
+    /// How [`Transform::after`] names this pass.
+    pub(super) const NAME: &'static str = "toc";
+
     /// Whether the page marked anything at all, checked read-only so a page
     /// with no table of contents never pays for [`DocumentExt::walk`], which
     /// clones each shared child list.

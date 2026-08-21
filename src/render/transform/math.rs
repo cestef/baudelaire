@@ -6,13 +6,21 @@ use typst_html::{HtmlDocument, HtmlNode, tag};
 use crate::config::{Config, MathStyles};
 use crate::owned::{MathSheet, Owned};
 
-use super::{Cx, DocumentExt, ElementExt, Transform};
+use super::{Cx, DocumentExt, ElementExt, Exempt, Transform};
 
 /// The [`Transform`] that takes typst's inline equation styles out and asks for
 /// the served stylesheet in their place.
 pub(super) struct Math;
 
 impl Transform for Math {
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+
+    fn after(&self) -> &'static [&'static str] {
+        &[Exempt::NAME]
+    }
+
     /// Whenever the styles are not being left where typst put them.
     fn enabled(&self, config: &Config) -> bool {
         MathStyles::of(&config.html).hoisted()
@@ -40,6 +48,9 @@ impl Transform for Math {
 }
 
 impl Math {
+    /// How [`Transform::after`] names this pass.
+    pub(super) const NAME: &'static str = "math";
+
     /// Whether this node is the `<style>` typst injected: an element with that
     /// tag, no attributes of its own, and exactly the pinned text.
     fn injected(node: &HtmlNode) -> bool {

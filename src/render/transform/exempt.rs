@@ -17,6 +17,14 @@ use super::{Cx, DocumentExt, Transform};
 pub(super) struct Exempt;
 
 impl Transform for Exempt {
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+
+    fn after(&self) -> &'static [&'static str] {
+        &[]
+    }
+
     fn enabled(&self, config: &Config) -> bool {
         config.check.enabled
     }
@@ -40,6 +48,9 @@ impl Transform for Exempt {
 }
 
 impl Exempt {
+    /// How [`Transform::after`] names this pass.
+    pub(super) const NAME: &'static str = "exempt";
+
     /// Every span under `element`, its own first: what a finding is tested
     /// against once the marker itself is gone. Text nodes carry spans too, and
     /// a code fence's lines are text, so the walk cannot stop at elements.

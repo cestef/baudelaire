@@ -8,12 +8,20 @@ use typst_html::{HtmlDocument, HtmlElement, HtmlNode, attr, tag};
 use crate::config::{AnchorConfig, Config, Place};
 use crate::content::Slug;
 
-use super::{Cx, DocumentExt, ElementExt, Transform};
+use super::{Cx, DocumentExt, ElementExt, Exempt, Transform};
 
 /// The [`Transform`] that adds heading `id` anchors.
 pub(super) struct Anchors;
 
 impl Transform for Anchors {
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+
+    fn after(&self) -> &'static [&'static str] {
+        &[Exempt::NAME]
+    }
+
     /// Always: `html { anchors }` decides whether ids are *derived*, not
     /// whether this pass runs, and the deep-link check needs the id set it
     /// records either way.
@@ -57,6 +65,9 @@ impl Transform for Anchors {
 }
 
 impl Anchors {
+    /// How [`Transform::after`] names this pass.
+    pub(super) const NAME: &'static str = "anchors";
+
     /// Put the self link inside `heading`, on the side `place` names.
     fn link(heading: &mut HtmlElement, id: &str, text: &str, place: Place) {
         let link = HtmlNode::from(

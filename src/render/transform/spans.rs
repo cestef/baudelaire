@@ -7,7 +7,7 @@ use crate::config::Config;
 use crate::content::Rebased;
 use crate::render::origin::Origins;
 
-use super::{Cx, DocumentExt, ElementExt, Transform};
+use super::{Cx, DocumentExt, ElementExt, Exempt, Transform};
 
 /// The attribute a stamped element carries, short enough for
 /// [`HtmlAttr::constant`]'s inline representation.
@@ -17,6 +17,9 @@ const SOURCE_ATTR: HtmlAttr = HtmlAttr::constant("data-typst");
 pub(super) struct Spans;
 
 impl Spans {
+    /// How [`Transform::after`] names this pass.
+    pub(super) const NAME: &'static str = "spans";
+
     /// This page's map back to the language its author wrote it in, positioned
     /// in the wrapper that was compiled.
     ///
@@ -39,6 +42,14 @@ impl Spans {
 }
 
 impl Transform for Spans {
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+
+    fn after(&self) -> &'static [&'static str] {
+        &[Exempt::NAME]
+    }
+
     fn enabled(&self, config: &Config) -> bool {
         config.html.spans
     }

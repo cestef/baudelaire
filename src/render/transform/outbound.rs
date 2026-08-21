@@ -4,12 +4,20 @@ use typst_html::{HtmlDocument, attr, tag};
 
 use crate::config::Config;
 
-use super::{Cx, DocumentExt, Transform};
+use super::{Cx, DocumentExt, Exempt, Links, Transform};
 
 /// The [`Transform`] that records outbound `http(s)` anchors.
 pub(super) struct Outbound;
 
 impl Transform for Outbound {
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+
+    fn after(&self) -> &'static [&'static str] {
+        &[Exempt::NAME, Links::NAME]
+    }
+
     fn enabled(&self, config: &Config) -> bool {
         config.check.external.enabled
     }
@@ -30,6 +38,9 @@ impl Transform for Outbound {
 }
 
 impl Outbound {
+    /// How [`Transform::after`] names this pass.
+    pub(super) const NAME: &'static str = "outbound";
+
     /// Whether a href names something out on the web that can be requested.
     ///
     /// Scheme-relative (`//host/x`) is excluded: it resolves against the page's

@@ -6,7 +6,7 @@ use typst_html::{HtmlDocument, attr, tag};
 
 use crate::config::Config;
 
-use super::{Cx, DocumentExt, Transform};
+use super::{Cx, DocumentExt, Exempt, Externalize, Transform};
 use crate::render::Tail;
 
 /// The [`Transform`] that annotates responsive images with a `srcset`.
@@ -16,7 +16,20 @@ use crate::render::Tail;
 /// has to pick up the new `srcset`.
 pub(super) struct Sources;
 
+impl Sources {
+    /// How [`Transform::after`] names this pass.
+    pub(super) const NAME: &'static str = "sources";
+}
+
 impl Transform for Sources {
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+
+    fn after(&self) -> &'static [&'static str] {
+        &[Exempt::NAME, Externalize::NAME]
+    }
+
     fn enabled(&self, config: &Config) -> bool {
         config.assets.images.responsive.enabled
     }

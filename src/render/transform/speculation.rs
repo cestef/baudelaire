@@ -7,12 +7,25 @@ use typst_html::{HtmlDocument, HtmlElement, HtmlNode, attr, tag};
 
 use crate::config::{Config, Eagerness, Named};
 
-use super::{Cx, DocumentExt, Transform};
+use super::{Cx, DocumentExt, Exempt, Transform};
 
 /// The [`Transform`] that appends speculation rules to `<head>`.
 pub(super) struct Speculation;
 
+impl Speculation {
+    /// How [`Transform::after`] names this pass.
+    pub(super) const NAME: &'static str = "speculation";
+}
+
 impl Transform for Speculation {
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+
+    fn after(&self) -> &'static [&'static str] {
+        &[Exempt::NAME]
+    }
+
     fn enabled(&self, config: &Config) -> bool {
         config.navigation.speculation.enabled
     }

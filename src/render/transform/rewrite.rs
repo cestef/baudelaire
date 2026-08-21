@@ -5,7 +5,7 @@ use typst_html::{HtmlDocument, attr, tag};
 use crate::config::Config;
 use crate::render::links::{Link, Target};
 use crate::render::origin::Origins;
-use crate::render::transform::{Cx, DocumentExt, ElementExt, Transform};
+use crate::render::transform::{Cx, DocumentExt, ElementExt, Exempt, Transform};
 
 /// The core [`Transform`]: resolves internal `.typ` source-path links to
 /// permalinks, recording the broken ones, every map entry it consulted
@@ -17,6 +17,14 @@ use crate::render::transform::{Cx, DocumentExt, ElementExt, Transform};
 pub(super) struct Links;
 
 impl Transform for Links {
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+
+    fn after(&self) -> &'static [&'static str] {
+        &[Exempt::NAME]
+    }
+
     fn enabled(&self, _config: &Config) -> bool {
         true
     }
@@ -74,6 +82,9 @@ impl Transform for Links {
 }
 
 impl Links {
+    /// How [`Transform::after`] names this pass.
+    pub(super) const NAME: &'static str = "links";
+
     /// The deep link a bare `#fragment` makes: it points into the page it was
     /// written on, so the target is that page's own permalink.
     ///

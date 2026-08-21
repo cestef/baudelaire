@@ -1,7 +1,8 @@
 //! Per-page transforms over the typed HTML DOM, applied before serialization.
 //!
 //! [`Transforms::builtin`] is the single source of the pipeline: a new pass is
-//! one `impl Transform` plus one line in that list.
+//! one `impl Transform` plus one line in that list. What order it runs in is
+//! [`Transform::after`], not that line: the list is sorted by it.
 
 mod anchors;
 mod base;
@@ -89,15 +90,17 @@ pub(super) struct Cx<'a> {
     /// The width variants this page's *extracted* images will be given, keyed
     /// by the URL each is served at.
     ///
-    /// Written by [`Externalize`] and read by [`Sources`], which run in that
-    /// order.
+    /// Written by [`Externalize`] and read by [`Sources`], which declares
+    /// [`Transform::after`] on it.
     pub extracted: std::collections::BTreeMap<String, Vec<super::Candidate>>,
     /// Every code fence on the page, as [`Fences`] gathered it: written here
     /// rather than read off the DOM, since that pass is what removes the hidden
     /// lines the snippet lint has to check.
     pub fences: Vec<super::snippet::Snippet>,
     /// What the author has kept the lint off, as [`Exempt`] read it before
-    /// removing the markers that said so.
+    /// removing the markers that said so. Every other pass declares
+    /// [`Transform::after`] on it, since the spans it records are the ones
+    /// typst produced.
     pub exempt: super::lint::Exemptions,
 }
 
@@ -377,6 +380,19 @@ impl<'a> SrcSet<'a> {
 /// A per-page pass over the typed HTML DOM. `Send + Sync` because the owning
 /// [`super::Renderer`] is shared read-only across the parallel compile pool.
 pub(super) trait Transform: Send + Sync {
+    /// How [`Transform::after`] names this pass. Its own `NAME` const, so a
+    /// dependency is spelled once and a typo is a compile error.
+    fn name(&self) -> &'static str;
+
+    /// The passes that must have run before this one.
+    ///
+    /// Required rather than defaulted: where a pass sits is a decision, and the
+    /// hand-written list in [`Transforms::builtin`] cannot be one, since
+    /// reordering it produces silently wrong markup that no other test sees.
+    /// [`Transforms::builtin`] sorts by this, so the list is a preference among
+    /// passes nothing separates and never the contract itself.
+    fn after(&self) -> &'static [&'static str];
+
     /// Whether to run, from config alone.
     fn enabled(&self, config: &Config) -> bool;
     /// Rewrite `doc` in place, optionally recording findings in `cx`.
@@ -393,7 +409,12 @@ impl Transforms {
     /// inline embeds, fingerprint whatever references remain, shift them under
     /// the base path, and digest the finished markup last.
     pub(super) fn builtin() -> Self {
-        Self(vec![
+        Self(Self::ordered(Self::declared()))
+    }
+
+    /// The passes as written, before [`Transforms::ordered`] settles them.
+    fn declared() -> Vec<Box<dyn Transform>> {
+        vec![
             Box::new(Exempt),
             Box::new(Links),
             Box::new(Svg),
@@ -418,7 +439,38 @@ impl Transforms {
             Box::new(Fingerprint),
             Box::new(BasePath),
             Box::new(Integrity),
-        ])
+        ]
+    }
+
+    /// `passes` with each one moved after everything its [`Transform::after`]
+    /// names, and otherwise left where it was written.
+    ///
+    /// Stable, so the written order is what separates two passes no constraint
+    /// does. A pass naming one that is not in the pipeline never becomes
+    /// placeable and is caught here rather than by wrong markup.
+    fn ordered(passes: Vec<Box<dyn Transform>>) -> Vec<Box<dyn Transform>> {
+        let mut waiting: Vec<Option<Box<dyn Transform>>> = passes.into_iter().map(Some).collect();
+        let mut placed: Vec<&'static str> = Vec::with_capacity(waiting.len());
+        let mut out = Vec::with_capacity(waiting.len());
+        while out.len() < waiting.len() {
+            let next = waiting
+                .iter()
+                .position(|slot| {
+                    slot.as_ref()
+                        .is_some_and(|pass| pass.after().iter().all(|name| placed.contains(name)))
+                })
+                .expect("every transform's dependencies are in the pipeline, and acyclic");
+            let pass = waiting[next].take().expect("just found");
+            placed.push(pass.name());
+            out.push(pass);
+        }
+        out
+    }
+
+    /// The pipeline's passes, in the order they will be applied.
+    #[cfg(test)]
+    fn names(&self) -> Vec<&'static str> {
+        self.0.iter().map(|pass| pass.name()).collect()
     }
 
     /// Apply every enabled transform to `doc`, in order.
@@ -433,7 +485,7 @@ impl Transforms {
 
 #[cfg(test)]
 mod tests {
-    use super::{ElementExt, HtmlElement, HtmlNode, HtmlTag, SrcSet, tag};
+    use super::{ElementExt, HtmlElement, HtmlNode, HtmlTag, SrcSet, Transform, Transforms, tag};
     use typst::syntax::Span;
 
     fn candidates(srcset: &str) -> Vec<(&str, &str)> {
@@ -533,5 +585,77 @@ mod tests {
             candidates("/a.png 1x, data:image/png;base64,AAA 2x"),
             vec![("/a.png", "1x"), ("data:image/png;base64,AAA", "2x")]
         );
+    }
+
+    /// Every `after` on a pass of `passes`, as `(pass, dependency)`.
+    fn edges(passes: &[Box<dyn Transform>]) -> Vec<(&'static str, &'static str)> {
+        passes
+            .iter()
+            .flat_map(|pass| pass.after().iter().map(|dep| (pass.name(), *dep)))
+            .collect()
+    }
+
+    fn at(order: &[&'static str], name: &str) -> usize {
+        order
+            .iter()
+            .position(|written| *written == name)
+            .unwrap_or_else(|| panic!("`{name}` is not a pass in the pipeline"))
+    }
+
+    #[test]
+    fn every_pass_is_named_once() {
+        let mut names = Transforms::builtin().names();
+        let total = names.len();
+        names.sort_unstable();
+        names.dedup();
+        assert_eq!(names.len(), total, "two passes share a name");
+    }
+
+    /// Every dependency names a pass that is actually in the pipeline. Left to
+    /// [`Transforms::ordered`] this is a panic about a cycle; here it names the
+    /// pass that cannot be found.
+    #[test]
+    fn every_dependency_names_a_pass() {
+        let passes = Transforms::declared();
+        let names: Vec<&'static str> = passes.iter().map(|pass| pass.name()).collect();
+        for (pass, dep) in edges(&passes) {
+            assert!(
+                names.contains(&dep),
+                "`{pass}` runs after `{dep}`, which does not exist"
+            );
+        }
+    }
+
+    /// The hand-written list is already a valid linearization, so sorting it
+    /// changes nothing. A reorder that breaks a declared constraint is fixed by
+    /// [`Transforms::ordered`] and reported here.
+    #[test]
+    fn the_written_order_already_satisfies_every_constraint() {
+        let written: Vec<&'static str> = Transforms::declared()
+            .iter()
+            .map(|pass| pass.name())
+            .collect();
+        assert_eq!(
+            Transforms::builtin().names(),
+            written,
+            "the pipeline as written is not the order its constraints put it in"
+        );
+    }
+
+    /// The sort is what holds the pipeline up, not the order the passes happen
+    /// to be written in: reversed, they still come back with every dependency
+    /// ahead of the pass that named it.
+    #[test]
+    fn a_scrambled_pipeline_sorts_back_into_a_valid_one() {
+        let mut scrambled = Transforms::declared();
+        scrambled.reverse();
+        let sorted = Transforms::ordered(scrambled);
+        let order: Vec<&'static str> = sorted.iter().map(|pass| pass.name()).collect();
+        for (pass, dep) in edges(&sorted) {
+            assert!(
+                at(&order, dep) < at(&order, pass),
+                "`{dep}` must run before `{pass}`, and does not"
+            );
+        }
     }
 }

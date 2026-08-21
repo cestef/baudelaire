@@ -7,12 +7,20 @@ use typst_html::{HtmlDocument, HtmlElement, HtmlNode, attr, tag};
 use crate::config::{Config, HighlightConfig, Named, Token};
 use crate::world::rules::{SCOPE, TOKEN};
 
-use super::{AttrsExt, Cx, DocumentExt, Transform};
+use super::{AttrsExt, Cx, DocumentExt, Exempt, Transform};
 
 /// The [`Transform`] that names highlight marks.
 pub(super) struct Highlight;
 
 impl Transform for Highlight {
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+
+    fn after(&self) -> &'static [&'static str] {
+        &[Exempt::NAME]
+    }
+
     fn enabled(&self, config: &Config) -> bool {
         config.html.highlight.enabled
     }
@@ -30,6 +38,9 @@ impl Transform for Highlight {
 }
 
 impl Highlight {
+    /// How [`Transform::after`] names this pass.
+    pub(super) const NAME: &'static str = "highlight";
+
     /// Name every marked span under `element`, depth first.
     fn name(element: &mut HtmlElement, config: &HighlightConfig) {
         let mut dropped = false;

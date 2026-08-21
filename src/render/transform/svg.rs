@@ -18,7 +18,7 @@ use crate::render::scope::Scoped;
 use crate::ui::markup;
 use crate::world::module::Html;
 
-use super::{AttrsExt, Cx, DocumentExt, ElementExt, Transform};
+use super::{AttrsExt, Cx, DocumentExt, ElementExt, Exempt, Transform};
 
 /// The namespace an inline `<svg>` declares, and the attribute declaring it.
 const XMLNS: &str = "http://www.w3.org/2000/svg";
@@ -158,6 +158,14 @@ impl<'a> Ids<'a> {
 pub(super) struct Svg;
 
 impl Transform for Svg {
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+
+    fn after(&self) -> &'static [&'static str] {
+        &[Exempt::NAME]
+    }
+
     /// Always on: importing `svg()` is itself the opt-in.
     fn enabled(&self, _config: &Config) -> bool {
         true
@@ -185,6 +193,9 @@ impl Transform for Svg {
 }
 
 impl Svg {
+    /// How [`Transform::after`] names this pass.
+    pub(super) const NAME: &'static str = "svg";
+
     /// Read the file `path` names, splice it into `element`, and return the
     /// file it read so the caller can record the dependency.
     ///
