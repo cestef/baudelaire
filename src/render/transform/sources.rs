@@ -14,6 +14,10 @@ use crate::render::Tail;
 /// A manifest probe is recorded whether or not it matched: an image with no
 /// variants today gets some when the responsive widths change, and this page
 /// has to pick up the new `srcset`.
+///
+/// A candidate's URL is percent-encoded, because `srcset` reads a URL up to the
+/// first whitespace: an asset named `my photo.png` would otherwise be two
+/// candidates, neither of them a file.
 pub(super) struct Sources;
 
 impl Sources {
@@ -56,7 +60,7 @@ impl Transform for Sources {
             };
             let srcset = candidates
                 .iter()
-                .map(|c| format!("{} {}w", c.url, c.width))
+                .map(|c| format!("{} {}w", crate::config::Percent::encode(&c.url), c.width))
                 .collect::<Vec<_>>()
                 .join(", ");
             element.attrs.push(attr::srcset, srcset);
