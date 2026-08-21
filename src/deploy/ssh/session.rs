@@ -224,7 +224,7 @@ impl Remote {
             let path = path.trim().trim_start_matches("./");
             match Listed::try_from(path) {
                 Ok(listed) => out.admit(listed.into_string(), hash.to_owned()),
-                Err(()) => out.refuse(path),
+                Err(()) => out.refuse(path, crate::deploy::Inventory::OUTSIDE),
             }
         }
         out

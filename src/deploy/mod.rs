@@ -61,23 +61,28 @@ impl Listed {
 #[derive(Debug, Default)]
 pub struct Inventory {
     files: Digests,
-    refused: Vec<String>,
+    refused: Vec<(String, &'static str)>,
 }
 
 impl Inventory {
+    /// Why a listed path at a destination the reconcile does not own is refused.
+    pub(crate) const OUTSIDE: &'static str = "outside the deploy root";
+
     fn admit(&mut self, path: String, digest: String) {
         self.files.insert(path, digest);
     }
 
-    fn refuse(&mut self, path: impl Into<String>) {
-        self.refused.push(path.into());
+    /// Record a listed path the reconcile may not act on, with the reason the
+    /// report gives for it.
+    fn refuse(&mut self, path: impl Into<String>, why: &'static str) {
+        self.refused.push((path.into(), why));
     }
 
     /// Report what was refused, and hand back what the reconcile may act on.
     fn report(self, ui: &Ui, target: &str) -> Digests {
         if !self.refused.is_empty() {
-            for path in &self.refused {
-                ui.skip(path, "outside the deploy root");
+            for (path, why) in &self.refused {
+                ui.skip(path, why);
             }
             ui.warn(RemotePathsRefused {
                 count: self.refused.len(),
@@ -639,7 +644,7 @@ mod tests {
     fn a_refused_remote_path_is_reported_rather_than_dropped() {
         let mut inventory = Inventory::default();
         inventory.admit("index.html".to_owned(), "aa".to_owned());
-        inventory.refuse("posts//a.html");
+        inventory.refuse("posts//a.html", Inventory::OUTSIDE);
         let ui = Ui::new(Level::Silent);
         let files = inventory.report(&ui, "bucket");
         assert_eq!(files.len(), 1);

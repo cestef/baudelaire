@@ -225,10 +225,10 @@ impl Bucket {
             )?;
             let listing = Listing::parse(&body)?;
             for (key, etag) in listing.objects {
-                if Listed::try_from(key.as_str()).is_ok() {
-                    out.admit(self.relative(key), etag);
-                } else {
-                    out.refuse(key);
+                match (Listed::try_from(key.as_str()).is_ok(), etag) {
+                    (true, Some(etag)) => out.admit(self.relative(key), etag),
+                    (true, None) => out.refuse(key, "listed with no ETag"),
+                    (false, _) => out.refuse(key, Inventory::OUTSIDE),
                 }
             }
             match listing.next {
@@ -425,7 +425,10 @@ struct Authorization {
 /// Keys are exactly as the bucket named them; deciding which this client may
 /// act on belongs to [`Bucket::objects`], where a refusal can be recorded.
 struct Listing {
-    objects: Vec<(String, String)>,
+    /// Each object's key and, where the listing carried one, its ETag: a key
+    /// listed without one is neither comparable nor droppable, and must reach
+    /// the inventory to be reported.
+    objects: Vec<(String, Option<String>)>,
     next: Option<String>,
 }
 
@@ -498,7 +501,7 @@ impl Listing {
             .filter(|node| node.has_tag_name("Contents"))
             .filter_map(|node| {
                 let key = text(node, "Key")?;
-                let etag = Self::unquote(&text(node, "ETag")?).to_owned();
+                let etag = text(node, "ETag").map(|etag| Self::unquote(&etag).to_owned());
                 Some((key, etag))
             })
             .collect();
@@ -684,11 +687,20 @@ mod tests {
         assert_eq!(
             listing.objects,
             vec![
-                ("a.html".into(), "abc123".into()),
-                ("b/c.css".into(), "def456".into())
+                ("a.html".into(), Some("abc123".to_owned())),
+                ("b/c.css".into(), Some("def456".to_owned()))
             ]
         );
         assert_eq!(listing.next.as_deref(), Some("TOKEN=="));
+    }
+
+    #[test]
+    fn listing_carries_a_key_the_bucket_gave_no_etag_for() {
+        let xml = r"<ListBucketResult>
+              <Contents><Key>a.html</Key><Size>10</Size></Contents>
+            </ListBucketResult>";
+        let listing = Listing::parse(xml).unwrap();
+        assert_eq!(listing.objects, vec![("a.html".into(), None)]);
     }
 
     #[test]
