@@ -117,7 +117,6 @@ impl<'a> Auth<'a> {
         }
         .into()
     }
-
 }
 
 /// The ssh-agent, and the one thing about reaching it that is not portable:
@@ -151,6 +150,11 @@ impl Agent {
     }
 
     /// Offer each identity a connected agent holds.
+    ///
+    /// A key the host refuses moves on to the next; a transport that failed
+    /// stops, because every identity after it would fail the same way and the
+    /// run would end up blaming the operator's credentials for a dead
+    /// connection.
     async fn identities<S>(
         agent: &mut AgentClient<S>,
         handle: &mut Handle<Client>,
@@ -164,12 +168,14 @@ impl Agent {
             return Ok(false);
         };
         for identity in identities {
-            if let AgentIdentity::PublicKey { key, .. } = identity
-                && let Ok(result) = handle
-                    .authenticate_publickey_with(user, key, hash, agent)
-                    .await
-                && result.success()
-            {
+            let AgentIdentity::PublicKey { key, .. } = identity else {
+                continue;
+            };
+            let offered = handle
+                .authenticate_publickey_with(user, key, hash, agent)
+                .await
+                .map_err(|e| DeployError::transfer(Step::Authenticate, e))?;
+            if offered.success() {
                 return Ok(true);
             }
         }
