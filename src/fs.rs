@@ -159,12 +159,18 @@ pub fn remove_dir_all(path: impl AsRef<Path>) -> Result<()> {
 
 /// A recursive walk of a directory tree.
 ///
-/// Symlinked directories are followed, but each directory is entered at most
-/// once by canonical path, so a link pointing at an ancestor ends that branch
-/// instead of recursing forever. Yielded paths are `root`-joined and never
-/// canonicalized, so they keep the caller's spelling.
+/// Symlinks are followed, but nothing resolving outside `root` is yielded
+/// unless the walk asks to [`follow`](Walk::following): a walk stands for what a
+/// tree holds, and a caller that copies what it finds would otherwise publish a
+/// file the site never wrote. Each directory is entered at most once by
+/// canonical path, so a link pointing at an ancestor ends that branch instead of
+/// recursing forever. Yielded paths are `root`-joined and never canonicalized,
+/// so they keep the caller's spelling.
 pub struct Walk<'a> {
     root: &'a Path,
+    /// The canonical root, which nothing yielded may resolve outside of, or
+    /// `None` for a walk that follows a link wherever it goes.
+    bound: Option<PathBuf>,
     skip: Option<Skip<'a>>,
 }
 
@@ -182,7 +188,19 @@ pub struct Tree {
 
 impl<'a> Walk<'a> {
     pub fn new(root: &'a Path) -> Self {
-        Self { root, skip: None }
+        Self {
+            root,
+            bound: Some(canonical(root)),
+            skip: None,
+        }
+    }
+
+    /// Yield what a link points at even where that leaves the tree, for a walk
+    /// whose files are read in place rather than copied out of it.
+    #[must_use]
+    pub fn following(mut self) -> Self {
+        self.bound = None;
+        self
     }
 
     /// Do not enter directories for which `skip` holds; they are absent from
@@ -207,6 +225,9 @@ impl<'a> Walk<'a> {
 
     fn descend(&self, dir: &Path, seen: &mut BTreeSet<PathBuf>, tree: &mut Tree) -> Result<()> {
         for path in read_dir(dir)? {
+            if !self.inside(&path) {
+                continue;
+            }
             if !path.is_dir() {
                 tree.files.push(path);
             } else if self.enters(&path, seen) {
@@ -215,6 +236,14 @@ impl<'a> Walk<'a> {
             }
         }
         Ok(())
+    }
+
+    /// Whether `path` resolves inside the root, which a symlink out of the tree
+    /// does not; always true for a [`following`](Walk::following) walk.
+    fn inside(&self, path: &Path) -> bool {
+        self.bound
+            .as_ref()
+            .is_none_or(|bound| canonical(path).starts_with(bound))
     }
 
     /// Whether to descend into `dir`: not skipped, and not already visited by
@@ -292,6 +321,28 @@ mod tests {
 
         assert_eq!(files.len(), 1, "{files:?}");
         assert!(files[0].ends_with("posts/a.typ"), "{files:?}");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn walk_omits_a_link_out_of_the_tree() {
+        let tmp = tempfile::tempdir().unwrap();
+        let outside = tmp.path().join("outside");
+        super::create_dir_all(&outside).unwrap();
+        super::write(outside.join("secret"), "").unwrap();
+        let root = tmp.path().join("static");
+        super::create_dir_all(&root).unwrap();
+        super::write(root.join("a.html"), "").unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("dir")).unwrap();
+        std::os::unix::fs::symlink(outside.join("secret"), root.join("file")).unwrap();
+
+        let files = super::Walk::new(&root).files().unwrap();
+
+        assert_eq!(files, [root.join("a.html")], "{files:?}");
+
+        let followed = super::Walk::new(&root).following().files().unwrap();
+
+        assert_eq!(followed.len(), 3, "{followed:?}");
     }
 
     #[test]

@@ -106,13 +106,10 @@ pub struct Dist {
 impl Dist {
     /// Walk `root` into the set of relative file paths.
     ///
-    /// Subdirectories are followed, but not out of `dist`: a symlink pointing
-    /// elsewhere would otherwise have the deploy upload files the build never
-    /// produced.
+    /// A walk stays inside the tree it was rooted at, so a symlink pointing
+    /// elsewhere cannot have the deploy upload files the build never produced.
     fn scan(root: &Path) -> Result<Self> {
-        let contained = crate::fs::canonical(root);
         let mut files: Vec<String> = crate::fs::Walk::new(root)
-            .skipping(|dir| !crate::fs::canonical(dir).starts_with(&contained))
             .files()?
             .iter()
             .filter_map(|path| path.strip_prefix(root).ok())

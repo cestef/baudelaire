@@ -119,6 +119,10 @@ impl<'a> Discovery<'a> {
 
     /// Every content file under `dir`, recursively, skipping dotfiles and
     /// dot-directories.
+    ///
+    /// The walk follows a link out of the tree: a site keeping its pages in a
+    /// vault and linking a subtree in is compiling those files, not copying
+    /// them, and each is published at the permalink its own frontmatter names.
     fn gather(dir: &Path, sources: &[&str]) -> Result<Vec<PathBuf>> {
         let hidden = |path: &Path| {
             path.file_name()
@@ -126,6 +130,7 @@ impl<'a> Discovery<'a> {
                 .is_some_and(|n| n.starts_with('.'))
         };
         Ok(crate::fs::Walk::new(dir)
+            .following()
             .skipping(hidden)
             .files()?
             .into_iter()
