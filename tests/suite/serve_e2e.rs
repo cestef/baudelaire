@@ -676,7 +676,7 @@ fn alt_click_opens_the_stamped_location_in_the_editor() {
         "page carries no source stamp: {body}"
     );
 
-    let (code, body) = srv.get("/__baudelaire/open?at=content/index.typ:2:1");
+    let (code, body) = srv.get_from_page("/__baudelaire/open?at=content/index.typ:2:1");
     assert_eq!(code, 200, "{body}");
     // The editor runs on its own, so the file it writes appears a moment later.
     let opened = (0..40)
@@ -708,9 +708,12 @@ fn the_open_endpoint_refuses_what_it_cannot_open() {
     );
     let srv = Serve::start(&t, &["--spans"]);
 
-    let (code, _) = srv.get_raw("/__baudelaire/open?at=../../etc/hostname:1:1");
+    let (code, _) = srv.get("/__baudelaire/open?at=content/index.typ:2:1");
+    assert_eq!(code, 403, "a request that is not a page was accepted");
+
+    let (code, _) = srv.get_raw_from_page("/__baudelaire/open?at=../../etc/hostname:1:1");
     assert_eq!(code, 404, "a path outside the project was accepted");
-    let (code, _) = srv.get("/__baudelaire/open?at=content/index.typ");
+    let (code, _) = srv.get_from_page("/__baudelaire/open?at=content/index.typ");
     assert_eq!(code, 400, "a location with no line was accepted");
     assert!(
         !t.exists("opened.txt"),
@@ -733,7 +736,7 @@ fn the_open_endpoint_says_when_no_editor_is_configured() {
     );
     let srv = Serve::start(&t, &["--spans"]);
 
-    let (code, body) = srv.get("/__baudelaire/open?at=content/index.typ:2:1");
+    let (code, body) = srv.get_from_page("/__baudelaire/open?at=content/index.typ:2:1");
     assert_eq!(code, 501, "{body}");
     assert!(body.contains("editor"), "unhelpful refusal: {body}");
 }

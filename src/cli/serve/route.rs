@@ -256,13 +256,17 @@ impl Handler {
         open.ok_or(Unopenable::Unconfigured)?.at(&at)
     }
 
-    /// Whether the request came from the page this server served. A client that
-    /// sends no `Sec-Fetch-Site` at all (curl, a test) is allowed through.
+    /// Whether the request came from the page this server served.
+    ///
+    /// The header has to be there: every browser that can reach this endpoint
+    /// sends one, so its absence is a client that is not a page, and admitting
+    /// those hands any local process the configured editor and a
+    /// file-exists oracle over the project.
     fn same_origin(req: &Request) -> bool {
         req.headers()
             .iter()
             .find(|header| header.field.equiv("Sec-Fetch-Site"))
-            .is_none_or(|header| header.value.as_str() == "same-origin")
+            .is_some_and(|header| header.value.as_str() == "same-origin")
     }
 
     /// The source location a request names, still encoded. An absent `at` and an

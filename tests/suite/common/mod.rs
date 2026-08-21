@@ -329,7 +329,7 @@ impl Serve {
     }
 
     pub fn get(&self, path: &str) -> (u16, String) {
-        self.request(path, false)
+        self.request(path, false, false)
     }
 
     /// Wait for `/` to serve a body containing `want`, re-issuing `edit`
@@ -355,7 +355,20 @@ impl Serve {
     /// so `..` segments reach the server instead of being collapsed by the
     /// client: the only way to exercise path-traversal defenses.
     pub fn get_raw(&self, path: &str) -> (u16, String) {
-        self.request(path, true)
+        self.request(path, true, false)
+    }
+
+    /// A request as the served page's own script makes it, carrying the
+    /// `Sec-Fetch-Site` a browser computes: what the editor endpoint requires,
+    /// since anything else is not a page.
+    pub fn get_from_page(&self, path: &str) -> (u16, String) {
+        self.request(path, false, true)
+    }
+
+    /// [`Serve::get_from_page`] with the path sent verbatim, as
+    /// [`Serve::get_raw`] does.
+    pub fn get_raw_from_page(&self, path: &str) -> (u16, String) {
+        self.request(path, true, true)
     }
 
     /// A request carrying a `Host` the server was not bound under, as a page
@@ -373,12 +386,15 @@ impl Serve {
         (status.trim().parse().unwrap_or(0), body.to_owned())
     }
 
-    fn request(&self, path: &str, raw: bool) -> (u16, String) {
+    fn request(&self, path: &str, raw: bool, from_page: bool) -> (u16, String) {
         let url = format!("http://127.0.0.1:{}{path}", self.port);
         let mut cmd = Command::new("curl");
         cmd.args(["-s", "-o", "-", "-w", "\n%{http_code}"]);
         if raw {
             cmd.arg("--path-as-is");
+        }
+        if from_page {
+            cmd.args(["-H", "Sec-Fetch-Site: same-origin"]);
         }
         let resp = cmd.arg(&url).output().expect("curl");
         let out = String::from_utf8_lossy(&resp.stdout);
