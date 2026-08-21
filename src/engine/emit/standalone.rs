@@ -340,6 +340,7 @@ mod tests {
         let site = Site {
             entities: crate::content::Registries::none(),
             relations: crate::content::Relations::none(),
+            history: crate::git::History::none(),
             config,
             pages: &[],
             outputs: &outputs,

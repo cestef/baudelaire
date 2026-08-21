@@ -84,6 +84,9 @@ pub(super) struct Site<'a> {
     pub relations: &'a crate::content::Relations,
     /// Every built page, cached and freshly compiled alike.
     pub outputs: &'a [Output<'a>],
+    /// What the repository's log says about each page, for the surfaces that
+    /// report when one last changed. Empty unless `content { history }` is on.
+    pub history: &'a crate::git::History,
 }
 
 impl Site<'_> {
@@ -500,6 +503,7 @@ mod tests {
         Site {
             entities: crate::content::Registries::none(),
             relations: crate::content::Relations::none(),
+            history: crate::git::History::none(),
             config,
             pages: &[],
             outputs: &[],

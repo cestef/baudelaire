@@ -316,6 +316,7 @@ impl Engine {
             &planned.pages,
             &planned.entities,
             &planned.relations,
+            self.project.history(),
         );
         let root = self.project.root();
         for table in prepare.generated() {
@@ -569,6 +570,7 @@ impl Engine {
             entities: &planned.entities,
             relations: &planned.relations,
             outputs,
+            history: self.project.history(),
         };
         let mut emitter = Emitter::new(ui, statics.paths.iter().cloned());
         Processors::builtin().run(&site, &mut emitter, cache)?;

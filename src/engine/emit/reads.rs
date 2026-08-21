@@ -30,6 +30,8 @@ pub(in crate::engine) enum Reads {
     Entities,
     /// Where each page sits among the others.
     Relations,
+    /// What the repository's log says about each page.
+    History,
 }
 
 impl Reads {
@@ -40,6 +42,7 @@ impl Reads {
             Self::Rendered => Hash::of(&site.outputs.iter().map(Produced).collect::<Vec<_>>()),
             Self::Entities => Hash::of(site.entities),
             Self::Relations => Hash::of(site.relations),
+            Self::History => Hash::of(site.history),
         }
     }
 }

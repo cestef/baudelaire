@@ -60,6 +60,12 @@ pub struct Project {
     /// The repository the site sits in, discovered once: every build reads git
     /// state more than once, and the dev server on every rebuild.
     repo: Option<Arc<crate::git::Repo>>,
+    /// What the log says about each page, walked once per world rather than
+    /// once per build: a new commit moves the build context, and a world whose
+    /// context has moved is rebuilt rather than reused.
+    ///
+    /// Empty unless `content { history }` asked for it.
+    history: Arc<crate::git::History>,
 }
 
 impl Project {
@@ -73,6 +79,7 @@ impl Project {
         let now = OffsetDateTime::now_utc();
         let repo = crate::git::Repo::discover(&project_root).map(Arc::new);
         let context = BuildContext::detect(repo.as_deref(), now, config, mode);
+        let history = Arc::new(Self::walk(repo.as_deref(), &config.content.history));
         let tree = codegen::Value::from(&context);
         let mut inputs: Dict = config
             .typst
@@ -115,6 +122,7 @@ impl Project {
 
         Ok(Self {
             repo,
+            history,
             lib: Arc::new(LazyHash::new(library)),
             fonts: Arc::new(Fonts::of(&config.typst.fonts, &project_root)),
             files: Arc::new(RwLock::new(FileStore::new(Files::new(
@@ -217,6 +225,26 @@ impl Project {
     /// The repository the site sits in, or `None` outside one.
     pub fn repo(&self) -> Option<&crate::git::Repo> {
         self.repo.as_deref()
+    }
+
+    /// What the repository's log says about each page.
+    ///
+    /// Empty with `content { history }` off and outside a repository, which is
+    /// the same thing to every page: no `page.git`.
+    pub fn history(&self) -> &crate::git::History {
+        &self.history
+    }
+
+    /// Walk the log, or do not: reading it is one process over the whole log,
+    /// so a site that never asked never pays for it.
+    fn walk(
+        repo: Option<&crate::git::Repo>,
+        config: &crate::config::HistoryConfig,
+    ) -> crate::git::History {
+        match repo {
+            Some(repo) if config.enabled => repo.history(config.contributors),
+            _ => crate::git::History::default(),
+        }
     }
 
     /// Create a world for compiling a single source file as `main`.

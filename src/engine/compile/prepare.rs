@@ -12,6 +12,7 @@ use crate::content::{
     Byline, Data, Iso, Localized, Page, Registries, Relations, Section, Sibling, Siblings, Strings,
 };
 use crate::error::{Result, TemplateMissing};
+use crate::git::History;
 use crate::graph::Hash;
 use crate::render::Backlinks;
 use crate::theme::Theme;
@@ -52,6 +53,8 @@ pub(in crate::engine) struct Prepare<'a> {
     /// The backlinks each page is compiled against: a *prediction* until the
     /// site has rendered, and [`Backlinks::Off`] until a build sets one.
     backlinks: Backlinks,
+    /// What git knows about each page, empty unless `content { history }` is on.
+    history: &'a History,
 }
 
 impl<'a> Prepare<'a> {
@@ -62,10 +65,12 @@ impl<'a> Prepare<'a> {
         pages: &'a [Page],
         entities: &'a Registries,
         relations: &'a Relations,
+        history: &'a History,
     ) -> Self {
         let base = Self {
             config,
             entities,
+            history,
             members: Self::members(config, entities, pages),
             project,
             theme,
@@ -263,7 +268,21 @@ impl<'a> Prepare<'a> {
             collection: Value::str(page.section()),
             assets: self.colocated(page),
             source: self.source(page),
+            git: self.history(page),
         }
+    }
+
+    /// What git knows about this page: the commit that last changed it, and
+    /// everyone who has where `content { history { contributors } }` asked.
+    ///
+    /// `None` with the feature off, for a generated listing, and for a page no
+    /// commit has ever touched.
+    fn history(&self, page: &Page) -> Value {
+        if !page.authored() {
+            return Value::None;
+        }
+        let key = crate::graph::Portable(self.project.root()).key(&page.source);
+        self.history.of(&key).map_or(Value::None, Value::from)
     }
 
     /// The page's own file as the compiler spells it, for a template that has

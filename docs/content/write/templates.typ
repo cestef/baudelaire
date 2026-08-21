@@ -68,6 +68,7 @@ Paths are file names inside `paths { templates }` (`templates/` by default). #li
   [`collection`], [str], [The collection it belongs to.],
   [`assets`], [dict], [The files beside it in its own bundle, authored name to served URL. Empty unless the page is a bundle.],
   [`source`], [str or none], [The page's own file, project-root-absolute (`/content/posts/hello.typ`). `none` on a generated listing, which has no file.],
+  [`git`], [dict or none], [What the repository's log says about that file. `none` unless `content { history }` is on.],
 )
 
 `page.source` is what an "edit this page" link is built from: it is
@@ -77,6 +78,44 @@ arithmetic.
 ```typ
 #let edit = "https://github.com/you/site/edit/main" + page.source
 ```
+
+`page.git` is the other half of that line: when the page last changed, and who
+has changed it. It is off by default, because reading it walks the repository's
+log:
+
+```kdl
+content {
+  history {
+    contributors #true    // gather every author, not just the last one
+  }
+}
+```
+
+#table(
+  columns: 3,
+  align: (left, left, left),
+  table.header([Key], [Type], [Is]),
+  [`hash`], [str], [The commit that last touched the file.],
+  [`committed`], [str], [Its date, ISO 8601.],
+  [`author`], [dict], [`(name, email)` of whoever made it.],
+  [`contributors`], [array], [`(name, email, commits)` per author, most commits first. Absent unless `contributors` asked for them.],
+)
+
+```typ
+#let git = page.at("git", default: none)
+#if git != none [
+  Last updated #git.committed.slice(0, 10) by #git.author.name.
+]
+```
+
+`none` for a page no commit has touched yet, for a generated listing, and for a
+build outside a repository. Read it defensively; a page written since the last
+commit has no history and that is not an error.
+
+This is also where the sitemap's `lastmod` comes from. Frontmatter `updated`
+wins where a page declares it, since that is an author saying so on purpose;
+otherwise the commit date is used, and the publication `date` only where neither
+is available.
 
 Read optional frontmatter defensively, since a page may not declare it:
 

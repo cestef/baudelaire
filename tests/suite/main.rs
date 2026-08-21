@@ -21,6 +21,7 @@ mod discovery;
 mod external_e2e;
 mod features_e2e;
 mod frontmatter;
+mod history_e2e;
 mod i18n_e2e;
 mod images_e2e;
 mod incremental_e2e;

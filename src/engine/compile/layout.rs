@@ -84,6 +84,9 @@ pub(in crate::engine) struct Context {
     /// (`/content/posts/hello.typ`), or `none` for a generated listing, whose
     /// path names no file anyone can open.
     pub source: Value,
+    /// What git knows about the page's own file, or `none` where nothing does:
+    /// `content { history }` off, a generated listing, an uncommitted page.
+    pub git: Value,
 }
 
 impl Context {
@@ -106,6 +109,7 @@ impl Context {
             collection,
             assets,
             source,
+            git,
         } = self;
         Value::dict([
             ("frontmatter", frontmatter),
@@ -123,6 +127,7 @@ impl Context {
             ("collection", collection.clone()),
             ("assets", assets.clone()),
             ("source", source.clone()),
+            ("git", git.clone()),
         ])
     }
 }
@@ -218,6 +223,7 @@ mod tests {
             collection: Value::str("posts"),
             assets: raw("(:)"),
             source: Value::str("/content/posts/a.typ"),
+            git: Value::None,
         }
     }
 
@@ -228,7 +234,8 @@ mod tests {
             "(frontmatter: {frontmatter}, taxonomies: (:), credits: (:), members: (), \
              nav: (prev: none, next: none), lang: \"en\", translations: (), strings: (:), \
              reading: (words: 0, minutes: 0), backlinks: (), date: none, url: \"/posts/a/\", \
-             collection: \"posts\", assets: (:), source: \"/content/posts/a.typ\")"
+             collection: \"posts\", assets: (:), source: \"/content/posts/a.typ\", \
+             git: none)"
         )
     }
 

@@ -3,6 +3,7 @@
 pub mod collection;
 pub mod drafts;
 pub mod entities;
+pub mod history;
 pub mod markdown;
 pub mod reading;
 pub mod taxonomy;
@@ -14,7 +15,8 @@ use crate::config::dispatch::{Block, Section};
 use crate::config::node::NodeExt;
 use crate::config::vocab::rule;
 use crate::config::{
-    CollectionConfig, DraftConfig, MarkdownConfig, ReadingConfig, RegistryConfig, TaxonomyConfig,
+    CollectionConfig, DraftConfig, HistoryConfig, MarkdownConfig, ReadingConfig, RegistryConfig,
+    TaxonomyConfig,
 };
 use crate::error::{ConfigError, ConfigErrorKind};
 
@@ -82,6 +84,10 @@ pub struct ContentConfig {
     /// Whether `.md` files are pages, and what one may contain. `markdown #false` is `markdown { enabled #false }`.
     #[key(shorthand(MarkdownConfig, "enabled"))]
     pub markdown: MarkdownConfig,
+
+    /// What git knows about each page, as `page.git`. Its presence turns it on.
+    #[key(nested(HistoryConfig))]
+    pub history: HistoryConfig,
 }
 
 impl Default for ContentConfig {
@@ -95,6 +101,7 @@ impl Default for ContentConfig {
             entities: Vec::default(),
             reading: ReadingConfig::default(),
             markdown: MarkdownConfig::default(),
+            history: HistoryConfig::default(),
         }
     }
 }

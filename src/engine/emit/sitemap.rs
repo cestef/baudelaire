@@ -1,6 +1,6 @@
 //! `sitemap.xml` generation.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use super::xml::Xml;
 use super::{Emit, Processor, Reads, Site};
@@ -8,9 +8,10 @@ use crate::config::{BaseUrl, Config};
 use crate::content::page::Translation;
 use crate::content::{Generated, Page, Relations};
 use crate::error::Result;
+use crate::git::History;
 
 /// Emits a [sitemaps.org] `sitemap.xml` listing every built page as an absolute
-/// URL under the site `base`, with an optional `lastmod` from its date.
+/// URL under the site `base`, with an optional `lastmod`.
 ///
 /// [sitemaps.org]: https://www.sitemaps.org/protocol.html
 pub(super) struct SiteMap;
@@ -20,7 +21,31 @@ impl SiteMap {
     const XMLNS: &'static str = "http://www.sitemaps.org/schemas/sitemap/0.9";
     const XHTML: &'static str = "http://www.w3.org/1999/xhtml";
 
-    fn render(base: &BaseUrl, pages: &[Page], relations: &Relations, config: &Config) -> String {
+    /// When a page last changed, as `lastmod` reports it.
+    ///
+    /// An author who wrote `updated` has said so and is believed. Otherwise the
+    /// repository knows, and knows better than `date`, which is when the page
+    /// was *published*: the two differ on every page edited after the fact, and
+    /// `date` is what a crawler was told last time.
+    fn modified(page: &Page, history: &History, root: &Path) -> Option<String> {
+        if let Some(updated) = page.frontmatter.updated {
+            return Some(updated.to_string());
+        }
+        let key = crate::graph::Portable(root).key(&page.source);
+        history
+            .of(&key)
+            .map(|changed| changed.committed().to_owned())
+            .or_else(|| page.frontmatter.date.map(|date| date.to_string()))
+    }
+
+    fn render(
+        base: &BaseUrl,
+        pages: &[Page],
+        relations: &Relations,
+        config: &Config,
+        history: &History,
+        root: &Path,
+    ) -> String {
         let mut xml = Xml::document();
         let ns: &[(&str, &str)] = &[("xmlns", Self::XMLNS), ("xmlns:xhtml", Self::XHTML)];
         xml.nest("urlset", ns, |xml| {
@@ -30,8 +55,8 @@ impl SiteMap {
             {
                 xml.nest("url", &[], |xml| {
                     xml.leaf("loc", &base.join(&page.permalink));
-                    if let Some(date) = page.frontmatter.modified() {
-                        xml.leaf("lastmod", &date.to_string());
+                    if let Some(modified) = Self::modified(page, history, root) {
+                        xml.leaf("lastmod", &modified);
                     }
                     Self::alternates(xml, base, &relations.of(page).translations, config);
                 });
@@ -74,7 +99,7 @@ impl Processor for SiteMap {
     }
 
     fn inputs(&self, _config: &Config) -> Option<&'static [Reads]> {
-        Some(&[Reads::Listing, Reads::Relations])
+        Some(&[Reads::Listing, Reads::Relations, Reads::History])
     }
 
     fn enabled(&self, config: &Config) -> bool {
@@ -86,7 +111,14 @@ impl Processor for SiteMap {
         let path = site.dist(&[Self::FILE]);
         out.file(
             &path,
-            &Self::render(&base, site.pages, site.relations, site.config),
+            &Self::render(
+                &base,
+                site.pages,
+                site.relations,
+                site.config,
+                site.history,
+                &site.config.root,
+            ),
         )?;
         out.wrote(&path);
         Ok(())

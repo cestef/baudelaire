@@ -1,10 +1,11 @@
 //! The one place a `git` process is started, under one set of options, in one
 //! directory.
 
+use std::io::{BufRead as _, BufReader};
 use std::path::Path;
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
 
-use super::format::{Format, Pretty};
+use super::format::{Entry, Format, Pretty};
 
 /// The options every invocation is made under.
 ///
@@ -108,16 +109,58 @@ impl<'a> Git<'a> {
         args: &[&'static str],
         format: Format<N>,
     ) -> Option<[String; N]> {
+        let record = Self::heard(args, Self::run(self.formatted(args, format)))?;
+        match Entry::<N>::of(&record) {
+            Some(Entry::Commit(fields)) => Some(fields.map(str::to_owned)),
+            _ => None,
+        }
+    }
+
+    /// `git <args> --format=<format>`, handing each line that says something to
+    /// `entry` as it arrives.
+    ///
+    /// Streamed rather than collected: a log holds a line per file per commit,
+    /// and what a caller keeps of it is far smaller than the log itself.
+    pub(super) fn walk<const N: usize>(
+        &self,
+        args: &[&'static str],
+        format: Format<N>,
+        mut entry: impl FnMut(Entry<'_, N>),
+    ) -> Result<(), Unanswered> {
+        let mut child = self
+            .formatted(args, format)
+            .stdout(Stdio::piped())
+            // Draining two pipes from one thread deadlocks on whichever is not
+            // being read; what a walk needs from a failure is that it failed.
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(Unanswered::Unavailable)?;
+        let stdout = child.stdout.take().expect("stdout was piped");
+        for line in BufReader::new(stdout).split(b'\n') {
+            let Ok(bytes) = line else { break };
+            let text = String::from_utf8_lossy(&bytes);
+            if let Some(found) = Entry::of(text.trim_end_matches('\r')) {
+                entry(found);
+            }
+        }
+        let status = child.wait().map_err(Unanswered::Unavailable)?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(Unanswered::Refused(String::new()))
+        }
+    }
+
+    fn formatted<const N: usize>(&self, args: &[&'static str], format: Format<N>) -> Command {
         let mut command = self.command(args);
         command.arg(Pretty(format).to_string());
-        let record = Self::heard(args, Self::run(command))?;
-        Format::<N>::read(&record).map(|fields| fields.map(str::to_owned))
+        command
     }
 
     /// The command git will be run as: the pinned options, then the query, in
     /// the directory being asked about and with nothing inherited that could
     /// redirect it.
-    pub(super) fn command(&self, args: &[&'static str]) -> Command {
+    fn command(&self, args: &[&'static str]) -> Command {
         let mut command = Command::new("git");
         command.args(OPTIONS).args(args).current_dir(self.dir);
         for name in CLEARED {

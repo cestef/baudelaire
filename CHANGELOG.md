@@ -14,6 +14,25 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **A page knows its own history.** `content { history }` hands each page
+  `page.git`: the commit that last touched its file, when, and who made it.
+  `contributors #true` gathers every author of the file, most commits first.
+  The sitemap's `lastmod` uses it too, so a page edited long after it was
+  published stops advertising its publication date; frontmatter `updated` still
+  wins where a page declares one. Off by default, because reading it walks the
+  repository's log. `none` for a page no commit has touched, for a generated
+  listing, and outside a repository.
+
+- **A table of contents, built where you put it.** `@baudelaire/toc` exports
+  `toc()`, which emits a `<nav>` that baudelaire fills afterwards with a nested
+  list of links to the page's own headings. `from`/`to` pick the levels,
+  `ordered: true` builds an `<ol>`, and any other named argument lands on the
+  `<nav>` as an attribute. Only headings inside `html { region }` are listed, so
+  a sidebar's own heading never appears in its own contents, and only those
+  carrying an `id`, which is every one unless `html { anchors }` was narrowed.
+  A page's heading set exists only after it compiles, which is why the call
+  returns an empty element rather than the entries.
+
 - **Every shipped theme has a not-found layout.** `templates/not-found.typ`, in
   all four. Bind it from `content/404.typ`, which publishes as the flat
   `404.html` a static host serves for an unmatched URL. It is named for its

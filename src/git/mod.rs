@@ -7,9 +7,12 @@
 
 mod format;
 mod head;
+mod log;
+mod path;
 mod run;
 
 pub use head::Head;
+pub use log::{Changed, History};
 
 use std::path::{Path, PathBuf};
 
@@ -38,5 +41,11 @@ impl Repo {
     /// What `HEAD` is, or `None` for a repository with no commit yet.
     pub fn head(&self) -> Option<Head> {
         Head::read(&Git::at(&self.dir))
+    }
+
+    /// What the log says about each file under the site root, and about who
+    /// changed it when `contributors` asks.
+    pub fn history(&self, contributors: bool) -> History {
+        History::read(&Git::at(&self.dir), contributors)
     }
 }

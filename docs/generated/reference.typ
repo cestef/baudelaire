@@ -72,6 +72,8 @@
   (path: "content.markdown.extensions", key: "extensions", shape: "[-](tables* | footnotes* | strikethrough* | tasklists* | smart) ..", doc: "Parser extensions to enable, or `-name` to disable one. A `*` marks the ones already on.", depth: 2, section: false),
   (path: "content.markdown.html", key: "html", shape: "refuse | drop", doc: "What raw HTML in a page does: `refuse` the build, or `drop` it.", depth: 2, section: false),
   (path: "content.markdown.eval", key: "eval", shape: "flag", doc: "Whether a fence marked `eval` runs as Typst. Turn it off for content you did not write: it runs at build time.", depth: 2, section: false),
+  (path: "content.history", key: "history", shape: "block", doc: "What git knows about each page, as `page.git`. Its presence turns it on.", depth: 1, section: true),
+  (path: "content.history.contributors", key: "contributors", shape: "flag", doc: "Gather everyone who has changed a page, not only the commit that last did.", depth: 2, section: false),
   (path: "languages", key: "languages", shape: "named blocks", doc: "One block per language, each named by its code.", depth: 0, section: true),
   (path: "languages.name", key: "name", shape: "text", doc: "The language's name in its own language, for a switcher.", depth: 1, section: false),
   (path: "languages.dir", key: "dir", shape: "text", doc: "Writing direction, `ltr` or `rtl`.", depth: 1, section: false),

@@ -86,6 +86,7 @@ pub use content::entities::source::{
     DataSource, Declared, InlineSource, PagesSource, SourceConfig, SourcesConfig,
 };
 pub use content::entities::{RegistryConfig, Shape, Slots, Unknown};
+pub use content::history::HistoryConfig;
 pub use content::markdown::{Extension, MarkdownConfig, RawHtml};
 pub use content::reading::ReadingConfig;
 pub use content::taxonomy::TaxonomyConfig;
