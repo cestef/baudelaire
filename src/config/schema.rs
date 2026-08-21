@@ -534,11 +534,12 @@ impl TypeError {
 }
 
 impl FieldSchema {
-    /// Refuse a constraint the declared type cannot answer for.
+    /// Refuse a constraint the declared type cannot answer for, and a default
+    /// that does not satisfy the constraints declared beside it.
     ///
     /// Caught here rather than at the page, where a bound nothing can measure
-    /// would simply never fire and a default of the wrong type would be handed
-    /// to every page that omitted the field.
+    /// would simply never fire and a default the field itself refuses would be
+    /// handed to every page that omitted it.
     fn constrained(&self, key: &str, node: &KdlNode, text: &str) -> Result<()> {
         let span = NodeExt::span(node);
         let refuse = |kind| Err(ConfigError::at(text, kind, span).into());
@@ -565,13 +566,12 @@ impl FieldSchema {
         }
         if let Some(default) = &self.default {
             let value = typst::foundations::Value::from(default);
-            if crate::content::Check::fits(&self.ty, &value) {
-                return Ok(());
+            if let Some(want) = crate::content::Check::refused(self, &value) {
+                return refuse(ConfigErrorKind::FieldDefault {
+                    key: key.to_owned(),
+                    declared: want,
+                });
             }
-            return refuse(ConfigErrorKind::FieldDefault {
-                key: key.to_owned(),
-                declared: self.ty.article(),
-            });
         }
         Ok(())
     }

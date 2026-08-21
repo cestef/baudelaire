@@ -104,11 +104,16 @@ pub(crate) struct Check {
 }
 
 impl Check {
-    /// Whether one value satisfies one type, for a caller with no page to name
-    /// and no path to report: the config layer, holding a declared default to
-    /// the type declared beside it.
-    pub(crate) fn fits(ty: &FieldType, value: &Value) -> bool {
-        Self::default().value(ty, value).is_none()
+    /// What `value` fails to be, against everything `field` asks of it, as a
+    /// clause reading after "is not"; `None` where it satisfies all of them.
+    ///
+    /// For a declared default, which no page's own check ever reaches: a page
+    /// that omits the field is handed the default unexamined.
+    pub(crate) fn refused(field: &FieldSchema, value: &Value) -> Option<String> {
+        match Self::default().field(field, value)? {
+            Fault::Refused { want, .. } => Some(want),
+            Fault::Missing { .. } | Fault::Mismatch { .. } => Some(field.ty.article()),
+        }
     }
 
     /// Every field a schema declares, against the dictionary that should carry
