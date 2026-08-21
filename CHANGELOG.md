@@ -114,8 +114,47 @@ chores are visible in the git history and change nothing for a site.
   compiled through, and that wrapper is the page's cache fingerprint, so the
   first build after upgrading recompiles the site. Several config sections also
   hash differently, their fields having been reordered to match the order their
-  block reads them in. Nothing else changes, and the build after it is
-  incremental again.
+  block reads them in, and the render passes emit different markup from the same
+  page than they did, so the renderer's own fingerprint moved with them. Nothing
+  else changes, and the build after it is incremental again.
+
+- **A profile naming a section no longer turns it on.** A section fills in
+  place, and its switch is one of the values that fills, so a profile tuning one
+  key of a section the base turned off used to switch it back on: with `prune
+  #false` at the top level, `profiles { dev { prune { keep "themes/**" } } }`
+  put the sweep back and deleted everything under `dist` the build did not
+  write. A profile that means to turn a section on says so on its line, which
+  works from either side:
+
+  ```kdl
+  profiles {
+    dev {
+      check #true { alt "warn" }
+    }
+  }
+  ```
+
+- **Six things that were accepted now fail the build.** Each was silently wrong
+  before, so a site that trips one was already not doing what it said:
+
+  - A duplicate key in a `---` YAML frontmatter block. Delete one; the later one
+    was winning.
+  - A schema `default=` that the `min`, `max` or `pattern` beside it refuses.
+  - A `${VAR}` in the config naming `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`,
+    `BAUDELAIRE_SSH_PASSWORD` or `BAUDELAIRE_ATPROTO_PASSWORD`. Leave those to
+    the environment the deploy runs in.
+  - A frontmatter `path`, a `redirect` old path or a permalink template whose
+    segments are not ordinary path components: `.`, `..`, a backslash, or a
+    drive prefix.
+  - A theme's `theme.kdl` carrying a `cache { }` block, alongside the sections it
+    already could not carry.
+  - A generated Typst module bound to a name that is not an identifier, which
+    only `paths { sources }` can reach and which the config parser already
+    refused.
+
+- **The dev server's editor endpoint requires `Sec-Fetch-Site: same-origin`.**
+  Browsers send it; `curl` does not. A script driving that endpoint has to send
+  the header now.
 
 ### Fixed
 
@@ -151,6 +190,190 @@ chores are visible in the git history and change nothing for a site.
 - **The skip link no longer reflows the header when focused.** Taking it out of
   the flow and putting it back moved the header under the reader the moment they
   tabbed into the page.
+
+- **A markdown page with no template picks up its own frontmatter edits.** Such
+  a page compiles its lowered body alone, and the body is lowered *without* the
+  frontmatter, so the cache fingerprint was the same before and after an edit to
+  `description`, `title`, `date` or `slug`. The page kept serving its old
+  `<meta>` tags and its old canonical URL out of a green build. The page's own
+  identity is folded into that fingerprint now.
+
+- **A `nolint` wrapper is taken back out of the page when the check is off.**
+  `nolint[..]` emits a marker element whatever the config says, but only the
+  lint pass removed it, and `check { }` is off by default: every site that used
+  it shipped a stray `<div data-lint="off">` around the content it marked.
+
+- **A static `_redirects` no longer costs you every redirect stub.** With
+  `redirects { file }` on and a `static/_redirects` shadowing it, the build
+  warns and writes an HTML stub per old path instead. Those sit at destinations
+  the pass cannot declare in advance, so the second build skipped the pass, kept
+  only the rules file, and let the sweep delete every stub. The third build
+  never brought them back.
+
+- **A whole-site pass no longer re-runs because the cache split reordered the
+  pages.** The digests that gate the sitemap, the feeds and the rest hashed the
+  render results in the order they came back, and a build chains freshly
+  rendered pages ahead of cached ones. Editing one page therefore re-ran every
+  pass, and so did the next build that edited nothing.
+
+- **A `srcset` candidate whose URL holds a space is still one candidate.** The
+  attribute's grammar reads a URL up to the first whitespace, so an image named
+  `my photo.png` produced two candidates, neither of them a file. Candidate URLs
+  are percent-encoded now.
+
+- **Three render passes declare what they read.** The stylesheet pass reads what
+  the maths pass records, the inlining pass inlines the links the stylesheet
+  pass writes, and the integrity pass hashes the inline scripts the metadata and
+  speculation passes inject. None of them said so; they worked only because of
+  the order the list happens to be written in.
+
+- **A deploy over SFTP lands whole or not at all.** The upload truncated the
+  live file and wrote into it, so a transfer that died left the remote serving a
+  half-written page. It stages beside the target and renames onto it now, which
+  is what the interrupted-deploy diagnostic already claimed.
+
+- **A transfer is no longer held to the deadline a metadata request is.** One
+  ten-second ceiling covered the whole request body, so any object that could
+  not be pushed inside it failed every time; a theme archive over a few
+  megabytes could never be fetched at all.
+
+- **A remote listing that failed is no longer read as an empty one.** The SSH
+  backend ignored the remote command's exit status, so a partial listing became
+  the authoritative remote state and nothing said why the whole site was being
+  re-uploaded. A deploy root that does not exist yet still answers with nothing,
+  which is a first deploy rather than a failure.
+
+- **An S3 object listed without an ETag is reported rather than dropped.** It
+  vanished from the inventory entirely, which is the one state the reconcile can
+  neither upload over nor delete and that nothing in the run ever mentioned.
+
+- **A dead connection while offering an SSH key is not reported as a rejected
+  key.** Every transport error looked like "this identity was refused", so the
+  loop kept offering keys down a dead socket and the run finally told the
+  operator to check their credentials.
+
+- **A failed destination says which others it took with it.** With two
+  destinations configured, the first failure ended the run and nothing mentioned
+  that the second was never attempted.
+
+- **A `git log` that could not be read through is unanswered, not short.** An
+  I/O error part way through the walk abandoned the stream, and git could still
+  exit zero, so the build shipped a partial history: wrong `lastmod` in the
+  sitemap and feeds, missing contributors, out of a green build.
+
+- **The scaffold's author lookup runs like every other git query.** `init` read
+  `git config user.name` with none of the pinned options and none of the `GIT_*`
+  variables cleared, so a stray `GIT_DIR` answered about a different repository.
+
+- **A schema `default=` is held to the constraints declared beside it.** `blurb
+  "str" min=5 default="ab"` parsed, and then every page that *omitted* the field
+  carried a value the schema itself forbids while a page that wrote the same
+  value was refused.
+
+- **A page that exports no frontmatter still takes its collection's defaults.**
+  They reached the template but not the struct the build reads, so listings,
+  feeds, the sitemap and the page's own `<meta>` tags fell back to the page id.
+
+- **A duplicate YAML frontmatter key is an error.** KDL and TOML both refused
+  one; YAML kept the last value silently, so a page could carry a title its
+  author could not see they had written.
+
+- **A `months` list that is not twelve long is no list at all.** A short one was
+  used per month, which put half a date in one language and half in another.
+
+- **An unterminated frontmatter block underlines the fence it opened with**,
+  rather than a fence-width window offset by whatever whitespace followed it.
+
+- **`baudelaire init` no longer hangs when stderr is redirected.** The three
+  prompts disagreed about what makes a run interactive: one tested stdin, one
+  tested stderr, and one tested nothing and blocked on a question the user never
+  saw. They ask one question now, and it is both.
+
+- **`config check` reports every file it was given.** It stopped at the first
+  fault, which `--compact`'s one-line-per-fault contract is written against.
+  That line also pointed at `1:1` for everything read from standard input, since
+  it re-read the path to find the line and column.
+
+- **`--compact` is the only thing `config check` prints under it.** The banner
+  and the summary diagnostic shared the stream, so a tool reading
+  `file:line:column:` had two other renderers to filter out.
+
+- **`serve -qq` says nothing.** The rebuild line was the one output method with
+  no verbosity gate.
+
+- **A font directory that links to itself no longer overflows the stack.** The
+  font walk followed directory symlinks with no cycle guard, and it runs on
+  every build.
+
+- **A grammar that loses its scope stack still emits the rest of the line.** A
+  malformed `.sublime-syntax` truncated the tail of a line of code out of the
+  page rather than falling back to showing it unclassed.
+
+- **A path written with a tilde expands the same way everywhere.** The SSH key
+  path read `HOME`, which is normally unset on Windows, so `key
+  "~/.ssh/id_ed25519"` failed there naming a literal `~`. Both expansions are
+  one now.
+
+- **An atomic write that cannot rename takes its staging file with it**, rather
+  than leaving it in the output tree for the deploy to pick up.
+
+- **A signed S3 request is issued with the verb it was signed for.**
+
+### Security
+
+- **A symlink under `static/`, `assets/`, `templates/` or `content/` no longer
+  publishes what it points at.** The tree walk followed a link and copied its
+  target into `dist`, so a single committed symlink (`static/leak -> ~/.ssh`, or
+  `static/all -> ..`) put files the build never produced into the published
+  site. A CI runner building an untrusted branch would have exfiltrated whatever
+  the build user could read. A walk now yields nothing that resolves outside the
+  tree it was rooted at. Content discovery is the one exception and says so: a
+  site keeping its pages in a vault and linking a subtree in is *compiling*
+  those files, each published at the permalink its own frontmatter names.
+
+- **The search palette escapes a hit's URL.** Every other value a result row
+  interpolates was escaped; the `href` was not, so a page whose permalink
+  carried a quote closed the attribute and ran script in the site's own origin
+  for any visitor whose query matched it. Permalinks reach the index from
+  frontmatter `path`, which content controls.
+
+- **A frontmatter `path` cannot climb out of `dist`.** The traversal check split
+  on `/` and looked for `..`, which says nothing about `\`, about `C:`, or about
+  `.`, so on Windows `path: "C:/evil.html"` and `path: "..\\..\\evil.html"` were
+  both meaningful and both landed outside the output directory. A URL segment is
+  now held to being one ordinary path component, on every platform rather than
+  on the one that happens to separate with a backslash.
+
+- **A `${VAR}` naming a deploy or announce credential is refused.** `client {
+  analytics "${AWS_SECRET_ACCESS_KEY}" }` expanded, so the key reached the
+  bundled JavaScript and `config get` printed it into the terminal and any CI
+  log. The publishing commands build the site in the same environment they later
+  read the key from, so it was present at build time by construction. The four
+  variables are one table now, and every reader takes its name from it.
+
+- **A `theme` line cannot name an install directory outside the project.**
+  `theme add` wrote there and `theme remove --force` deleted there. The check
+  existed on `--dir` and on the build path; the third derivation of "the theme
+  directory" skipped it.
+
+- **A theme's `theme.kdl` cannot move the cache directory.** `paths` was already
+  refused so a theme could not move `dist`; `cache` is the other directory the
+  tool deletes, and `clean --cache` removes it without a prompt.
+
+- **The dev server's editor endpoint requires a same-origin request.** It
+  admitted any client that sent no `Sec-Fetch-Site` at all, so any local process
+  could spawn the configured editor and use the endpoint's status codes as a
+  file-existence oracle over the project.
+
+- **The speculation-rules island escapes every `<`.** Its two sibling JSON
+  islands did; this one did not, so a configured URL containing `<!--<script`
+  put the tokenizer in the state where the island's own `</script>` stopped
+  closing it. All three now go through one adapter.
+
+- **Content cannot forge a diagnostic's styling.** An interpolated value was
+  escaped for markup but not for control characters, so a frontmatter field
+  carrying an ANSI escape recoloured the rest of the build log and could hide
+  what followed it.
 
 ## [0.0.16] - 2026-08-20
 
