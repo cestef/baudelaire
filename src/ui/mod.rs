@@ -488,8 +488,14 @@ impl Ui {
 
     /// A dev-server event line: wall clock, change glyph, the file that
     /// triggered the rebuild, and what it cost.
+    ///
+    /// Kept at [`Level::Quiet`], alongside the address line: a serve that says
+    /// nothing at all is what `-qq` asks for.
     pub fn event(&self, path: impl Display, pages: usize, elapsed: Duration) {
         let mut s = self.state.lock();
+        if s.level < Level::Quiet {
+            return;
+        }
         let clear = if self.tty { CLEAR_LINE } else { "" };
         let _ = writeln!(
             s.out,
