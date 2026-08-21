@@ -38,12 +38,34 @@ impl Reads {
     fn digest(self, site: &Site) -> Hash {
         match self {
             Self::Listing => Hash::of(&site.pages.iter().map(Listed).collect::<Vec<_>>()),
-            Self::Markup => Hash::of(&site.outputs.iter().map(|out| out.html).collect::<Vec<_>>()),
-            Self::Rendered => Hash::of(&site.outputs.iter().map(Produced).collect::<Vec<_>>()),
+            Self::Markup => Hash::of(
+                &Self::ordered(site)
+                    .iter()
+                    .map(|out| out.html)
+                    .collect::<Vec<_>>(),
+            ),
+            Self::Rendered => Hash::of(
+                &Self::ordered(site)
+                    .into_iter()
+                    .map(Produced)
+                    .collect::<Vec<_>>(),
+            ),
             Self::Entities => Hash::of(site.entities),
             Self::Relations => Hash::of(site.relations),
             Self::History => Hash::of(site.history),
         }
+    }
+
+    /// The outputs in one order whatever the cache split was.
+    ///
+    /// A build chains freshly rendered pages ahead of cached ones, so the
+    /// sequence changes with *which* pages were edited rather than with what
+    /// any of them says: hashed as written, every whole-site pass re-runs after
+    /// any single-page edit, and again on the next build that edits nothing.
+    fn ordered<'a>(site: &'a Site<'a>) -> Vec<&'a Output<'a>> {
+        let mut outputs: Vec<&Output<'_>> = site.outputs.iter().collect();
+        outputs.sort_by_key(|out| out.page.permalink.as_str());
+        outputs
     }
 }
 
