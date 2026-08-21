@@ -1,7 +1,7 @@
 {
- "badge": "b7374c230bf06d1b",
- "commit": "56845fe33f7e90e34716954e05912a73f6c7e51d",
- "covered": 16233,
+ "badge": "67177e1daa9cc4d5",
+ "commit": "df395403740efa03d29c71d67bf146d10029e8fc",
+ "covered": 16263,
  "files": {
   "src/announce/mod.rs": [
    45,
@@ -724,8 +724,8 @@
    80
   ],
   "src/engine/compile/layout.rs": [
-   52,
-   52
+   54,
+   54
   ],
   "src/engine/compile/paged.rs": [
    24,
@@ -736,8 +736,8 @@
    13
   ],
   "src/engine/compile/prepare.rs": [
-   189,
-   193
+   196,
+   200
   ],
   "src/engine/compile/sidecar.rs": [
    42,
@@ -1296,8 +1296,8 @@
    37
   ],
   "src/world/context.rs": [
-   79,
-   80
+   100,
+   101
   ],
   "src/world/fonts.rs": [
    31,
@@ -1352,8 +1352,8 @@
    9
   ]
  },
- "percent": 87.43,
+ "percent": 87.45,
  "schema": 2,
- "total": 18567,
- "updated": "2026-08-20T04:11:59+00:00"
+ "total": 18597,
+ "updated": "2026-08-21T04:14:14+00:00"
 }
