@@ -91,7 +91,7 @@ impl Archive {
     /// [`Archive::whole`] can tell a theme that exactly fills it from one that
     /// ran over.
     fn download(url: &str) -> Result<Vec<u8>> {
-        let mut body = Http::agent("fetching a theme", Status::Fatal)
+        let mut body = Http::transferring("fetching a theme", Status::Fatal)
             .get(url)
             .call()
             .map_err(|why| ThemeError::fetch(url, why))?

@@ -30,7 +30,7 @@ impl Repo {
     /// errors, so an XRPC error body can be read and surfaced instead of
     /// swallowed.
     fn agent() -> ureq::Agent {
-        crate::remote::Http::agent("announce", crate::remote::Status::Read)
+        crate::remote::Http::transferring("announce", crate::remote::Status::Read)
     }
 
     /// Resolve `identifier`, a handle or a DID, to a repo reader on `host`.

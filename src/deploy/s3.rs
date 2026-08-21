@@ -184,7 +184,7 @@ impl Bucket {
             },
         );
         Self {
-            agent: crate::remote::Http::agent("deploy", crate::remote::Status::Read),
+            agent: crate::remote::Http::transferring("deploy", crate::remote::Status::Read),
             name: config.bucket.clone(),
             access_key,
             secret_key,

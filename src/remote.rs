@@ -26,10 +26,22 @@ impl Http {
     /// defaults to.
     pub const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
+    /// The same for a request whose body is the point rather than its headers.
+    ///
+    /// A deadline here covers the transfer as well as the handshake, so an
+    /// object big enough not to fit in [`TIMEOUT`](Http::TIMEOUT) could never be
+    /// uploaded at all: a 30 MB export on a domestic link needs minutes.
+    pub const TRANSFER: std::time::Duration = std::time::Duration::from_mins(5);
+
     /// An agent for the work `doing` describes, which is what an administrator
     /// reading their logs sees knocking.
     pub fn agent(doing: &str, status: Status) -> ureq::Agent {
         Self::within(doing, status, Self::TIMEOUT)
+    }
+
+    /// [`Http::agent`] for work that moves a file rather than asking about one.
+    pub fn transferring(doing: &str, status: Status) -> ureq::Agent {
+        Self::within(doing, status, Self::TRANSFER)
     }
 
     /// The same agent on a caller-chosen deadline, for the one caller a site
