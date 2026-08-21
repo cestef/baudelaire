@@ -23,34 +23,6 @@ for (const button of document.querySelectorAll("[data-theme-toggle]")) {
   });
 }
 
-/* Contents ------------------------------------------------------------------
-   Built from the rendered article rather than from the layout: the headings are
-   in the page's own body, which the template never sees. `html { anchors }`
-   gives each one an id, so a heading without one is a heading nothing can link.
-   The element is only in the markup on a page that asked for it. */
-
-const toc = document.querySelector("[data-toc]");
-// The post's own headings, and only those: the anchors pass slugs every heading
-// in the page, the theme's own included, so the related-posts heading would
-// otherwise turn up in the post's contents.
-const headings = [...document.querySelectorAll(".post h2[id], .post h3[id]")].filter(
-  (heading) => !heading.closest(".related, .recent, .toc"),
-);
-
-if (toc && headings.length > 1) {
-  const list = toc.querySelector(".toc-list");
-  for (const heading of headings) {
-    const item = document.createElement("li");
-    item.className = `toc-item toc-${heading.tagName.toLowerCase()}`;
-    const link = document.createElement("a");
-    link.href = `#${heading.id}`;
-    link.textContent = heading.textContent.trim();
-    item.append(link);
-    list.append(item);
-  }
-  toc.hidden = false;
-}
-
 /* Copy a code block ---------------------------------------------------------
    Added here rather than in the layout because the blocks are in the page's own
    body, which the template never sees. Absent without `navigator.clipboard`,

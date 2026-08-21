@@ -352,7 +352,11 @@ details[open] > summary.nav-title::before {
 
 /* On-page contents -------------------------------------------------------- */
 
-.toc[hidden] {
+/* Built into the page rather than by a script, so there is nothing to unhide.
+   What is left is what markup cannot decide: a contents list of one entry is
+   furniture, and an empty one has nothing to show. */
+.toc:has(.toc-list:empty),
+.toc:has(.toc-list > ol > li:only-child):not(:has(.toc-list li li)) {
   display: none;
 }
 
@@ -366,10 +370,14 @@ details[open] > summary.nav-title::before {
 }
 
 .toc-list {
+  display: block;
+  border-inline-start: 1px solid var(--rule);
+}
+
+.toc-list ol {
   list-style: none;
   margin: 0;
   padding: 0;
-  border-inline-start: 1px solid var(--rule);
 }
 
 .toc-list a {
@@ -391,7 +399,8 @@ details[open] > summary.nav-title::before {
   border-inline-start-color: var(--accent);
 }
 
-.toc-h3 a {
+/* A subsection sits under the section above it, however deep it goes. */
+.toc-list ol ol a {
   padding-inline-start: 1.4rem;
   font-size: 0.88rem;
 }

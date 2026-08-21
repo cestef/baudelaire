@@ -43,6 +43,13 @@ html {
   // and `style.css` paints them. Without this the colours stay inline, where
   // the light/dark toggle cannot reach them.
   highlight
+
+  // What counts as the post itself. The related-posts block at its foot is an
+  // `<aside>`, so leaving asides out keeps it off the contents list, out of the
+  // search index, and out of a full-content feed entry.
+  region {
+    ignore "aside"
+  }
 }
 
 generate {

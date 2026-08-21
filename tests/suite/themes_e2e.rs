@@ -170,13 +170,13 @@ fn the_blog_theme_switches_languages() {
 }
 
 /// `phares` is the documentation one: a sidebar of the site's own tree, a
-/// search client to open, and a contents placeholder its script fills in.
+/// search client to open, and a contents list of the page's own headings.
 #[test]
 fn the_docs_theme_builds_a_sidebar_and_a_search_client() {
     let site = wearing("phares", "");
     site.write(
         "content/guide/install.typ",
-        "#let frontmatter = (title: \"Install\", order: 1)\n\nInstall it.\n",
+        "#let frontmatter = (title: \"Install\", order: 1)\n\n= From source\n\nBuild it.\n\n== On Linux\n\nApt.\n\n= From a release\n\nDownload it.\n",
     );
     site.write(
         "content/guide/writing.typ",
@@ -189,7 +189,14 @@ fn the_docs_theme_builds_a_sidebar_and_a_search_client() {
         page.contains("class=\"sidebar\"") && page.contains("/guide/writing/"),
         "sidebar names the site's own pages: {page}"
     );
-    assert!(page.contains("data-toc"), "contents placeholder: {page}");
+    assert!(
+        page.contains("data-toc") && page.contains(r##"<a href="#from-source">"##),
+        "the contents, built into the page rather than by a script: {page}"
+    );
+    assert!(
+        page.contains(r##"<a href="#on-linux">"##),
+        "a subsection is listed under the section above it: {page}"
+    );
     assert!(
         page.contains("data-search-open") && page.contains("/search.js"),
         "search trigger and client: {page}"
@@ -436,9 +443,9 @@ fn the_docs_theme_exports_the_components_a_manual_writes_with() {
     );
 }
 
-/// The contents list is opt-in, and its markup is empty: the headings are in
-/// the compiled body, which the layout never sees, so the theme's script fills
-/// it in the browser.
+/// The contents list is opt-in, and built into the page: the headings are in
+/// the compiled body, which the layout never sees, so baudelaire fills the
+/// element after the page compiles.
 #[test]
 fn the_blog_theme_draws_contents_only_when_a_post_asks() {
     let site = blog("albatros");
@@ -449,11 +456,42 @@ fn the_blog_theme_draws_contents_only_when_a_post_asks() {
     site.stats();
 
     let asked = site.output("posts/first/index.html");
-    assert!(asked.contains("data-toc"), "the placeholder: {asked}");
-    assert!(asked.contains("class=\"toc-list\""), "its list: {asked}");
+    assert!(asked.contains("data-toc"), "the element: {asked}");
+    assert!(
+        asked.contains(r##"<a href="#one">"##) && asked.contains(r##"<a href="#two">"##),
+        "with both headings already in it: {asked}"
+    );
 
     let silent = site.output("posts/second/index.html");
     assert!(!silent.contains("data-toc"), "and nowhere else: {silent}");
+}
+
+/// The related posts at the foot of one are an `<aside>`, which `theme.kdl`
+/// leaves out of the page's prose. Its heading is the theme's, not the post's,
+/// so it belongs in neither the contents nor the search index.
+#[test]
+fn the_blog_theme_keeps_related_posts_out_of_a_posts_own_contents() {
+    let site = blog("albatros");
+    site.write(
+        "content/posts/first.typ",
+        "#let frontmatter = (\n  title: \"First\",\n  date: datetime(year: 2026, month: 7, day: 20),\n  tags: (\"rust\",),\n  toc: true,\n)\n\n= One\n\nText.\n\n= Two\n\nMore.\n",
+    );
+    site.write(
+        "content/posts/near.typ",
+        "#let frontmatter = (\n  title: \"Near\",\n  date: datetime(year: 2026, month: 7, day: 21),\n  tags: (\"rust\",),\n)\n\nText.\n",
+    );
+    site.stats();
+
+    let page = site.output("posts/first/index.html");
+
+    assert!(
+        page.contains("class=\"related\"") && page.contains("Related posts"),
+        "the block is there: {page}"
+    );
+    assert!(
+        !page.contains(r##"<a href="#related-posts">"##),
+        "and its heading is not an entry: {page}"
+    );
 }
 
 /// `albatros` ranks the posts nearest one by shared tags, inside its own

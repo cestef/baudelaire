@@ -9,6 +9,7 @@
 #import "@baudelaire/html:0.1.0": classes, h
 #import "@baudelaire/pages:0.1.0": pages
 #import "@baudelaire/sections:0.1.0": sections
+#import "@baudelaire/toc:0.1.0": toc
 #import "@baudelaire/site:0.1.0": author, title as site-title
 
 // An icon, as real DOM rather than an `<img>`, so it inherits `currentColor`
@@ -92,21 +93,18 @@
   },
 )
 
-// The on-page contents. Deliberately empty markup: the headings live in the
-// compiled body, so the theme's script fills this from the rendered page rather
-// than the layout guessing at a structure it cannot see. A page with fewer than
-// two headings gets no contents at all, which the script decides.
-#let contents(page) = h(
-  "nav",
-  class: "toc",
-  aria-label: label(page, "contents", "On this page"),
-  data-toc: true,
-  hidden: true,
-  {
-    h("p", class: "toc-title", label(page, "contents", "On this page"))
-    h("ol", class: "toc-list")
-  },
-)
+// The on-page contents. The headings live in the compiled body, which the
+// layout never sees, so `toc` emits the element and baudelaire fills it after
+// the page compiles: it is in the markup a reader without script gets, and the
+// script only lights up the section being read. A page with fewer than two
+// headings gets one the stylesheet hides.
+#let contents(page) = {
+  let name = label(page, "contents", "On this page")
+  h("div", class: "toc", data-toc: true, {
+    h("p", class: "toc-title", name)
+    toc(ordered: true, class: "toc-list", aria-label: name)
+  })
+}
 
 #let search-trigger(page) = h(
   "button",

@@ -70,30 +70,22 @@ for (const button of document.querySelectorAll("[data-nav-toggle]")) {
 
 /* On-page contents -------------------------------------------------------- */
 
-// Built from the rendered article rather than from the layout: the headings are
-// in the page's own body, which the template never sees. `html { anchors }`
-// gives each one an id, so a heading without one is a heading nothing can link.
+// The list itself is in the markup: baudelaire builds it from the page's own
+// headings after the page compiles. What is left for the browser is the one
+// thing markup cannot say, which is where the reader is.
 const toc = document.querySelector("[data-toc]");
-const headings = [...document.querySelectorAll(".content h2[id], .content h3[id]")];
+const links = new Map(
+  [...(toc?.querySelectorAll("a[href^='#']") ?? [])].map((link) => [
+    decodeURIComponent(link.getAttribute("href").slice(1)),
+    link,
+  ]),
+);
 
-if (toc && headings.length > 1) {
-  const list = toc.querySelector(".toc-list");
-  for (const heading of headings) {
-    const item = document.createElement("li");
-    item.className = `toc-item toc-${heading.tagName.toLowerCase()}`;
-    const link = document.createElement("a");
-    link.href = `#${heading.id}`;
-    // The heading's own text, minus the anchor glyph a stylesheet may add.
-    link.textContent = heading.textContent.trim();
-    item.append(link);
-    list.append(item);
-  }
-  toc.hidden = false;
-
-  // Highlight the section being read. `rootMargin` pins the trigger line near
-  // the top of the viewport, so the entry lights up as its heading arrives
-  // rather than when the whole section is on screen.
-  const links = new Map(headings.map((h, i) => [h.id, list.children[i].firstChild]));
+// One entry is always the section being read, so there is nothing to follow.
+if (links.size > 1) {
+  // `rootMargin` pins the trigger line near the top of the viewport, so the
+  // entry lights up as its heading arrives rather than when the whole section
+  // is on screen.
   const spy = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
@@ -104,7 +96,10 @@ if (toc && headings.length > 1) {
     },
     { rootMargin: "-72px 0px -70% 0px" },
   );
-  for (const heading of headings) spy.observe(heading);
+  for (const id of links.keys()) {
+    const heading = document.getElementById(id);
+    if (heading) spy.observe(heading);
+  }
 }
 
 /* Copy a code block ---------------------------------------------------------

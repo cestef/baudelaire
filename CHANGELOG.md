@@ -63,9 +63,17 @@ chores are visible in the git history and change nothing for a site.
 
 - **`albatros` posts can carry their own contents and the ones nearest them.**
   `toc: true` in a page's frontmatter draws a contents list from its own
-  headings. Every post ends with the posts that share the most tags with it,
-  inside its own collection; a post with no tags gets none rather than the
-  newest three.
+  headings, built into the page rather than by a script, so a reader running
+  none still gets it. Every post ends with the posts that share the most tags
+  with it, inside its own collection; a post with no tags gets none rather than
+  the newest three. Those related posts are an `<aside>`, which the theme leaves
+  out of the page's prose: they stay off its contents list, out of the search
+  index, and out of a full-content feed entry.
+
+- **`phares` builds its on-page contents into the page.** The list is in the
+  markup a reader without JavaScript gets; the script is left with the one thing
+  markup cannot say, which is where the reader is. Both themes list a
+  subsection under the section above it now, rather than flat with an indent.
 
 - **`phares` has breadcrumbs, a last-updated line, and the components a manual
   writes with.** `callout` is joined by `tabs`/`pane`, `steps`, `cards`/`card`

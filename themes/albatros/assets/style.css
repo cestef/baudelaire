@@ -759,9 +759,8 @@ td {
 }
 
 /* Contents ----------------------------------------------------------------
-   A `<details>`, so a reader can fold it away and a page without script still
-   shows a heading rather than an empty box. `hidden` until the script has
-   something to put in it. */
+   A `<details>`, so a reader can fold it away. Baudelaire fills the list after
+   the page compiles, so it is in the markup a reader without script gets. */
 
 .toc {
   margin-block: 0 2rem;
@@ -771,7 +770,11 @@ td {
   background: var(--raised);
 }
 
-.toc[hidden] {
+/* Built into the page rather than by a script, so there is nothing to unhide.
+   What is left is what markup cannot decide: a contents list of one entry is
+   furniture, and an empty one has nothing to show. */
+.toc:has(.toc-list:empty),
+.toc:has(.toc-list > ol > li:only-child):not(:has(.toc-list li li)) {
   display: none;
 }
 
@@ -785,8 +788,13 @@ td {
 }
 
 .toc-list {
+  display: block;
+  margin-block-start: 0.6rem;
+}
+
+.toc-list ol {
   list-style: none;
-  margin: 0.6rem 0 0;
+  margin: 0;
   padding: 0;
 }
 
@@ -802,7 +810,8 @@ td {
   color: var(--accent);
 }
 
-.toc-h3 a {
+/* A subsection sits under the section above it, however deep it goes. */
+.toc-list ol ol a {
   padding-inline-start: 1rem;
   font-size: 0.94em;
 }

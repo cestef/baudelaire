@@ -9,6 +9,7 @@
 #import "@baudelaire/html:0.1.0": classes, h
 #import "@baudelaire/pages:0.1.0": pages
 #import "@baudelaire/sections:0.1.0": sections
+#import "@baudelaire/toc:0.1.0": toc
 #import "@baudelaire/site:0.1.0": author, feed-url, feeds, languages, title as site-title
 
 // An icon, as real DOM rather than an `<img>`, so it inherits `currentColor`
@@ -204,18 +205,18 @@
   }
 }
 
-// The post's own contents, above the prose. Deliberately empty markup: the
-// headings live in the compiled body, which the layout never sees, so the
-// theme's script fills this from the rendered page. A post with fewer than two
-// headings gets none at all, which the script decides.
+// The post's own contents, above the prose. The headings live in the compiled
+// body, which the layout never sees, so `toc` emits the element and baudelaire
+// fills it after the page compiles: no script, and it is there for a reader who
+// runs none. A post with fewer than two headings gets one the stylesheet hides.
 //
 // Opt in per page with `toc: true`, or for a whole collection by copying
 // `page.typ` out of the theme; a blog is mostly short posts, and a contents
 // list over two headings is furniture.
 #let contents(page) = if page.frontmatter.at("toc", default: false) {
-  h("details", class: "toc", open: true, data-toc: true, hidden: true, {
+  h("details", class: "toc", open: true, data-toc: true, {
     h("summary", class: "toc-title", label(page, "contents", "Contents"))
-    h("ol", class: "toc-list")
+    toc(ordered: true, class: "toc-list")
   })
 }
 
@@ -292,7 +293,10 @@
   // Sorting is stable, so posts sharing as many tags stay in the catalogue's
   // own order, which for a blog is newest first.
   let ranked = scored.sorted(key: pair => -pair.at(1))
-  h("section", class: "related", {
+  // An `<aside>`, and `theme.kdl` leaves those out of the page's prose: these
+  // are links away from the post, so they belong in neither its contents, its
+  // search entry, nor its feed entry.
+  h("aside", class: "related", {
     h("h2", label(page, "related", "Related posts"))
     entry-list(page, ranked.slice(0, calc.min(limit, ranked.len())).map(pair => pair.at(0)))
   })
