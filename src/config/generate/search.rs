@@ -111,14 +111,6 @@ impl Default for SearchFields {
     }
 }
 
-impl SearchFields {
-    /// Whether a page's prose is indexed at all, which is what decides if the
-    /// build has to extract text from the rendered HTML.
-    pub fn indexes_body(&self) -> bool {
-        self.body > 0
-    }
-}
-
 /// The generated command palette. Enabled by the presence of a `ui` block.
 #[derive(Debug, Clone, Hash, Table)]
 #[table(hook(switch = enabled))]

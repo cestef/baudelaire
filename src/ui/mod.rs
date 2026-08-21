@@ -228,7 +228,7 @@ impl Ui {
             s.out,
             "\n  {} {}  {}\n",
             "baudelaire".magenta().bold(),
-            concat!("v", env!("CARGO_PKG_VERSION")).dimmed(),
+            format!("v{}", crate::VERSION).dimmed(),
             action
         );
     }

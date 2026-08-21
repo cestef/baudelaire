@@ -77,14 +77,14 @@ impl NewArgs {
             if Config::has_ext(&path, Config::TYPST) {
                 path.set_extension("");
             }
-            return path.join(format!("{}.typ", config.bundle_index()));
+            return path.join(format!("{}.{}", config.bundle_index(), Config::TYPST));
         }
         if !Config::has_ext(&path, Config::TYPST) {
             let name = path
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("untitled");
-            path.set_file_name(format!("{name}.typ"));
+            path.set_file_name(format!("{name}.{}", Config::TYPST));
         }
         path
     }

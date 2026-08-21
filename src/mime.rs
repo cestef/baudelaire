@@ -37,7 +37,7 @@ impl Mime {
             return format.mime();
         }
         Self(match ext.to_ascii_lowercase().as_str() {
-            "html" => "text/html",
+            "html" | "htm" => "text/html",
             "css" => "text/css",
             "js" | "mjs" => "text/javascript",
             "svg" => "image/svg+xml",
@@ -48,6 +48,7 @@ impl Mime {
             "woff2" => "font/woff2",
             "woff" => "font/woff",
             "ttf" => "font/ttf",
+            "otf" => "font/otf",
             "json" | "map" => "application/json",
             "webmanifest" => "application/manifest+json",
             "xml" => "application/xml",
