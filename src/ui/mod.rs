@@ -17,7 +17,7 @@ use miette::{Diagnostic, GraphicalReportHandler, GraphicalTheme, Severity};
 use owo_colors::OwoColorize;
 use parking_lot::Mutex;
 
-pub use fmt::{Bytes, Count, Dur, List, Paths, Wrap};
+pub use fmt::{Bytes, Count, Dur, List, Paths, Prose, Width, Wrap};
 pub use highlight::Highlighted;
 pub use marker::{Marker, PageStatus};
 pub(crate) use markup::markup;

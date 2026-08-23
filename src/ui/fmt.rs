@@ -271,11 +271,75 @@ impl Display for Clock {
 
 const DOT: &str = " · ";
 
-/// The band [`Wrap`] clamps a terminal's real width into, and the width it
-/// stands in with outside a terminal.
+/// The band a measured width is clamped into, and the width a layout stands in
+/// with outside a terminal.
 const MIN_WIDTH: usize = 40;
 const MAX_WIDTH: usize = 200;
 const NO_TERMINAL_WIDTH: usize = 100;
+
+/// The usable width of one stream in columns, which is what every layout here
+/// breaks against.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Width(pub usize);
+
+impl Width {
+    /// The width of the payload stream, which is where a generated document is
+    /// written.
+    pub fn stdout() -> Self {
+        Self::of(&console::Term::stdout())
+    }
+
+    /// The width of the message stream, which is where every progress and log
+    /// line is written.
+    pub fn stderr() -> Self {
+        Self::of(&console::Term::stderr())
+    }
+
+    fn of(term: &console::Term) -> Self {
+        Self(term.size_checked().map_or(NO_TERMINAL_WIDTH, |(_, cols)| {
+            usize::from(cols).clamp(MIN_WIDTH, MAX_WIDTH)
+        }))
+    }
+}
+
+/// Greedy line breaking: the one place a list or a paragraph is laid out to a
+/// terminal.
+struct Fill;
+
+impl Fill {
+    /// Join `items` with `sep`, breaking before an item that would pass
+    /// `width`, with every line after the first indented to `indent` columns.
+    fn lay<'a>(
+        items: impl Iterator<Item = &'a str>,
+        sep: &str,
+        indent: usize,
+        width: usize,
+    ) -> String {
+        let gap = console::measure_text_width(sep);
+        let mut lines: Vec<String> = Vec::new();
+        let mut line = String::new();
+        let mut col = indent;
+        for item in items {
+            let w = console::measure_text_width(item);
+            if line.is_empty() {
+                line.push_str(item);
+                col = indent + w;
+            } else if col + gap + w <= width {
+                line.push_str(sep);
+                line.push_str(item);
+                col += gap + w;
+            } else {
+                lines.push(std::mem::take(&mut line));
+                line.push_str(item);
+                col = indent + w;
+            }
+        }
+        if !line.is_empty() {
+            lines.push(line);
+        }
+        lines.join(&format!("\n{}", " ".repeat(indent)))
+    }
+}
 
 /// A `·`-separated list laid out to the terminal, every line after the first
 /// indented to `indent` columns.
@@ -292,18 +356,8 @@ impl<'a> Wrap<'a> {
         Self {
             items,
             indent,
-            width: Self::width(),
+            width: Width::stderr().0,
         }
-    }
-
-    /// The usable width in columns, measured on stderr, which is where every
-    /// line laid out here is written.
-    fn width() -> usize {
-        console::Term::stderr()
-            .size_checked()
-            .map_or(NO_TERMINAL_WIDTH, |(_, cols)| {
-                usize::from(cols).clamp(MIN_WIDTH, MAX_WIDTH)
-            })
     }
 
     /// A layout at a stated width, so a test describes its own terminal.
@@ -319,33 +373,47 @@ impl<'a> Wrap<'a> {
 
 impl Display for Wrap<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let sep = console::measure_text_width(DOT);
-        let mut lines: Vec<String> = Vec::new();
-        let mut line = String::new();
-        let mut col = self.indent;
-        for item in self.items {
-            let w = console::measure_text_width(item);
-            if line.is_empty() {
-                line.push_str(item);
-                col = self.indent + w;
-            } else if col + sep + w <= self.width {
-                line.push_str(DOT);
-                line.push_str(item);
-                col += sep + w;
-            } else {
-                lines.push(std::mem::take(&mut line));
-                line.push_str(item);
-                col = self.indent + w;
-            }
+        let laid = Fill::lay(
+            self.items.iter().map(String::as_str),
+            DOT,
+            self.indent,
+            self.width,
+        );
+        write!(f, "{laid}")
+    }
+}
+
+/// Prose laid out to `width` columns, every line after the first indented to
+/// `indent`. Whitespace in the text is not preserved: it is what separates one
+/// word from the next.
+pub struct Prose<'a> {
+    text: &'a str,
+    indent: usize,
+    width: usize,
+}
+
+impl<'a> Prose<'a> {
+    /// Lay `text` out under `indent`, to a stated width.
+    pub fn at(text: &'a str, indent: usize, width: usize) -> Self {
+        Self {
+            text,
+            indent,
+            width,
         }
-        if !line.is_empty() {
-            lines.push(line);
-        }
-        write!(
-            f,
-            "{}",
-            lines.join(&format!("\n{}", " ".repeat(self.indent)))
-        )
+    }
+
+    /// The column the laid-out text's last line finishes at.
+    pub fn end(&self) -> usize {
+        let laid = self.to_string();
+        let tail = laid.rsplit('\n').next().unwrap_or_default();
+        console::measure_text_width(tail) + if laid.contains('\n') { 0 } else { self.indent }
+    }
+}
+
+impl Display for Prose<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let laid = Fill::lay(self.text.split_whitespace(), " ", self.indent, self.width);
+        write!(f, "{laid}")
     }
 }
 
@@ -388,12 +456,26 @@ mod tests {
     }
 
     #[test]
-    fn the_measured_width_stays_in_the_band() {
-        let width = Wrap::width();
-        assert!(
-            width == NO_TERMINAL_WIDTH || (MIN_WIDTH..=MAX_WIDTH).contains(&width),
-            "{width}"
+    fn a_measured_width_stays_in_the_band() {
+        for width in [Width::stdout().0, Width::stderr().0] {
+            assert!(
+                width == NO_TERMINAL_WIDTH || (MIN_WIDTH..=MAX_WIDTH).contains(&width),
+                "{width}"
+            );
+        }
+    }
+
+    #[test]
+    fn prose_breaks_at_width_and_hangs_the_rest_at_the_indent() {
+        assert_eq!(
+            Prose::at("one two three four", 4, 16).to_string(),
+            "one two\n    three four"
         );
+    }
+
+    #[test]
+    fn prose_collapses_the_whitespace_it_breaks_on() {
+        assert_eq!(Prose::at("one\n  two", 0, 40).to_string(), "one two");
     }
 
     #[test]
