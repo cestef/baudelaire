@@ -29,6 +29,13 @@ pub struct Entry {
     pub depth: usize,
 }
 
+impl Entry {
+    /// The columns the entry's key takes, its indent included.
+    fn head(&self) -> usize {
+        self.depth * 2 + self.key.len()
+    }
+}
+
 impl Reference {
     pub fn new() -> Self {
         let mut entries = Vec::new();
@@ -115,34 +122,95 @@ impl Default for Reference {
     }
 }
 
+/// Where a rendering's two gutters fall: the shape column past the longest
+/// key, the doc column past the longest shape, each capped at a share of the
+/// terminal so a doc keeps the rest of it to wrap in.
+#[derive(Debug, Clone, Copy)]
+struct Columns {
+    shape: usize,
+    doc: usize,
+    width: usize,
+}
+
+impl Columns {
+    /// The gap between one column and the next.
+    const GAP: usize = 2;
+    /// The share of the terminal one gutter may take, which is what holds the
+    /// doc column back from the longest shape there is: a single
+    /// `one-of<..>` spelled out in full used to space the whole table.
+    const SHARE: usize = 4;
+
+    fn of(reference: &Reference, width: usize) -> Self {
+        let cap = width / Self::SHARE;
+        let longest = |f: fn(&Entry) -> usize| {
+            reference
+                .entries()
+                .iter()
+                .map(f)
+                .max()
+                .unwrap_or(0)
+                .min(cap)
+        };
+        let shape = longest(Entry::head) + Self::GAP;
+        let doc = shape + longest(|e| e.kind.label().len()) + Self::GAP;
+        Self { shape, doc, width }
+    }
+
+    /// What carries a row from column `at` to `column`: spaces, or a line of
+    /// its own when the row has already passed it.
+    fn pad(column: usize, at: usize) -> String {
+        if at + Self::GAP <= column {
+            " ".repeat(column - at)
+        } else {
+            format!("\n{}", " ".repeat(column))
+        }
+    }
+}
+
 /// The reference as a terminal tree: what `baudelaire reference` writes,
 /// indented by nesting depth rather than by full dotted path.
-pub struct Terminal<'a>(pub &'a Reference);
+pub struct Terminal<'a> {
+    reference: &'a Reference,
+    width: usize,
+}
+
+impl<'a> Terminal<'a> {
+    /// Render `reference` to the width of the stream it is written to.
+    pub fn new(reference: &'a Reference) -> Self {
+        Self {
+            reference,
+            width: crate::ui::Width::stdout().0,
+        }
+    }
+
+    /// A rendering at a stated width, so a test describes its own terminal.
+    #[cfg(test)]
+    fn at(reference: &'a Reference, width: usize) -> Self {
+        Self { reference, width }
+    }
+}
 
 impl fmt::Display for Terminal<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use owo_colors::{OwoColorize, Stream::Stdout};
 
-        let width = self
-            .0
-            .entries()
-            .iter()
-            .map(|e| e.depth * 2 + e.key.len() + e.kind.label().len() + 3)
-            .max()
-            .unwrap_or(0);
-        for entry in self.0.entries() {
-            let indent = " ".repeat(entry.depth * 2);
+        let columns = Columns::of(self.reference, self.width);
+        for entry in self.reference.entries() {
             let label = entry.kind.label();
-            let plain = indent.len() + entry.key.len() + label.len() + 3;
+            let shape = crate::ui::Prose::at(&label, columns.shape, columns.width);
             writeln!(
                 f,
-                "{indent}{}  {}{}{}",
+                "{}{}{}{}{}{}",
+                " ".repeat(entry.depth * 2),
                 entry
                     .key
                     .if_supports_color(Stdout, |t| t.green().bold().to_string()),
-                label.if_supports_color(Stdout, |t| t.dimmed().to_string()),
-                " ".repeat(width.saturating_sub(plain) + 2),
-                entry.doc,
+                Columns::pad(columns.shape, entry.head()),
+                shape
+                    .to_string()
+                    .if_supports_color(Stdout, |t| t.dimmed().to_string()),
+                Columns::pad(columns.doc, shape.end()),
+                crate::ui::Prose::at(entry.doc, columns.doc, columns.width),
             )?;
         }
         Ok(())
@@ -251,7 +319,56 @@ impl Kind {
 
 #[cfg(test)]
 mod tests {
-    use super::{Kind, Reference};
+    use super::{Columns, Kind, Reference, Terminal};
+
+    /// The rendering a reader without colour sees, at a stated terminal width.
+    fn rendered(reference: &Reference, width: usize) -> String {
+        console::strip_ansi_codes(&Terminal::at(reference, width).to_string()).into_owned()
+    }
+
+    #[test]
+    fn a_long_shape_does_not_space_the_whole_table() {
+        for width in [60, 80, 100, 200] {
+            let columns = Columns::of(&Reference::new(), width);
+            assert!(columns.shape < columns.doc, "{width}: {columns:?}");
+            assert!(
+                columns.doc <= width / 2 + 2 * Columns::GAP,
+                "{width}: {columns:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn every_line_fits_the_terminal_unless_it_holds_one_word() {
+        let reference = Reference::new();
+        for width in [60, 80, 100, 200] {
+            for line in rendered(&reference, width).lines() {
+                assert!(
+                    console::measure_text_width(line) <= width
+                        || line.split_whitespace().count() == 1,
+                    "at {width}: {line}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn what_carries_on_below_a_row_starts_at_one_of_its_columns() {
+        let reference = Reference::new();
+        let columns = Columns::of(&reference, 80);
+        let rendering = rendered(&reference, 80);
+        let indents: Vec<usize> = rendering
+            .lines()
+            .map(|line| line.len() - line.trim_start().len())
+            .collect();
+        assert!(indents.contains(&columns.doc), "{columns:?}");
+        for indent in indents {
+            assert!(
+                indent <= columns.shape || indent == columns.doc,
+                "{indent}: {columns:?}"
+            );
+        }
+    }
 
     #[test]
     fn a_multi_value_choice_renders_as_a_list() {

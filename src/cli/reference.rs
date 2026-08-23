@@ -36,7 +36,7 @@ impl Run for ReferenceArgs {
             None => Reference::new(),
             Some(key) => Reference::at(key).ok_or_else(|| UnknownKey::at(key))?,
         };
-        Generated::Reference.emit(Terminal(&reference).to_string().as_bytes())?;
+        Generated::Reference.emit(Terminal::new(&reference).to_string().as_bytes())?;
         Ok(())
     }
 }
