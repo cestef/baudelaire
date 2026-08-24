@@ -1,7 +1,7 @@
 {
- "badge": "d9bc23cc17d0e8fe",
- "commit": "a2729b066f8a198b743c45dcb4e6cad9c38ccb2b",
- "covered": 41439,
+ "badge": "5ed3b99cde9a2e90",
+ "commit": "5e0e3481538d605ae6bc21739a3ed5f73135e0a7",
+ "covered": 41594,
  "files": {
   "macros/src/key.rs": [
    82,
@@ -284,7 +284,7 @@
    115
   ],
   "src/config/content/markdown.rs": [
-   16,
+   18,
    18
   ],
   "src/config/content/mod.rs": [
@@ -376,7 +376,7 @@
    614
   ],
   "src/config/named.rs": [
-   173,
+   193,
    256
   ],
   "src/config/navigation/spa.rs": [
@@ -420,8 +420,8 @@
    22
   ],
   "src/config/reference.rs": [
-   191,
-   209
+   270,
+   286
   ],
   "src/config/schema.rs": [
    507,
@@ -1280,8 +1280,8 @@
    127
   ],
   "src/ui/fmt.rs": [
-   300,
-   321
+   354,
+   375
   ],
   "src/ui/highlight.rs": [
    29,
@@ -1372,8 +1372,8 @@
    29
   ]
  },
- "percent": 84.54,
+ "percent": 84.63,
  "schema": 2,
- "total": 49015,
- "updated": "2026-08-22T04:10:16+00:00"
+ "total": 49146,
+ "updated": "2026-08-24T04:20:20+00:00"
 }
