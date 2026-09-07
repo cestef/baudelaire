@@ -21,7 +21,7 @@ pub use fmt::{Bytes, Count, Dur, List, Paths, Prose, Width, Wrap};
 pub use highlight::Highlighted;
 pub use marker::{Marker, PageStatus};
 pub(crate) use markup::markup;
-pub use markup::{Code, Markup, Styled, Text};
+pub use markup::{Code, Markup, Plain, Styled, Text};
 pub use progress::{Progress, Step};
 
 /// Return the cursor to column 0 and erase the line; only ever written to a
@@ -523,6 +523,9 @@ impl Ui {
     }
 
     /// A dev-server request that missed (verbose+): `12:31:02 404 /x.ico`.
+    ///
+    /// The target is whatever the client put on the request line, so it is
+    /// written through [`Plain`] rather than as itself.
     pub fn request(&self, code: u16, url: &str) {
         let mut s = self.state.lock();
         if s.level < Level::Verbose {
@@ -533,7 +536,7 @@ impl Ui {
             "  {}  {} {}",
             fmt::Clock.to_string().dimmed(),
             code.yellow(),
-            url.dimmed()
+            Plain(url).to_string().dimmed()
         );
     }
 

@@ -58,7 +58,18 @@ pub struct Text<T>(pub T);
 
 impl<T: Display> Display for Text<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(Escaping(f), "{}", self.0)
+        write!(Escaping::markup(f), "{}", self.0)
+    }
+}
+
+/// A value written to the terminal outside a diagnostic, stripped of the
+/// control characters but with its markup characters left as they are.
+#[derive(Debug, Clone, Copy)]
+pub struct Plain<T>(pub T);
+
+impl<T: Display> Display for Plain<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(Escaping::literal(f), "{}", self.0)
     }
 }
 
@@ -74,12 +85,26 @@ impl<T: Display> Display for Code<T> {
     }
 }
 
-/// A [`fmt::Write`] that escapes markup on the way through.
+/// A [`fmt::Write`] that drops control characters on the way through, and
+/// escapes markup as well when `markup` is set.
 ///
-/// Control characters are dropped rather than escaped: an interpolated value is
-/// a page's own text, and one carrying `\x1b[` would otherwise close the span it
-/// sits in and restyle the rest of the terminal.
-struct Escaping<'a, 'b>(&'a mut fmt::Formatter<'b>);
+/// Control characters are dropped rather than escaped either way: the value is
+/// text this build did not write, and one carrying `\x1b[` would otherwise
+/// close the span it sits in and restyle the rest of the terminal.
+struct Escaping<'a, 'b> {
+    out: &'a mut fmt::Formatter<'b>,
+    markup: bool,
+}
+
+impl<'a, 'b> Escaping<'a, 'b> {
+    fn markup(out: &'a mut fmt::Formatter<'b>) -> Self {
+        Self { out, markup: true }
+    }
+
+    fn literal(out: &'a mut fmt::Formatter<'b>) -> Self {
+        Self { out, markup: false }
+    }
+}
 
 impl fmt::Write for Escaping<'_, '_> {
     fn write_str(&mut self, s: &str) -> fmt::Result {
@@ -87,10 +112,10 @@ impl fmt::Write for Escaping<'_, '_> {
             if c.is_control() && c != '\n' && c != '\t' {
                 continue;
             }
-            if Kind::is_special(c) {
-                self.0.write_char(ESCAPE)?;
+            if self.markup && Kind::is_special(c) {
+                self.out.write_char(ESCAPE)?;
             }
-            self.0.write_char(c)?;
+            self.out.write_char(c)?;
         }
         Ok(())
     }
