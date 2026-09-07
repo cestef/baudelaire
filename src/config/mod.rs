@@ -777,6 +777,17 @@ impl Config {
             .join(format!(".{}.staging", self.asset_name()))
     }
 
+    /// Where the tree being replaced is moved aside to while
+    /// [`Assets::publish`] swaps the new one in, so a build that dies mid-swap
+    /// leaves one of the two standing rather than neither.
+    ///
+    /// [`Assets::publish`]: crate::engine::asset::Assets::publish
+    pub fn asset_replaced(&self) -> PathBuf {
+        self.paths
+            .dist
+            .join(format!(".{}.replaced", self.asset_name()))
+    }
+
     /// A URL's path segments, joined back with everything that is not one
     /// dropped.
     ///

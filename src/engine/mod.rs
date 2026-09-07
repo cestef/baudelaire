@@ -248,6 +248,7 @@ impl Engine {
     fn stage(&self) -> Result<Copied> {
         fs::create_dir_all(&self.config.paths.dist)?;
         let _ = std::fs::remove_dir_all(self.config.asset_staging());
+        let _ = std::fs::remove_dir_all(self.config.asset_replaced());
         let statics = Static::new(&self.config, self.theme.as_ref()).copy()?;
         debug!(
             count = statics.count,

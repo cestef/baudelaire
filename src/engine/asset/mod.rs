@@ -144,14 +144,29 @@ impl<'a> Assets<'a> {
     /// previous build left there. Call once every page is on disk naming the
     /// new asset filenames; the served tree is dropped even when this build
     /// staged nothing, since the prune pass skips it.
+    ///
+    /// The old tree is moved aside rather than deleted first: between a delete
+    /// and a rename there is a window where the site has no assets at all, and
+    /// a build that dies in it leaves every asset URL a 404 until the next
+    /// build that gets all the way through.
     pub fn publish(&self) -> Result<()> {
         let served = self.config.asset_dist();
+        if !self.dst.exists() {
+            if served.exists() {
+                fs::remove_dir_all(&served)?;
+            }
+            return Ok(());
+        }
+        let aside = self.config.asset_replaced();
+        let _ = std::fs::remove_dir_all(&aside);
         if served.exists() {
-            fs::remove_dir_all(&served)?;
+            fs::rename(&served, &aside)?;
         }
-        if self.dst.exists() {
-            fs::rename(&self.dst, &served)?;
+        if let Err(e) = fs::rename(&self.dst, &served) {
+            let _ = std::fs::rename(&aside, &served);
+            return Err(e);
         }
+        let _ = std::fs::remove_dir_all(&aside);
         Ok(())
     }
 
