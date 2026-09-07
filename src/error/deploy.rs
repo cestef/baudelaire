@@ -255,6 +255,13 @@ pub enum DeployError {
     )]
     HostKeyUnverifiable { host: String },
 
+    #[error("the ssh handshake with {} did not finish within {}", Code(.host), Text(.within))]
+    #[diagnostic(
+        code(baudelaire::deploy::ssh::handshake),
+        help("check that the host is reachable on the configured `port`")
+    )]
+    Handshake { host: String, within: String },
+
     #[error("no ssh user configured and `$USER` is unset")]
     #[diagnostic(
         code(baudelaire::deploy::ssh::no_user),
@@ -409,6 +416,13 @@ impl DeployError {
 
     pub fn host_key_unverifiable(host: impl Into<String>) -> Self {
         Self::HostKeyUnverifiable { host: host.into() }
+    }
+
+    pub fn handshake(host: impl Into<String>, within: std::time::Duration) -> Self {
+        Self::Handshake {
+            host: host.into(),
+            within: format!("{}s", within.as_secs()),
+        }
     }
 
     /// The port a `known_hosts` line is written without brackets for.

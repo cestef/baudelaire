@@ -1,7 +1,9 @@
 //! The SSH transport: one authenticated connection with an open SFTP session,
 //! and the remote directory it reconciles into.
 
+use std::future::Future;
 use std::sync::Arc;
+use std::time::Duration;
 
 use parking_lot::Mutex;
 
@@ -28,6 +30,16 @@ pub struct Session {
 }
 
 impl Session {
+    /// The ceiling on setting a session up, from the socket to the open SFTP
+    /// subsystem; keepalives take over once there is a session to ping.
+    const HANDSHAKE: Duration = Duration::from_secs(30);
+
+    /// How often an otherwise idle session pings, and how many unanswered pings
+    /// close it. A host that wedges mid-deploy answers nothing and is never
+    /// read from again, which without this hangs the command indefinitely.
+    const KEEPALIVE: Duration = Duration::from_secs(15);
+    const UNANSWERED: usize = 4;
+
     /// Connect, verify the host key, authenticate, and open the SFTP subsystem.
     ///
     /// A host-key warning is flushed as it happens, since warnings are buffered
@@ -38,38 +50,50 @@ impl Session {
         opts: &Options<'_>,
         ui: &Ui,
     ) -> Result<Self> {
-        let rc = Arc::new(client::Config::default());
+        let rc = Arc::new(client::Config {
+            keepalive_interval: Some(Self::KEEPALIVE),
+            keepalive_max: Self::UNANSWERED,
+            ..client::Config::default()
+        });
         let verdict = Arc::new(Mutex::new(None));
         let client = Client::new(config, Arc::clone(&verdict));
         let host = config.host.as_str();
-        let mut handle = client::connect(rc, (host, config.port), client)
-            .await
-            .map_err(|e| match verdict.lock().as_ref().map(|seen| seen.verdict) {
-                Some(Verdict::Changed) => DeployError::host_key_changed(host, config.port),
-                Some(Verdict::Unverifiable) if config.strict => {
-                    DeployError::host_key_unverifiable(host)
+        let mut handle = Self::within(host, client::connect(rc, (host, config.port), client))
+            .await?
+            .map_err(|e| {
+                let seen = verdict.lock().as_ref().map(|seen| seen.verdict);
+                match seen {
+                    Some(Verdict::Changed) => DeployError::host_key_changed(host, config.port),
+                    Some(Verdict::Unverifiable) if config.strict => {
+                        DeployError::host_key_unverifiable(host)
+                    }
+                    _ => DeployError::connect(host, e),
                 }
-                _ => DeployError::connect(host, e),
             })?;
         Self::report(config, verdict.lock().take(), ui);
-        Auth::new(config, opts).run(&mut handle, user).await?;
+        Self::within(host, Auth::new(config, opts).run(&mut handle, user)).await??;
 
-        let channel = handle
-            .channel_open_session()
-            .await
+        let channel = Self::within(host, handle.channel_open_session())
+            .await?
             .map_err(|e| DeployError::connect(host, e))?;
-        channel
-            .request_subsystem(true, "sftp")
-            .await
+        Self::within(host, channel.request_subsystem(true, "sftp"))
+            .await?
             .map_err(|e| DeployError::connect(host, e))?;
-        let sftp = SftpSession::new(channel.into_stream())
-            .await
+        let sftp = Self::within(host, SftpSession::new(channel.into_stream()))
+            .await?
             .map_err(|e| DeployError::transfer(Step::OpenSftp, e))?;
         Ok(Self {
             handle,
             sftp,
             remote: Remote::new(&config.path),
         })
+    }
+
+    /// Await one step of the handshake under [`Session::HANDSHAKE`].
+    async fn within<T>(host: &str, work: impl Future<Output = T>) -> Result<T> {
+        tokio::time::timeout(Self::HANDSHAKE, work)
+            .await
+            .map_err(|_| DeployError::handshake(host, Self::HANDSHAKE).into())
     }
 
     /// Say out loud what verifying the host key concluded, so neither a
