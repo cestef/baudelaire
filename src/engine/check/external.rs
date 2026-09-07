@@ -85,6 +85,7 @@ impl External {
                 }),
             }
         }
+        verified.retain(targets.keys().copied());
         verified.save(site.config);
 
         if !unreachable.is_empty() {
@@ -249,6 +250,13 @@ impl Verified {
                 status,
             },
         );
+    }
+
+    /// Drop every URL this run's pages no longer name, so the record tracks the
+    /// site rather than growing for the life of the project.
+    fn retain<'a>(&mut self, urls: impl IntoIterator<Item = &'a str>) {
+        let named: std::collections::BTreeSet<&str> = urls.into_iter().collect();
+        self.0.retain(|url, _| named.contains(url.as_str()));
     }
 
     /// Persist the record, best-effort: failing to write a cache must not fail
