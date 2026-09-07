@@ -14,7 +14,18 @@ pub(crate) struct Scoped {
 
 impl Scoped {
     /// Confine to the elements carrying `attribute="value"`.
+    ///
+    /// The value is escaped as CSS spells a string: it is written into a quoted
+    /// selector, and one carrying a quote of its own would otherwise close it
+    /// and leave the rest of the value as selector syntax.
     pub(crate) fn attribute(attribute: &str, value: &str) -> Self {
+        let value: String = value
+            .chars()
+            .flat_map(|c| {
+                let escape = matches!(c, '"' | '\\').then_some('\\');
+                escape.into_iter().chain(std::iter::once(c))
+            })
+            .collect();
         Self {
             scope: format!(":where([{attribute}=\"{value}\"])"),
         }
