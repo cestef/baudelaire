@@ -8,6 +8,21 @@ use typst_kit::packages::{FsPackages, SystemPackages, UniversePackages};
 /// site names one, the official one otherwise.
 pub struct Registry<'a>(pub Option<&'a str>);
 
+/// Where a downloaded or system-installed package is served from.
+pub struct Store;
+
+impl Store {
+    /// The directories packages live in, which nothing watches and no rebuild
+    /// waits on: they are machine-global and never edited in place.
+    pub fn dirs() -> Vec<std::path::PathBuf> {
+        [FsPackages::system_data(), FsPackages::system_cache()]
+            .into_iter()
+            .flatten()
+            .map(|dir| dir.path().to_path_buf())
+            .collect()
+    }
+}
+
 impl From<Registry<'_>> for SystemPackages {
     fn from(Registry(url): Registry<'_>) -> Self {
         let downloader = SystemDownloader::new(super::USER_AGENT);

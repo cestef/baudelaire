@@ -289,15 +289,17 @@ impl Cache {
     /// project root: sources, their transitive imports, and the data files a
     /// page loaded.
     ///
-    /// Paths recorded as absolute are left out: those lie outside the project
-    /// (typst's package cache), and nothing there is edited by hand.
+    /// A package's own files are left out, and only those: nothing there is
+    /// edited by hand, while a template shared from beside the project is, and
+    /// keying it absolutely is not what makes it uninteresting.
     pub fn read(&self) -> impl Iterator<Item = PathBuf> + '_ {
+        let packaged = crate::world::Store::dirs();
         self.next
             .pages
             .values()
             .flat_map(|entry| entry.deps.keys())
-            .filter(|dep| dep.is_relative())
             .map(|dep| self.root.join(dep))
+            .filter(move |path| !packaged.iter().any(|dir| path.starts_with(dir)))
     }
 
     fn roots(&self) -> Roots<'_> {

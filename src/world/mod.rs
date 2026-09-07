@@ -22,7 +22,7 @@ mod packages;
 pub mod rules;
 
 pub use context::{BuildContext, Mode};
-pub(crate) use packages::Registry;
+pub(crate) use packages::{Registry, Store};
 
 use parking_lot::RwLock;
 use typst_kit::{files::FileStore, files::FsRoot, packages::SystemPackages};
