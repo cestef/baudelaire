@@ -78,6 +78,15 @@ impl Private {
             || (!config.assets.bundling() && Scripts::unbundled(&ext))
     }
 
+    /// Whether `rel` is an input for one reason alone: bundling is off. The
+    /// other exclusions a site reads off the filename; this one it cannot.
+    pub(super) fn unbundled(rel: &Path, config: &Config) -> bool {
+        !config.assets.bundling()
+            && Scripts::unbundled(&rel.ext().to_ascii_lowercase())
+            && !Self::partial(rel)
+            && !Self::declaration(rel)
+    }
+
     /// A Sass source in a binary with no Sass compiler: the one input this
     /// build recognizes and cannot turn into anything.
     fn uncompiled(ext: &str) -> bool {

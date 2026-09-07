@@ -197,6 +197,35 @@ impl From<Vec<Unreachable>> for UnreachableLinks {
 }
 
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("{} is not published", Code(.file))]
+#[diagnostic(code(baudelaire::assets::unbundled), severity(warning))]
+pub struct Unbundled {
+    pub file: String,
+}
+
+/// The other two exclusions a site can read off a filename (`_partial`,
+/// `.d.ts`); this one it can only read off a config key elsewhere.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("{} asset{} need a bundler to be published", files.len(), if files.len() == 1 { "" } else { "s" })]
+#[diagnostic(
+    code(baudelaire::assets::unbundled_sources),
+    severity(warning),
+    help("set `assets {{ bundle #true }}`, or move them out of the asset tree")
+)]
+pub struct UnbundledSources {
+    #[related]
+    pub files: Vec<Unbundled>,
+}
+
+impl From<Vec<String>> for UnbundledSources {
+    fn from(files: Vec<String>) -> Self {
+        Self {
+            files: files.into_iter().map(|file| Unbundled { file }).collect(),
+        }
+    }
+}
+
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
 #[error("no page at {}, single-file export skipped", Code(.entry))]
 #[diagnostic(
     code(baudelaire::output::standalone_entry),

@@ -332,6 +332,11 @@ impl Engine {
     fn processed(assets: &Assets<'_>, ui: &Ui) -> Result<crate::engine::asset::Processed> {
         let _step = ui.step("processing assets");
         let processed = assets.process()?;
+        if !processed.unbundled.is_empty() {
+            ui.warn(crate::error::warning::UnbundledSources::from(
+                processed.unbundled.clone(),
+            ));
+        }
         debug!(
             count = processed.count,
             bytes = processed.bytes,

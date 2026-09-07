@@ -66,6 +66,9 @@ pub struct Processed {
     /// The [`Owned`] assets this build named but has not written; see
     /// [`Assets::generated`].
     pub deferred: Vec<Deferred>,
+    /// Script sources dropped only because bundling is off, for the caller to
+    /// say so: nothing about the file itself marks it as an input.
+    pub unbundled: Vec<String>,
 }
 
 /// An asset the build provides itself, named and digested but not yet on disk:
@@ -183,9 +186,13 @@ impl<'a> Assets<'a> {
             emitted: Emitted::new(self.config.base_path().to_owned()),
             ..Processed::default()
         };
-        let sources: Vec<Layered> = self
-            .sources
-            .files()?
+        let files = self.sources.files()?;
+        out.unbundled = files
+            .iter()
+            .filter(|file| Private::unbundled(&file.rel, self.config))
+            .map(|file| file.rel.display().to_string())
+            .collect();
+        let sources: Vec<Layered> = files
             .into_iter()
             .filter(|file| !Private::covers(&file.rel, self.config))
             .collect();
