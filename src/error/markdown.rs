@@ -70,6 +70,20 @@ pub enum MarkdownError {
         span: SourceSpan,
     },
 
+    #[error("frontmatter in {} nests more than {} levels deep", Text(.path), .limit)]
+    #[diagnostic(
+        code(baudelaire::markdown::frontmatter_depth),
+        help("flatten the block; a value that deep is a mistake rather than a schema")
+    )]
+    FrontmatterDepth {
+        path: String,
+        limit: usize,
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("this is as deep as a block goes")]
+        span: SourceSpan,
+    },
+
     #[error("frontmatter in {} is not valid {}", Text(.path), Text(.dialect))]
     #[diagnostic(code(baudelaire::markdown::frontmatter))]
     Frontmatter {

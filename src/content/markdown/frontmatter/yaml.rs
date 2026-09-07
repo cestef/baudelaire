@@ -7,7 +7,7 @@ use saphyr::{AnnotatedMapping, LoadableYamlNode as _, MarkedYaml, Marker, Scalar
 use saphyr_parser::{Event, Parser, Span, SpannedEventReceiver};
 use typst::foundations::{Dict, Value};
 
-use super::{Block, Spans};
+use super::{Block, Spans, too_deep};
 use crate::error::Result;
 use crate::error::markdown::{FrontmatterFault, MarkdownError};
 use crate::ui::Text;
@@ -48,6 +48,9 @@ pub fn parse(text: &str, offset: usize, path: &str, source: &str) -> Result<Bloc
             reader.fields(mapping, &[])
         }
     };
+    if let Some(at) = &reader.deep {
+        return Err(too_deep(path, source, reader.spans.of(at)));
+    }
     Ok(Block {
         dict,
         spans: reader.spans,
@@ -60,6 +63,8 @@ struct Reader<'a> {
     /// The file, which every span recorded here indexes into.
     source: &'a str,
     spans: Spans,
+    /// The path of the first value that nested past [`super::DEPTH`].
+    deep: Option<Vec<String>>,
 }
 
 impl<'a> Reader<'a> {
@@ -70,6 +75,7 @@ impl<'a> Reader<'a> {
             bytes: Bytes::new(text, offset),
             source,
             spans: Spans::default(),
+            deep: None,
         };
         let block = reader.trim(offset..offset + text.len());
         reader.spans.insert(Vec::new(), block);
@@ -94,6 +100,10 @@ impl<'a> Reader<'a> {
 
     /// What a node holds, as its typst counterpart.
     fn read(&mut self, node: &MarkedYaml<'_>, at: &[String]) -> Value {
+        if at.len() > super::DEPTH {
+            self.deep.get_or_insert_with(|| at.to_vec());
+            return Value::None;
+        }
         match &node.data {
             YamlData::Value(scalar) => Self::scalar(scalar),
             YamlData::Sequence(items) => Value::Array(

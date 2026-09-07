@@ -5,7 +5,7 @@ use std::ops::Range;
 use toml_edit::{Item, TableLike, Value as TomlValue};
 use typst::foundations::{Dict, Value};
 
-use super::{Block, Spans};
+use super::{Block, Spans, too_deep};
 use crate::error::Result;
 use crate::error::markdown::{FrontmatterFault, MarkdownError};
 use crate::ui::Text;
@@ -31,6 +31,9 @@ pub fn parse(text: &str, offset: usize, path: &str, source: &str) -> Result<Bloc
         }
     })?;
     let dict = reader.fields(doc.as_table(), &[]);
+    if let Some(at) = &reader.deep {
+        return Err(too_deep(path, source, reader.spans.of(at)));
+    }
     Ok(Block {
         dict,
         spans: reader.spans,
@@ -41,6 +44,8 @@ struct Reader {
     /// Where the block starts in the file, folded into every span this records.
     offset: usize,
     spans: Spans,
+    /// The path of the first value that nested past [`super::DEPTH`].
+    deep: Option<Vec<String>>,
 }
 
 impl Reader {
@@ -51,10 +56,21 @@ impl Reader {
         let mut reader = Self {
             offset,
             spans: Spans::default(),
+            deep: None,
         };
         let block = reader.shift(0..text.len());
         reader.spans.insert(Vec::new(), block);
         reader
+    }
+
+    /// Whether `at` has nested past [`super::DEPTH`], recording the first place
+    /// it did so the diagnostic can point at it.
+    fn too_deep(&mut self, at: &[String]) -> bool {
+        let deep = at.len() > super::DEPTH;
+        if deep {
+            self.deep.get_or_insert_with(|| at.to_vec());
+        }
+        deep
     }
 
     /// A span of the block, as a span of the file it sits in.
@@ -90,6 +106,9 @@ impl Reader {
     /// [[post]]           # repeated: an array of tables
     /// ```
     fn read(&mut self, item: &Item, at: &[String]) -> Value {
+        if self.too_deep(at) {
+            return Value::None;
+        }
         match item {
             Item::Value(value) => self.value(value, at),
             Item::Table(table) => Value::Dict(self.fields(table, at)),
@@ -115,6 +134,9 @@ impl Reader {
     /// an array was written on the way through; a datetime becomes its own
     /// spelling, which is the ISO string the frontmatter date reader takes.
     fn value(&mut self, value: &TomlValue, at: &[String]) -> Value {
+        if self.too_deep(at) {
+            return Value::None;
+        }
         match value {
             TomlValue::String(v) => Value::Str(v.value().as_str().into()),
             TomlValue::Integer(v) => Value::Int(*v.value()),

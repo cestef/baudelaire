@@ -22,6 +22,13 @@ pub enum Dialect {
     Kdl,
 }
 
+/// How deep a block may nest before it is refused, in every dialect.
+///
+/// Each reader converts a value by recursing, so a page's own nesting is what
+/// bounds the stack: without a ceiling a block nested thousands deep aborts the
+/// build with nothing said rather than failing as a page.
+pub const DEPTH: usize = 64;
+
 /// A dialect's reader, taking the text between the fences, where it sits in the
 /// file, and the path and source a syntax error names and renders from.
 type Read = fn(&str, usize, &str, &str) -> Result<Block>;
@@ -77,6 +84,23 @@ impl Dialect {
             .find(|fence| fence.dialect == self)
             .expect("every dialect has a row in FENCES")
     }
+}
+
+/// The fault a block nested past [`DEPTH`] is refused with, underlining the
+/// deepest thing the author wrote where the value itself has no span.
+fn too_deep(
+    path: &str,
+    source: &str,
+    span: Option<Range<usize>>,
+) -> crate::error::BaudelaireErrorKind {
+    let span = span.unwrap_or(0..source.len());
+    crate::error::markdown::MarkdownError::FrontmatterDepth {
+        path: path.to_owned(),
+        limit: DEPTH,
+        src: miette::NamedSource::new(path, source.to_owned()),
+        span: (span.start, span.len()).into(),
+    }
+    .into()
 }
 
 /// A frontmatter block, read: the fields it declares and where each was

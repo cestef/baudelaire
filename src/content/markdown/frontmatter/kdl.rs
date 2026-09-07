@@ -4,7 +4,7 @@
 use kdl::{KdlDocument, KdlNode, KdlValue};
 use typst::foundations::{Dict, Value};
 
-use super::{Block, Spans};
+use super::{Block, Spans, too_deep};
 use crate::error::Result;
 use crate::error::markdown::{FrontmatterFault, MarkdownError};
 
@@ -37,6 +37,9 @@ pub fn parse(text: &str, offset: usize, path: &str, source: &str) -> Result<Bloc
         }
         .into());
     }
+    if let Some(at) = &reader.deep {
+        return Err(too_deep(path, source, reader.spans.of(at)));
+    }
     if let Some((key, span)) = reader.ambiguous {
         return Err(MarkdownError::AmbiguousNode {
             path: path.to_owned(),
@@ -61,6 +64,8 @@ struct Reader {
     ambiguous: Option<(String, std::ops::Range<usize>)>,
     /// The first key declared twice at one level, and where the second one is.
     duplicate: Option<(String, std::ops::Range<usize>)>,
+    /// The path of the first value that nested past [`super::DEPTH`].
+    deep: Option<Vec<String>>,
 }
 
 impl Reader {
@@ -72,6 +77,7 @@ impl Reader {
             spans: Spans::default(),
             ambiguous: None,
             duplicate: None,
+            deep: None,
         };
         let block = reader.shift(doc.span());
         reader.spans.insert(Vec::new(), block);
@@ -113,6 +119,10 @@ impl Reader {
     /// author { name "cstef" }    // a block, or `key=value` entries, is a dict
     /// ```
     fn read(&mut self, node: &KdlNode, at: &[String]) -> Value {
+        if at.len() > super::DEPTH {
+            self.deep.get_or_insert_with(|| at.to_vec());
+            return Value::None;
+        }
         let named: Vec<_> = node
             .entries()
             .iter()
