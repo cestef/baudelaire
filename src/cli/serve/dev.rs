@@ -17,7 +17,7 @@ use crate::config::Config;
 use crate::engine::{Engine, Mode};
 use crate::error::Result;
 use crate::error::serve::ServeError;
-use crate::error::warning::{BrowserOpen, ConfigReload, RebuildFailed, WatchLost};
+use crate::error::warning::{BrowserOpen, ConfigReload, RebuildFailed, ServeRebound, WatchLost};
 use crate::ui::{Level, Paths, Timer, Ui};
 
 /// Orchestrates a dev-server session: the initial build, the HTTP handler, and
@@ -245,6 +245,9 @@ impl<'a> Dev<'a> {
         if config_changed {
             match (self.reload)() {
                 Ok(config) => {
+                    if let Some(warning) = Self::rebound(&self.config, &config) {
+                        self.ui.warn(warning);
+                    }
                     self.config = config;
                     self.restart();
                 }
@@ -285,6 +288,14 @@ impl<'a> Dev<'a> {
             }
         }
         config_changed
+    }
+
+    /// The warning for a reloaded `serve { }` that names a different address:
+    /// the socket is bound once, at startup, so the new one takes no effect and
+    /// would otherwise look like every other setting a reload applies.
+    fn rebound(was: &Config, now: &Config) -> Option<ServeRebound> {
+        let addr = |config: &Config| format!("{}:{}", config.serve.bind, config.serve.port);
+        (addr(was) != addr(now)).then(|| ServeRebound { addr: addr(now) })
     }
 
     /// Whether the open tabs can swap their stylesheets instead of reloading:

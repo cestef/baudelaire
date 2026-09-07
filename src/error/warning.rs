@@ -315,6 +315,19 @@ pub struct BrowserOpen {
     pub source: std::io::Error,
 }
 
+/// Every other reloaded setting takes effect; this one silently does not,
+/// which reads as a config edit that did nothing.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("the server is already bound, so it is not now serving {}", Code(.addr))]
+#[diagnostic(
+    code(baudelaire::serve::rebound),
+    severity(warning),
+    help("restart `baudelaire serve` to bind the new address")
+)]
+pub struct ServeRebound {
+    pub addr: String,
+}
+
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
 #[error("file watcher error, some changes may not trigger a rebuild")]
 #[diagnostic(
