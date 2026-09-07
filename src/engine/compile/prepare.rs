@@ -16,7 +16,7 @@ use crate::git::History;
 use crate::graph::Hash;
 use crate::render::Backlinks;
 use crate::theme::Theme;
-use crate::ui::{Code, markup};
+use crate::ui::markup;
 use crate::world::Project;
 use crate::world::Wrapper;
 use crate::world::module;
@@ -430,7 +430,7 @@ impl<'a> Prepare<'a> {
             if bundle.active().contains(&crate::config::BundleFormat::Pdf) {
                 push(
                     &bundle.template,
-                    markup!("`artifacts {{ bundles {{ {} }} }}`", Code(id)),
+                    markup!("`artifacts {{ bundles {{ {} }} }}`", id),
                 );
             }
         }

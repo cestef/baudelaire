@@ -564,7 +564,7 @@ mod tests {
 
         /// Where the walk stops: a test module's literals are assertions, not
         /// output.
-        const TESTS: &'static str = "#[cfg(test)]";
+        pub(super) const TESTS: &'static str = "#[cfg(test)]";
 
         fn new(text: &'a str, everything: bool) -> Self {
             Self {
@@ -743,6 +743,53 @@ mod tests {
         );
     }
 
+    /// The arguments of one `markup!` call, as source text; a file's own test
+    /// module is left out, as the message scan leaves it out, since a literal
+    /// there may hold half a construct.
+    fn arguments(text: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        let mut rest = text.split(Scan::TESTS).next().unwrap_or(text);
+        while let Some(at) = rest.find("markup!(") {
+            rest = &rest[at + "markup!(".len()..];
+            let mut depth = 1_usize;
+            let end = rest
+                .char_indices()
+                .find(|(_, c)| {
+                    match c {
+                        '(' => depth += 1,
+                        ')' => depth -= 1,
+                        _ => {}
+                    }
+                    depth == 0
+                })
+                .map_or(rest.len(), |(i, _)| i);
+            out.push(rest[..end].to_owned());
+            rest = &rest[end..];
+        }
+        out
+    }
+
+    /// The other half of the same rule: `markup!` wraps every argument in
+    /// [`Text`] itself, so one handed a wrapped value escapes the delimiters
+    /// [`Code`] wrote and bakes them into the message as literal backticks.
+    #[test]
+    fn no_markup_call_wraps_a_value_it_already_wraps() {
+        let mut offenders = Vec::new();
+        for path in sources() {
+            let text = std::fs::read_to_string(&path).expect("readable source");
+            for call in arguments(&text) {
+                if call.contains("Code(") || call.contains("Text(") {
+                    offenders.push(format!("{}: markup!({call})", path.display()));
+                }
+            }
+        }
+        assert!(
+            offenders.is_empty(),
+            "`markup!` wraps its own arguments; pass the value itself:\n{}",
+            offenders.join("\n")
+        );
+    }
+
     #[test]
     fn the_check_reads_the_constructs_and_not_the_lines() {
         let scan = |text: &str| {
@@ -762,6 +809,10 @@ mod tests {
         assert_eq!(scan("markup!(\"did you mean `{}`?\", guess)"), 0);
         assert_eq!(scan("#[error(\"write `assets {{ tsconfig }}`\")]"), 0);
         assert_eq!(scan("let s = \"a `{name}` label\";"), 0);
+        assert_eq!(
+            arguments("markup!(\"a {} b\", one(two))"),
+            ["\"a {} b\", one(two)"]
+        );
         assert_eq!(
             Scan::new("let s = \"a `{name}` label\";", true)
                 .messages()
