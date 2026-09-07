@@ -202,15 +202,28 @@ impl<'a> Bundle<'a> {
         project: &Project,
         _prepare: &Prepare<'_>,
         text: String,
-    ) -> Result<(Vec<u8>, Deps)> {
+    ) -> Result<Exported> {
         let laid = Paged {
             name: self.id(),
             kind: Self::KIND,
             text,
         }
         .run(project)?;
-        Ok((laid.pdf(Self::KIND, &self.url)?, laid.deps))
+        Ok(Exported {
+            bytes: laid.pdf(Self::KIND, &self.url)?,
+            deps: laid.deps,
+            source: laid.source,
+        })
     }
+}
+
+/// One exported bundle: the file, what its compile read, and the text it was
+/// compiled from, which is what the injected values it read are recovered from.
+#[cfg(feature = "pdf")]
+pub(in crate::engine) struct Exported {
+    pub bytes: Vec<u8>,
+    pub deps: Deps,
+    pub source: typst::syntax::Source,
 }
 
 /// The generated module.

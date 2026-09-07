@@ -500,13 +500,14 @@ impl Engine {
                 debug!(bundle = %id, "bundle reused");
                 continue;
             }
-            let (bytes, deps) = bundle.export(&self.project, &pass.prepare, text)?;
-            cache.record_bundle(&id, fingerprint, &deps);
+            let exported = bundle.export(&self.project, &pass.prepare, text)?;
+            let reads = pass.analyzer.reads(&exported.source, &exported.deps);
+            cache.record_bundle(&id, fingerprint, &exported.deps, &reads);
             ui.page(bundle.label(), PageStatus::Built);
             bundled.drawn.push(Artifact {
                 kind: Bundle::KIND,
                 path,
-                bytes,
+                bytes: exported.bytes,
             });
         }
         Ok(bundled)

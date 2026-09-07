@@ -157,6 +157,12 @@ struct Compiled {
     /// Dependency files and their hashes at compile time; `None` for one that
     /// could not be hashed.
     deps: BTreeMap<PathBuf, Option<Hash>>,
+    /// Digests of the injected values the compile read, by qualified key;
+    /// `None` records that nothing lives there, and must: a template stamping
+    /// `sys.inputs.baudelaire.git.hash` on a cover has to invalidate when the
+    /// commit moves, and neither the module text nor a file changes with it.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    meta: BTreeMap<String, Option<Hash>>,
 }
 
 /// What a build reads that no page records reading, and so is fingerprinted
@@ -430,14 +436,18 @@ impl Cache {
     /// that compiles it, so a `dist` cleared behind the cache's back would
     /// leave it missing forever.
     pub fn reuse_bundle(&mut self, id: &str, fingerprint: &Hash, path: &Path) -> bool {
+        let roots = self.roots();
         let hit = self.enabled
             && self.prev.config.as_ref() == Some(&self.config)
             && path.exists()
-            && self
-                .prev
-                .bundles
-                .get(id)
-                .is_some_and(|entry| &entry.hash == fingerprint && self.intact(&entry.deps));
+            && self.prev.bundles.get(id).is_some_and(|entry| {
+                &entry.hash == fingerprint
+                    && self.intact(&entry.deps)
+                    && entry
+                        .meta
+                        .iter()
+                        .all(|(key, hash)| roots.digest(key) == *hash)
+            });
         if hit && let Some(entry) = self.prev.bundles.get(id).cloned() {
             self.next.bundles.insert(id.to_owned(), entry);
         }
@@ -467,13 +477,15 @@ impl Cache {
     }
 
     /// Record a freshly compiled bundle, so the next build can leave it alone.
-    pub fn record_bundle(&mut self, id: &str, fingerprint: Hash, deps: &Deps) {
+    pub fn record_bundle(&mut self, id: &str, fingerprint: Hash, deps: &Deps, reads: &Reads) {
+        let meta = self.roots().digests(reads);
         let deps = self.digested(deps);
         self.next.bundles.insert(
             id.to_owned(),
             Compiled {
                 hash: fingerprint,
                 deps,
+                meta,
             },
         );
     }

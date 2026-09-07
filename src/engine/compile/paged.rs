@@ -25,7 +25,9 @@ pub(in crate::engine) struct Paged<'a> {
 pub(in crate::engine) struct Laid {
     pub document: PagedDocument,
     pub deps: Deps,
-    source: Source,
+    /// The text typst compiled, which is also what the injected values it read
+    /// are recovered from.
+    pub source: Source,
     world: PageWorld,
 }
 
