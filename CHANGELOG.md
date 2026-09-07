@@ -10,6 +10,84 @@ chores are visible in the git history and change nothing for a site.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/spec/v2.0.0.html
 
+## [Unreleased]
+
+### Fixed
+
+- **An embedded asset reference can no longer name a file outside the staging
+  tree.** Under `html { embed }`, the guard on a reference was a `..` substring
+  test, so an authored `src="/assets//etc/passwd"` replaced the staging root on
+  the join and published the file it named as a `data:` URI. Every component is
+  now checked the way the other asset transforms check one.
+
+- **Frontmatter nested past 64 levels is refused with a diagnostic** rather than
+  overflowing the stack and aborting the build with nothing said. All three
+  dialects convert a block by recursion, so the depth a page writes is what
+  bounded it.
+
+- **A host key trusted on first use is said out loud**, with the fingerprint to
+  compare out of band. Only a *changed* key was reported, so the one connection
+  where a key is taken on trust passed in silence. A `known_hosts` that could
+  not be read is now reported too, and under `strict` it fails as itself instead
+  of as an ordinary connection error.
+
+- **An ssh deploy fails instead of hanging.** Nothing in the exchange had a
+  deadline, so a host that completed the handshake and then stalled held the
+  command open indefinitely. Setting a session up now has a ceiling, and
+  keepalives close a connection that stops answering mid-transfer.
+
+- **The served asset tree is never absent between two builds.** Publishing
+  deleted the old tree and then renamed the new one over it, so a build that
+  died in between left every asset URL a 404 until the next build that got all
+  the way through. The old tree is moved aside instead.
+
+- **A bundled document notices that the values it stamped have changed.** A
+  bundle's cache entry recorded the files its compile read but not the injected
+  values, so a cover printing `sys.inputs.baudelaire.git.hash` kept the old
+  commit for as long as its pages and template stood still.
+
+- **`serve` rebuilds on an edit to a file outside the project root.** A
+  dependency was watched only when the cache keyed it relatively, which excluded
+  every file beside the project as well as the package cache it was meant to
+  exclude.
+
+- **A dev-server request line cannot restyle the terminal.** The URL a client
+  sent was written to `serve -v` output as itself, control characters included.
+
+- **A page bundle directory that cannot be read fails the build** rather than
+  rendering `page.assets` empty, which published the page without the files
+  sitting beside it.
+
+- **An entity does not collide with itself.** Declaring one alias twice, or an
+  alias equal to the entity's own id, was refused as a clash between the entity
+  and itself.
+
+- **A bundle id that is not a filename is refused where it is written.** An
+  `artifacts { bundles { } }` key holding `..` or a backslash panicked the build
+  when the compile fabricated its module path.
+
+- **A loopback endpoint is recognized however its host is cased.** `deploy { s3
+  { endpoint "http://LOCALHOST:9000" } }` was refused as insecure.
+
+- **A stylesheet scoped to an inlined SVG escapes the value it is confined by**,
+  so a quote in that value can no longer end the selector.
+
+- **A reloaded `serve { bind }` or `{ port }` says it needs a restart** instead
+  of looking like a config edit that took effect.
+
+- **A script the pipeline cannot publish says so.** A `.ts` or `.jsx` file under
+  the asset tree is an input while `assets { bundle }` is off, and unlike the
+  `_partial` and `.d.ts` conventions nothing about the file itself says that.
+
+### Changed
+
+- **A Sass source is compiled once per build.** Ordering stylesheets for
+  fingerprinting compiled each one to read its imports, and transforming it
+  compiled it again.
+
+- **The external-link record drops every URL the site no longer names**, rather
+  than growing for the life of the project.
+
 ## [0.0.17] - 2026-08-22
 
 ### Added
