@@ -130,7 +130,7 @@ pub use security::csp::CspConfig;
 pub use serve::ServeConfig;
 pub use typst::TypstConfig;
 pub use typst::fonts::FontConfig;
-pub use url::{BaseUrl, Basename, Percent, Slashed, UrlStyle};
+pub use url::{BaseUrl, Basename, Percent, Scheme, Slashed, UrlStyle};
 pub use values::Value;
 
 #[derive(Debug, Clone, Derive)]

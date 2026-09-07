@@ -11,6 +11,21 @@ use super::Named;
 #[derive(Debug, Clone)]
 pub struct BaseUrl(String);
 
+/// A URL scheme, as RFC 3986 spells one.
+pub struct Scheme;
+
+impl Scheme {
+    /// Whether `text` is a scheme: a letter, then letters, digits, `+`, `-` or
+    /// `.`. Stated once, because a config that accepts a base URL and a render
+    /// pass that classifies a link as external have to agree on what a scheme
+    /// is or one publishes what the other refused.
+    pub fn valid(text: &str) -> bool {
+        let mut chars = text.chars();
+        chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+            && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+    }
+}
+
 impl BaseUrl {
     pub(super) fn new(url: &str) -> Self {
         Self(url.trim_end_matches('/').to_owned())
@@ -27,12 +42,7 @@ impl BaseUrl {
             return false;
         };
         let host = rest.split(['/', '?', '#']).next().unwrap_or(rest);
-        !scheme.is_empty()
-            && scheme
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
-            && !host.is_empty()
-            && !host.contains(char::is_whitespace)
+        Scheme::valid(scheme) && !host.is_empty() && !host.contains(char::is_whitespace)
     }
 
     /// Absolute URL for a root-relative path (a permalink or `/file`),

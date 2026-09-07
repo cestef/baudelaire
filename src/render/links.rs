@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use typst::syntax::{Source, ast};
 
 use crate::codegen::Value;
+use crate::config::Scheme;
 use crate::content::Page;
 use crate::graph::Hash;
 
@@ -457,12 +458,8 @@ impl LinkMap {
     /// site and is published as the literal source path.
     fn scheme(raw: &str) -> bool {
         let head = raw.split(['/', '?', '#']).next().unwrap_or(raw);
-        let Some((scheme, _)) = head.split_once(':') else {
-            return false;
-        };
-        let mut chars = scheme.chars();
-        chars.next().is_some_and(|c| c.is_ascii_alphabetic())
-            && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+        head.split_once(':')
+            .is_some_and(|(scheme, _)| Scheme::valid(scheme))
     }
 }
 
