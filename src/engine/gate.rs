@@ -334,10 +334,6 @@ impl Gate {
             .map(FeatureMissing::from)
     }
 
-    /// Whether this site has markdown pages to lose: the capability is on and
-    /// at least one `.md` file sits under the content tree. A filesystem probe
-    /// rather than a config read, because a markdown page asks for nothing: it
-    /// is a file.
     /// Whether any bundle asks for `format`, read off the *defaulted* list so
     /// the row still fires for the `pdf` a bundle takes by writing nothing.
     fn bundles(config: &Config, format: BundleFormat) -> bool {
@@ -348,6 +344,10 @@ impl Gate {
             .any(|(_, bundle)| bundle.enabled() && bundle.formats().contains(&format))
     }
 
+    /// Whether this site has markdown pages to lose: the capability is on and
+    /// at least one `.md` file sits under the content tree. A filesystem probe
+    /// rather than a config read, because a markdown page asks for nothing: it
+    /// is a file.
     fn markdown(config: &Config) -> bool {
         config.content.markdown.enabled
             && crate::fs::Walk::new(&config.paths.content)
