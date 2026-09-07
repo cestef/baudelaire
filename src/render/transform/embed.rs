@@ -8,6 +8,7 @@ use typst_html::{HtmlDocument, tag};
 
 use crate::config::Config;
 use crate::digest::Base64;
+use crate::fs::Contained;
 use crate::mime::Mime;
 
 use super::{Cx, DocumentExt, ElementExt, Exempt, Externalize, Sheets, Sources, Transform};
@@ -77,16 +78,19 @@ impl<'a> Inliner<'a> {
     /// The `data:` URI for a local asset reference, `None` to leave it as is.
     ///
     /// A path is recorded before it is read, not after: a reference to a file
-    /// that was not there has to invalidate when it appears.
+    /// that was not there has to invalidate when it appears. It is also checked
+    /// before it is joined, and must be: the reference is a page's own text, and
+    /// an absolute one would replace the staging root rather than resolve under
+    /// it, embedding any file the build can read into the published page.
     fn inline(&mut self, raw: &str) -> Option<String> {
         let resolved = self.assets.resolve(raw);
         self.probed.extend(resolved.probed);
         let served = resolved.url.unwrap_or_else(|| raw.to_owned());
         let rest = served.strip_prefix(&self.prefix)?;
-        if rest.contains("..") || rest.contains(['?', '#']) {
+        if rest.contains(['?', '#']) {
             return None;
         }
-        let path = self.dst.join(rest);
+        let path = Contained::new(rest)?.under(&self.dst);
         self.inlined.push(path.clone());
         let bytes = crate::fs::read(&path).ok()?;
         Some(format!(
