@@ -12,7 +12,7 @@ pub enum ServeError {
     #[error("failed to bind {}", Code(.addr))]
     #[diagnostic(
         code(baudelaire::serve::bind),
-        help("is another process using this port? try --port <n>")
+        help("is another process using this port? try {}", Code("--port <n>"))
     )]
     Bind {
         addr: String,
