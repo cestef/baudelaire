@@ -4,6 +4,8 @@
 #[cfg(feature = "css")]
 use std::path::Component;
 use std::path::{Path, PathBuf};
+#[cfg(feature = "sass")]
+use std::sync::Arc;
 
 use crate::config::{Config, SourceMaps};
 use crate::error::Result;
@@ -116,6 +118,10 @@ pub(super) enum Phase {
 /// prefix, and the shared JS bundler.
 pub(super) struct Ctx<'a> {
     pub config: &'a Config,
+    /// Preprocessed sources, by file: ordering a stylesheet reads it and so
+    /// does transforming it, and for a Sass source reading it is a compile.
+    #[cfg(feature = "sass")]
+    pub compiled: Compiled,
     /// The asset roots as a search path, strongest first: where the Sass
     /// compiler resolves a `@use` that names no file it can see from the
     /// importing sheet.
@@ -123,6 +129,25 @@ pub(super) struct Ctx<'a> {
     pub roots: Vec<PathBuf>,
     #[cfg(feature = "js")]
     pub bundler: Option<&'a Js>,
+}
+
+/// The sources this build has already preprocessed, keyed by file.
+#[cfg(feature = "sass")]
+#[derive(Default)]
+pub(super) struct Compiled(parking_lot::Mutex<std::collections::HashMap<PathBuf, Arc<str>>>);
+
+#[cfg(feature = "sass")]
+impl Compiled {
+    /// The preprocessed source for `file`, running `compile` the first time it
+    /// is asked for.
+    pub fn get(&self, file: &Path, compile: impl FnOnce() -> Result<String>) -> Result<Arc<str>> {
+        if let Some(hit) = self.0.lock().get(file) {
+            return Ok(Arc::clone(hit));
+        }
+        let text: Arc<str> = Arc::from(compile()?);
+        self.0.lock().insert(file.to_owned(), Arc::clone(&text));
+        Ok(text)
+    }
 }
 
 impl Ctx<'_> {

@@ -99,7 +99,9 @@ impl Stylesheet {
     #[cfg(feature = "sass")]
     fn source(file: &Path, ctx: &Ctx) -> Result<String> {
         if Sass::claims(file) {
-            Sass::compile(file, ctx)
+            ctx.compiled
+                .get(file, || Sass::compile(file, ctx))
+                .map(|text| text.to_string())
         } else {
             fs::read_to_string(file)
         }

@@ -35,6 +35,8 @@ use crate::theme::Theme;
 use memo::Memo;
 
 use crate::config::SourceMaps;
+#[cfg(feature = "sass")]
+use handler::Compiled;
 use handler::{Ctx, Handler, PathExt, Phase, Private, Produced, Variant, builtin};
 use sourcemap::SourceMap;
 
@@ -301,6 +303,8 @@ impl<'a> Assets<'a> {
     fn ctx(&self) -> Ctx<'_> {
         Ctx {
             config: self.config,
+            #[cfg(feature = "sass")]
+            compiled: Compiled::default(),
             #[cfg(feature = "sass")]
             roots: self.sources.search(),
             #[cfg(feature = "js")]
