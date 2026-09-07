@@ -258,6 +258,19 @@ impl ConfigError {
         )
     }
 
+    /// A block whose node name becomes a filename, spelled as something that
+    /// is not one; `noun` names what the block declares.
+    pub fn not_a_name(source: &str, noun: &'static str, name: &str, span: SourceSpan) -> Self {
+        Self::at(
+            source,
+            ConfigErrorKind::NotAName {
+                noun,
+                name: name.to_owned(),
+            },
+            span,
+        )
+    }
+
     /// A generated asset's served path that leaves the tree it is written in.
     ///
     /// The pipeline writes the file under `paths { assets }` and the render pass
@@ -626,6 +639,18 @@ pub enum ConfigErrorKind {
         )
     )]
     NotAnIdentifier { name: String },
+
+    #[error("{} is not a name a {} can be written under", Code(.name), Text(.noun))]
+    #[diagnostic(
+        code(baudelaire::config::not_a_name),
+        help(
+            "the block's name is the filename stem every format is written as, so it is one \
+             ordinary path segment: {}, not {}",
+            Code("guide"),
+            Code("../guide")
+        )
+    )]
+    NotAName { noun: &'static str, name: String },
 
     #[error("{} is not a path a generated asset can be served from", Code(.got))]
     #[diagnostic(

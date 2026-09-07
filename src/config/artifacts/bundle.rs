@@ -5,9 +5,10 @@ use kdl::KdlNode;
 use dispatch_derive::Table;
 
 use crate::config::dispatch::{Block, Section};
+use crate::config::node::NodeExt;
 use crate::config::vocab::rule;
-use crate::config::{Named, SortKey};
-use crate::error::Result;
+use crate::config::{Config, Named, SortKey};
+use crate::error::{ConfigError, Result};
 
 /// What a bundle is written as, kept separate from the page selection so one
 /// selection can target more than one format.
@@ -83,12 +84,16 @@ impl BundleConfig {
     /// One `guide { .. }` block: the node name is the bundle's id, the
     /// filename stem every format is written under.
     pub(crate) fn item(node: &KdlNode, text: &str) -> Result<(String, Self)> {
+        let id = node.name().value();
+        if !Config::segment(id) {
+            return Err(ConfigError::not_a_name(text, "bundle", id, NodeExt::span(node)).into());
+        }
         let mut cfg = Self::default();
         Self::line(node, text)?;
         if node.children().is_some() {
             cfg.fill(node, text)?;
         }
-        Ok((node.name().value().to_owned(), cfg))
+        Ok((id.to_owned(), cfg))
     }
 
     /// Whether this bundle binds anything at all.

@@ -800,6 +800,12 @@ impl Config {
         !segment.contains('\\') && crate::fs::Contained::new(segment).is_some()
     }
 
+    /// Whether `name` can be written as one file: an ordinary segment, and only
+    /// the one, for a block whose node name becomes a filename stem.
+    pub(crate) fn segment(name: &str) -> bool {
+        !name.contains('/') && Self::ordinary(name)
+    }
+
     /// Whether `url` names a segment that climbs out of the directory it is
     /// resolved against, or that is not a segment at all, which
     /// [`Config::segments`] drops and every URL a page or a redirect can name
