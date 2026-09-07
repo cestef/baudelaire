@@ -337,6 +337,32 @@ mod tests {
         }
     }
 
+    /// The layout is stated twice over, in each shipped `config.kdl` and in
+    /// `File::HOME`/`File::CONTENT`, and a third time as the config's own
+    /// default; a drift between them is a scaffold whose sample content lands
+    /// somewhere the site does not read.
+    #[test]
+    fn every_scaffolded_layout_is_the_one_the_config_defaults_to() {
+        let default = crate::config::Paths::default();
+        assert_eq!(File::CONTENT, default.content.to_string_lossy());
+        assert!(File::HOME.starts_with(File::CONTENT));
+        for template in TEMPLATES {
+            let files = template.files(&vars());
+            let text = &files
+                .iter()
+                .find(|f| f.is_config())
+                .unwrap_or_else(|| panic!("`{}` has no config.kdl", template.name))
+                .body;
+            let config = crate::config::Config::parse(text)
+                .unwrap_or_else(|e| panic!("`{}` config: {e}", template.name));
+            assert_eq!(
+                config.paths.content, default.content,
+                "`{}` content path",
+                template.name
+            );
+        }
+    }
+
     #[test]
     fn the_scaffolded_config_takes_a_name_not_a_path() {
         use std::path::Path;
