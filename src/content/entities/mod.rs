@@ -261,6 +261,10 @@ impl Registry {
 
     /// Build the alias index, refusing a name that would reach two entities,
     /// an alias equal to another entity's own id included.
+    ///
+    /// A name that already reaches *this* entity is not a clash: an entity may
+    /// spell one alias twice (`Bob` and `BOB` slug alike) or restate its own
+    /// id, and neither leaves a reader anywhere ambiguous.
     fn index(&mut self, project: &Project) -> Result<()> {
         for entity in self.entities.values() {
             for alias in entity.aliases() {
@@ -268,7 +272,7 @@ impl Registry {
                     Some(other) => Some(other.id()),
                     None => self.aliases.get(alias).map(String::as_str),
                 };
-                if let Some(first) = clash {
+                if let Some(first) = clash.filter(|first| *first != entity.id()) {
                     let snippet = entity.from().snippet(project, &[]);
                     return Err(
                         EntityError::alias(&self.id, alias, first, entity.id(), snippet).into(),
