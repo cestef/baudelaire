@@ -22,7 +22,8 @@ impl Loopback {
     /// Whether a URL's post-scheme remainder names loopback.
     ///
     /// Userinfo is stripped at the *last* `@` first: the authority of
-    /// `http://localhost:9000@evil.com` is `evil.com`, not loopback.
+    /// `http://localhost:9000@evil.com` is `evil.com`, not loopback. A host is
+    /// matched case-insensitively, since a scheme already is.
     fn at(rest: &str) -> bool {
         let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
         let host = authority
@@ -35,7 +36,10 @@ impl Loopback {
                 host
             }
         });
-        matches!(host, "localhost" | "127.0.0.1" | "[::1]" | "::1")
+        matches!(
+            host.to_ascii_lowercase().as_str(),
+            "localhost" | "127.0.0.1" | "[::1]" | "::1"
+        )
     }
 }
 
