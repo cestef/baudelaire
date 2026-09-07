@@ -11,11 +11,11 @@ use russh_sftp::client::SftpSession;
 use tokio::io::AsyncWriteExt;
 
 use super::auth::Auth;
-use super::hosts::{Client, Verdict};
+use super::hosts::{Checked, Client, Verdict};
 use crate::config::SshConfig;
 use crate::deploy::{Inventory, Listed};
 use crate::error::deploy::Step;
-use crate::error::warning::HostKeyAccepted;
+use crate::error::warning::{HostKeyAccepted, HostKeyLearned, HostKeyUnverified};
 use crate::error::{DeployError, Result};
 use crate::remote::Options;
 use crate::ui::Ui;
@@ -41,34 +41,27 @@ impl Session {
         let rc = Arc::new(client::Config::default());
         let verdict = Arc::new(Mutex::new(None));
         let client = Client::new(config, Arc::clone(&verdict));
-        let mut handle = client::connect(rc, (config.host.as_str(), config.port), client)
+        let host = config.host.as_str();
+        let mut handle = client::connect(rc, (host, config.port), client)
             .await
-            .map_err(|e| {
-                let seen = *verdict.lock();
-                match seen {
-                    Some(Verdict::Changed) => {
-                        DeployError::host_key_changed(&config.host, config.port)
-                    }
-                    _ => DeployError::connect(&config.host, e),
+            .map_err(|e| match verdict.lock().as_ref().map(|seen| seen.verdict) {
+                Some(Verdict::Changed) => DeployError::host_key_changed(host, config.port),
+                Some(Verdict::Unverifiable) if config.strict => {
+                    DeployError::host_key_unverifiable(host)
                 }
+                _ => DeployError::connect(host, e),
             })?;
-        if *verdict.lock() == Some(Verdict::Changed) {
-            ui.warn(HostKeyAccepted {
-                host: config.host.clone(),
-                entry: DeployError::entry(&config.host, config.port),
-            });
-            ui.flush();
-        }
+        Self::report(config, verdict.lock().take(), ui);
         Auth::new(config, opts).run(&mut handle, user).await?;
 
         let channel = handle
             .channel_open_session()
             .await
-            .map_err(|e| DeployError::connect(&config.host, e))?;
+            .map_err(|e| DeployError::connect(host, e))?;
         channel
             .request_subsystem(true, "sftp")
             .await
-            .map_err(|e| DeployError::connect(&config.host, e))?;
+            .map_err(|e| DeployError::connect(host, e))?;
         let sftp = SftpSession::new(channel.into_stream())
             .await
             .map_err(|e| DeployError::transfer(Step::OpenSftp, e))?;
@@ -77,6 +70,28 @@ impl Session {
             sftp,
             remote: Remote::new(&config.path),
         })
+    }
+
+    /// Say out loud what verifying the host key concluded, so neither a
+    /// first-use key nor an unreadable `known_hosts` is trusted in silence.
+    fn report(config: &SshConfig, checked: Option<Checked>, ui: &Ui) {
+        let Some(checked) = checked else { return };
+        match checked.verdict {
+            Verdict::Trusted => return,
+            Verdict::Learned => ui.warn(HostKeyLearned {
+                host: config.host.clone(),
+                fingerprint: checked.fingerprint,
+            }),
+            Verdict::Changed => ui.warn(HostKeyAccepted {
+                host: config.host.clone(),
+                entry: DeployError::entry(&config.host, config.port),
+            }),
+            Verdict::Unverifiable => ui.warn(HostKeyUnverified {
+                host: config.host.clone(),
+                fingerprint: checked.fingerprint,
+            }),
+        }
+        ui.flush();
     }
 
     /// The remote files' digests, from the host's `sha256sum`; a deploy root

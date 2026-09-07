@@ -266,6 +266,34 @@ pub struct HostKeyAccepted {
     pub entry: String,
 }
 
+/// Trust on first use is still trust granted without evidence, so the key it
+/// was granted to is named where an operator can compare it out of band.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("trusting {} on first use, with key {}", Code(.host), Code(.fingerprint))]
+#[diagnostic(
+    code(baudelaire::deploy::ssh::host_key_learned),
+    severity(warning),
+    help("compare that fingerprint against the host's own before the next deploy")
+)]
+pub struct HostKeyLearned {
+    pub host: String,
+    pub fingerprint: String,
+}
+
+/// `strict #false` accepting a key nothing could be compared against, which
+/// otherwise reads like an ordinary connection.
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("could not check the host key for {}, and `strict #false` accepted {}", Code(.host), Code(.fingerprint))]
+#[diagnostic(
+    code(baudelaire::deploy::ssh::host_key_unverified),
+    severity(warning),
+    help("make `~/.ssh/known_hosts` readable so the key can be compared")
+)]
+pub struct HostKeyUnverified {
+    pub host: String,
+    pub fingerprint: String,
+}
+
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
 #[error(
     "`{} init` failed, repository setup skipped{}",

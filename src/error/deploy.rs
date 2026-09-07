@@ -245,6 +245,16 @@ pub enum DeployError {
     )]
     HostKeyChanged { host: String, port: u16 },
 
+    /// Distinct from a changed key: nothing was compared at all, which under
+    /// `strict` is a refusal rather than the connection failing for its own
+    /// reasons.
+    #[error("the host key for {} could not be checked", Code(.host))]
+    #[diagnostic(
+        code(baudelaire::deploy::ssh::host_key_unverifiable),
+        help("make `~/.ssh/known_hosts` readable, or set `strict #false` to connect without it")
+    )]
+    HostKeyUnverifiable { host: String },
+
     #[error("no ssh user configured and `$USER` is unset")]
     #[diagnostic(
         code(baudelaire::deploy::ssh::no_user),
@@ -395,6 +405,10 @@ impl DeployError {
             host: host.into(),
             port,
         }
+    }
+
+    pub fn host_key_unverifiable(host: impl Into<String>) -> Self {
+        Self::HostKeyUnverifiable { host: host.into() }
     }
 
     /// The port a `known_hosts` line is written without brackets for.
