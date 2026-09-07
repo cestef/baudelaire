@@ -159,7 +159,7 @@ impl<'a> Bundle<'a> {
             };
             entries.push(format!(
                 "(page: {}, body: {body})",
-                prepare.dict(page, &frontmatter)
+                prepare.dict(page, &frontmatter)?
             ));
         }
         Ok(Module {

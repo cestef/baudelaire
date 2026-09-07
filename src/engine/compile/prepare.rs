@@ -187,12 +187,12 @@ impl<'a> Prepare<'a> {
             _ => Wrapper::id(&rooted),
         };
         let dir = self.dir(template);
-        let bare = self.bound(page, &rooted, &dir, template, &Backlinks::Off);
+        let bare = self.bound(page, &rooted, &dir, template, &Backlinks::Off)?;
         let fingerprint = Hash::of_bytes(bare.as_bytes());
         let text = if self.backlinks.of(page).is_empty() {
             bare
         } else {
-            self.bound(page, &rooted, &dir, template, &self.backlinks)
+            self.bound(page, &rooted, &dir, template, &self.backlinks)?
         };
         Ok((id, text, fingerprint))
     }
@@ -224,7 +224,7 @@ impl<'a> Prepare<'a> {
         rooted: &RootedPath,
         dir: &str,
         file: &str,
-    ) -> String {
+    ) -> Result<String> {
         self.bound(page, rooted, dir, file, &Backlinks::Off)
     }
 
@@ -238,7 +238,7 @@ impl<'a> Prepare<'a> {
         dir: &str,
         file: &str,
         backlinks: &Backlinks,
-    ) -> String {
+    ) -> Result<String> {
         let vpath = Self::rooted_str(rooted);
         let body = match &page.data {
             #[cfg(feature = "markdown")]
@@ -246,23 +246,23 @@ impl<'a> Prepare<'a> {
             Data::Generated { .. } => Body::Inline(&page.body),
             _ => Body::Include,
         };
-        let context = self.context(page, backlinks);
-        Layout::new(dir, file, &vpath, context, body).to_string()
+        let context = self.context(page, backlinks)?;
+        Ok(Layout::new(dir, file, &vpath, context, body).to_string())
     }
 
     /// The `page` dict this page is handed as, with its frontmatter spelled as
     /// `frontmatter`: what a bundled document gives each of its entries, where
     /// there is no wrapper module per page to hold the binding.
     #[cfg(feature = "pdf")]
-    pub(in crate::engine) fn dict(&self, page: &Page, frontmatter: &str) -> String {
-        let context = self.context(page, &Backlinks::Off);
-        crate::codegen::Typst(&context.dict(Value::Raw(frontmatter.to_owned()))).to_string()
+    pub(in crate::engine) fn dict(&self, page: &Page, frontmatter: &str) -> Result<String> {
+        let context = self.context(page, &Backlinks::Off)?;
+        Ok(crate::codegen::Typst(&context.dict(Value::Raw(frontmatter.to_owned()))).to_string())
     }
 
     /// This page's [`Context`]: every value a template is handed, read off the
     /// page and the plan around it.
-    fn context(&self, page: &Page, backlinks: &Backlinks) -> Context {
-        Context {
+    fn context(&self, page: &Page, backlinks: &Backlinks) -> Result<Context> {
+        Ok(Context {
             data: match &page.data {
                 Data::Export => Bind::Import,
                 Data::Empty => Bind::Literal("(:)".to_owned()),
@@ -287,11 +287,11 @@ impl<'a> Prepare<'a> {
             date: self.date(page),
             url: Value::str(self.config.prefixed(&page.permalink)),
             collection: Value::str(page.section()),
-            assets: self.colocated(page),
+            assets: self.colocated(page)?,
             source: self.source(page),
             git: self.history(page),
             defaults: self.defaults(page),
-        }
+        })
     }
 
     /// What this page's collection schema fills in for a field the page left
@@ -343,10 +343,10 @@ impl<'a> Prepare<'a> {
     /// [`Config::sources`] names is skipped: a page is not an asset, whichever
     /// dialect it is written in, and one listed here is a URL nothing
     /// publishes.
-    fn colocated(&self, page: &Page) -> crate::codegen::Value {
+    fn colocated(&self, page: &Page) -> Result<crate::codegen::Value> {
         use crate::codegen::Value;
         let Some(dir) = page.source.parent() else {
-            return Value::dict::<&str>([]);
+            return Ok(Value::dict::<&str>([]));
         };
         let bundled = page
             .source
@@ -354,7 +354,7 @@ impl<'a> Prepare<'a> {
             .and_then(|stem| stem.to_str())
             .is_some_and(|stem| stem == self.config.index());
         if !bundled || !page.authored() {
-            return Value::dict::<&str>([]);
+            return Ok(Value::dict::<&str>([]));
         }
         let root = crate::fs::canonical(&self.config.root);
         let content = crate::fs::canonical(&self.config.paths.content);
@@ -365,11 +365,7 @@ impl<'a> Prepare<'a> {
                 .is_some_and(|ext| sources.contains(&ext))
         };
         let mut entries: Vec<(String, Value)> = Vec::new();
-        let Ok(read) = std::fs::read_dir(dir) else {
-            return Value::dict::<&str>([]);
-        };
-        for file in read.flatten() {
-            let path = file.path();
+        for path in crate::fs::read_dir(dir)? {
             if !path.is_file() || is_page(&path) {
                 continue;
             }
@@ -384,7 +380,7 @@ impl<'a> Prepare<'a> {
             entries.push((name.to_owned(), Value::str(self.config.asset_url(&named))));
         }
         entries.sort_by(|a, b| a.0.cmp(&b.0));
-        Value::dict(entries)
+        Ok(Value::dict(entries))
     }
 
     /// One language's [`Section`] tree as a value: each node is

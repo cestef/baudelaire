@@ -34,9 +34,8 @@ impl Sidecar for Pdf {
     /// layout for the HTML compile.
     fn source(&self, cx: &Cx<'_>, page: &Page, rooted: &RootedPath) -> Result<String> {
         let template = &cx.config.artifacts.pdf.pages.template;
-        Ok(cx
-            .prepare
-            .bind(page, rooted, &cx.prepare.dir(template), template))
+        cx.prepare
+            .bind(page, rooted, &cx.prepare.dir(template), template)
     }
 
     /// Identified by the page's permalink, which is stable across builds and
