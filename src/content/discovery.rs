@@ -38,7 +38,8 @@ impl Collection {
     fn sorted(mut self) -> Self {
         let sort = self.config.sort;
         let reverse = self.config.reverse;
-        self.pages.sort_by(|a, b| Page::ordered(sort, reverse, a, b));
+        self.pages
+            .sort_by(|a, b| Page::ordered(sort, reverse, a, b));
         self
     }
 }

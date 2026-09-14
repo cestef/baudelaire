@@ -573,8 +573,14 @@ mod tests {
 
         // Same date either way round: `a` before `b`, because that is what a
         // tie-break is for.
-        assert_eq!(Page::ordered(SortKey::Date, false, &a, &b), std::cmp::Ordering::Less);
-        assert_eq!(Page::ordered(SortKey::Date, true, &a, &b), std::cmp::Ordering::Less);
+        assert_eq!(
+            Page::ordered(SortKey::Date, false, &a, &b),
+            std::cmp::Ordering::Less
+        );
+        assert_eq!(
+            Page::ordered(SortKey::Date, true, &a, &b),
+            std::cmp::Ordering::Less
+        );
     }
 
     /// The root index page maps onto `/` under whatever name `content { index
