@@ -64,15 +64,16 @@ impl<'a> Selection<'a> {
     /// the order the pages arrived in, since re-sorting a multi-collection
     /// selection by one key would interleave collections that never mix.
     fn order(bound: &mut [&'a Page], cfg: &BundleConfig, config: &Config) {
+        let reverse = cfg.reverse;
         if let Some(sort) = cfg.sort {
-            bound.sort_by(|a, b| Page::compare(sort, a, b));
+            bound.sort_by(|a, b| Page::ordered(sort, reverse, a, b));
         } else if !cfg.site && cfg.collections.len() == 1 {
             let sort = config
                 .collection(&cfg.collections[0])
                 .map_or_else(SortKey::default, |c| c.sort);
-            bound.sort_by(|a, b| Page::compare(sort, a, b));
-        }
-        if cfg.reverse {
+            bound.sort_by(|a, b| Page::ordered(sort, reverse, a, b));
+        } else if reverse {
+            // Nothing was sorted here, so `reverse` still means the arrival order.
             bound.reverse();
         }
     }

@@ -96,10 +96,7 @@ impl<'a> Group<'a> {
             }
         }
         for members in terms.values_mut() {
-            members.sort_by(|a, b| Page::compare(cfg.sort, a, b));
-            if cfg.reverse {
-                members.reverse();
-            }
+            members.sort_by(|a, b| Page::ordered(cfg.sort, cfg.reverse, a, b));
         }
         Self {
             name,

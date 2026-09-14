@@ -294,13 +294,28 @@ impl Page {
     /// on source path, so pages sharing a key keep a stable order across
     /// machines.
     pub fn compare(sort: crate::config::SortKey, a: &Self, b: &Self) -> std::cmp::Ordering {
+        Self::ordered(sort, false, a, b)
+    }
+
+    /// The same, with `reverse` applied to the key and not to the tie-break.
+    ///
+    /// Reversing the whole comparison reversed the tie-break with it, so a
+    /// collection of newest-first posts listed pages sharing a date in reverse
+    /// filename order. A tie-break is there to make the order predictable, and a
+    /// predictable order that flips with an unrelated setting is not one.
+    pub fn ordered(
+        sort: crate::config::SortKey,
+        reverse: bool,
+        a: &Self,
+        b: &Self,
+    ) -> std::cmp::Ordering {
         use crate::config::SortKey;
-        match sort {
+        let key = match sort {
             SortKey::Order => a.frontmatter.order.cmp(&b.frontmatter.order),
             SortKey::Date => a.frontmatter.date.cmp(&b.frontmatter.date),
             SortKey::Title => a.frontmatter.title.cmp(&b.frontmatter.title),
-        }
-        .then_with(|| a.source.cmp(&b.source))
+        };
+        if reverse { key.reverse() } else { key }.then_with(|| a.source.cmp(&b.source))
     }
 
     /// Whether this page gets a generated social card, the one answer the
@@ -525,6 +540,42 @@ mod tests {
     use super::{Page, Path};
     use crate::config::Config;
     use crate::content::Frontmatter;
+
+    /// Newest first is a statement about dates, not about filenames. Reversing
+    /// the whole comparison took the tie-break with it, so two posts sharing a
+    /// date came out in reverse filename order and a listing's second page could
+    /// disagree with its first about which of them came first.
+    #[test]
+    fn reversing_a_sort_leaves_the_tie_break_alone() {
+        use crate::config::SortKey;
+        use crate::content::{Data, PageId};
+        use time::{Date, Month};
+
+        let config = Config::parse("site \"x\"").expect("config");
+        let dated = |slug: &str| {
+            Page::assemble(
+                PageId::new("posts", slug),
+                std::path::PathBuf::from(format!("content/posts/{slug}.md")),
+                Frontmatter {
+                    date: Date::from_calendar_date(2024, Month::September, 30).ok(),
+                    ..Frontmatter::default()
+                },
+                String::new(),
+                Data::Empty,
+                "posts".to_owned(),
+                &format!("/posts/{slug}/"),
+                None,
+                config.lang.clone(),
+                &config,
+            )
+        };
+        let (a, b) = (dated("a"), dated("b"));
+
+        // Same date either way round: `a` before `b`, because that is what a
+        // tie-break is for.
+        assert_eq!(Page::ordered(SortKey::Date, false, &a, &b), std::cmp::Ordering::Less);
+        assert_eq!(Page::ordered(SortKey::Date, true, &a, &b), std::cmp::Ordering::Less);
+    }
 
     /// The root index page maps onto `/` under whatever name `content { index
     /// }` gives it.
