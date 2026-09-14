@@ -12,6 +12,13 @@ chores are visible in the git history and change nothing for a site.
 
 ## [Unreleased]
 
+### Added
+
+- **`content { markdown { extensions } }` takes `math`.** `$x^2$` and `$$x^2$$`
+  in a `.md` page lower to Typst math and are typeset by Typst, inline and as a
+  block respectively. The body is Typst's math language, not LaTeX: the two
+  agree on the simple cases and part company past them.
+
 ### Fixed
 
 - **An embedded asset reference can no longer name a file outside the staging
@@ -78,6 +85,18 @@ chores are visible in the git history and change nothing for a site.
 - **A script the pipeline cannot publish says so.** A `.ts` or `.jsx` file under
   the asset tree is an input while `assets { bundle }` is off, and unlike the
   `_partial` and `.d.ts` conventions nothing about the file itself says that.
+
+- **Reversing a sort reverses the key, not the tie-break.** Under a collection's
+  `reverse`, pages sharing a date came out in reverse filename order, so a
+  listing's second page could disagree with its first about which of two posts
+  came first.
+
+- **`baudelaire reference` wraps to the terminal** instead of overflowing it.
+
+- **A diagnostic naming a PDF bundle no longer prints its id in nested
+  backticks.**
+
+- **The `serve` bind help spells `--port <n>` as a flag.**
 
 ### Changed
 
