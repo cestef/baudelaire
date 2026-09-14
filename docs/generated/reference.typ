@@ -77,7 +77,7 @@
   (path: "content.reading.wpm", key: "wpm", shape: "number", doc: "Words a reader gets through in a minute, for `page.reading.minutes`.", depth: 2, section: false),
   (path: "content.markdown", key: "markdown", shape: "block", doc: "Whether `.md` files are pages, and what one may contain. `markdown #false` is `markdown { enabled #false }`.", depth: 1, section: true),
   (path: "content.markdown.enabled", key: "enabled", shape: "flag", doc: "Whether a `.md` file under `content/` is a page at all.", depth: 2, section: false),
-  (path: "content.markdown.extensions", key: "extensions", shape: "[-](tables* | footnotes* | strikethrough* | tasklists* | smart) ..", doc: "Parser extensions to enable, or `-name` to disable one. A `*` marks the ones already on.", depth: 2, section: false),
+  (path: "content.markdown.extensions", key: "extensions", shape: "[-](tables* | footnotes* | strikethrough* | tasklists* | smart | math) ..", doc: "Parser extensions to enable, or `-name` to disable one. A `*` marks the ones already on.", depth: 2, section: false),
   (path: "content.markdown.html", key: "html", shape: "refuse | drop", doc: "What raw HTML in a page does: `refuse` the build, or `drop` it.", depth: 2, section: false),
   (path: "content.markdown.eval", key: "eval", shape: "flag", doc: "Whether a fence marked `eval` runs as Typst. Turn it off for content you did not write: it runs at build time.", depth: 2, section: false),
   (path: "content.history", key: "history", shape: "block", doc: "What git knows about each page, as `page.git`. Its presence turns it on.", depth: 1, section: true),
