@@ -33,7 +33,13 @@ pub enum Extension {
     Tasklists,
     /// Typographic quotes, dashes and ellipses.
     Smart,
-    // Math, superscript/subscript and definition lists are absent on purpose:
+    /// `$x$` and `$$x$$`, lowered to Typst math and typeset by Typst itself.
+    ///
+    /// The body is Typst's math language, not LaTeX: the two agree on the easy
+    /// cases and part company past them, and a generator whose pages are Typst
+    /// has no business carrying a second syntax for the same thing.
+    Math,
+    // Superscript, subscript and definition lists are absent on purpose:
     // `pulldown-cmark` parses them, but the lowering has no Typst mapping for
     // their events, so enabling one flattens their structure silently.
 }
@@ -45,6 +51,7 @@ impl Named for Extension {
         ("strikethrough", Self::Strikethrough),
         ("tasklists", Self::Tasklists),
         ("smart", Self::Smart),
+        ("math", Self::Math),
     ];
 }
 

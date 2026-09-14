@@ -63,6 +63,7 @@ impl<'a> Markdown<'a> {
                 Extension::Strikethrough => Options::ENABLE_STRIKETHROUGH,
                 Extension::Tasklists => Options::ENABLE_TASKLISTS,
                 Extension::Smart => Options::ENABLE_SMART_PUNCTUATION,
+                Extension::Math => Options::ENABLE_MATH,
             })
             .fold(Options::empty(), |all, one| all | one)
     }
@@ -131,6 +132,13 @@ mod tests {
 
     fn lower(source: &str) -> String {
         try_lower(source).expect("lower")
+    }
+
+    /// The same, with extensions a site turned on beyond the defaults.
+    fn lower_with(extensions: &[Extension], source: &str) -> String {
+        let mut config = MarkdownConfig::default();
+        config.extensions.extend_from_slice(extensions);
+        under(source, &config).expect("lower")
     }
 
     #[test]
@@ -501,12 +509,24 @@ mod tests {
         assert!(lower("a  \nb\n").contains("#linebreak()"));
     }
 
-    /// Math is not an extension a site can enable, so a dollar run is prose and
-    /// stays prose.
+    /// Math is off unless a site asks for it, so a dollar run is prose until then.
     #[test]
-    fn math_is_never_parsed_so_a_dollar_run_is_text() {
+    fn math_is_not_parsed_until_a_site_enables_it() {
         let out = lower("an $x^2$ run\n");
         assert!(out.contains("$x^2$"), "{out}");
         assert!(!out.contains("math.equation"), "{out}");
+    }
+
+    /// And once it is, the body reaches Typst as math rather than as its own
+    /// source: emitting it through `Content` set the string `$x^2$` in the page.
+    #[test]
+    fn math_lowers_to_typst_math_rather_than_to_its_own_source() {
+        let inline = lower_with(&[Extension::Math], "an $x^2$ run\n");
+        assert!(inline.contains("$x^2$"), "{inline}");
+        assert!(!inline.contains(r#"#"$x^2$""#), "{inline}");
+
+        // Typst reads `$ x $` as a block and `$$x$$` as two empty equations.
+        let display = lower_with(&[Extension::Math], "$$\nx^2\n$$\n");
+        assert!(display.contains("$ x^2 $"), "{display}");
     }
 }

@@ -150,8 +150,21 @@ impl<'a> Writer<'a> {
     }
 
     /// A math run as the literal text it was written as, delimiters included.
-    pub(super) fn math(&mut self, delimiter: &str, text: &str) {
-        self.push(&Content(&[delimiter, text, delimiter].concat()).to_string());
+    /// Math, as Typst's own, so Typst typesets it rather than printing it.
+    ///
+    /// The body is emitted raw: it is already Typst's math language, and passing
+    /// it through `Content` made it a string literal, which set the source of the
+    /// equation instead of the equation. Display math is spaced rather than
+    /// doubled, because `$ x $` is what Typst reads as a block and `$$x$$` is two
+    /// empty equations around some text.
+    pub(super) fn math(&mut self, display: bool, text: &str) {
+        let body = text.trim();
+        if body.is_empty() {
+            return;
+        }
+        self.push(if display { "$ " } else { "$" });
+        self.push(body);
+        self.push(if display { " $" } else { "$" });
     }
 
     /// A link's destination, with the scheme an autolink leaves implicit put
@@ -339,11 +352,11 @@ impl<'a> Writer<'a> {
                 .into()),
             },
             Event::InlineMath(text) => {
-                self.math("$", text);
+                self.math(false, text);
                 Ok(())
             }
             Event::DisplayMath(text) => {
-                self.math("$$", text);
+                self.math(true, text);
                 Ok(())
             }
         }
