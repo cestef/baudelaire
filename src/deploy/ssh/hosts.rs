@@ -97,12 +97,15 @@ impl client::Handler for Client {
 
     /// Checked either way: non-strict still records what the check concluded,
     /// so the caller warns rather than accepting a key without a word.
-    async fn check_server_key(&mut self, key: &PublicKey) -> Result<bool, Self::Error> {
+    fn check_server_key(
+        &mut self,
+        key: &PublicKey,
+    ) -> impl Future<Output = Result<bool, Self::Error>> {
         let verdict = self.known.check(key);
         *self.verdict.lock() = Some(Checked {
             verdict,
             fingerprint: key.fingerprint(HashAlg::Sha256).to_string(),
         });
-        Ok(verdict.accepts(self.strict))
+        std::future::ready(Ok(verdict.accepts(self.strict)))
     }
 }

@@ -3,6 +3,9 @@
 //! SSH/SFTP server.
 // Split from `deploy_e2e.rs` because a whole file is the one granularity cargo
 // will skip building outright.
+// The server here answers every request from memory, so none of its handlers
+// awaits anything; `async fn` is the shape the trait is written in.
+#![allow(clippy::unused_async_trait_impl)]
 
 use std::collections::BTreeMap;
 use std::net::TcpListener;
