@@ -752,13 +752,13 @@ impl Engine {
         let serialization_failed = |errs| {
             BaudelaireErrorKind::TypstHtml(Self::diagnostics(errs, page, &source, world.inner()))
         };
-        let html = typst_html::html(&doc, &options).map_err(&serialization_failed)?;
+        let html = typst_html::html(&doc, &options).map_err(serialization_failed)?;
         let fragments = self
             .config
             .navigation
             .standalone
             .enabled
-            .then(|| Fragments::capture(&doc, &options).map_err(&serialization_failed))
+            .then(|| Fragments::capture(&doc, &options).map_err(serialization_failed))
             .transpose()?;
         let syndicated = (self.config.generate.feed.full() || self.config.binds_prose())
             .then(|| {
@@ -768,7 +768,7 @@ impl Engine {
                     &self.config.html.region,
                     self.config.base().as_ref(),
                 )
-                .map_err(&serialization_failed)
+                .map_err(serialization_failed)
             })
             .transpose()?;
         let (artifacts, drawn) =

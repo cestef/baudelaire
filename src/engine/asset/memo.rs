@@ -105,13 +105,13 @@ impl Memo {
             hash
         };
         let rendered = Rendered {
-            primary: primary.map(&store),
+            primary: primary.map(store),
             variants: variants
                 .iter()
                 .map(|variant| Derived {
                     rel: variant.rel.clone(),
                     width: variant.width,
-                    blob: variant.bytes.as_deref().map(&store),
+                    blob: variant.bytes.as_deref().map(store),
                 })
                 .collect(),
         };
