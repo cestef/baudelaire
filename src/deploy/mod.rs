@@ -696,7 +696,7 @@ mod tests {
         assert_eq!(with_delete.deletes, vec!["gone.html".to_owned()]);
         assert_eq!(with_delete.unchanged, 1);
 
-        assert!(Plan::compute(&local, &remote, false).deletes.is_empty());
+        assert_eq!(Plan::compute(&local, &remote, false).deletes.len(), 0);
     }
 
     #[test]

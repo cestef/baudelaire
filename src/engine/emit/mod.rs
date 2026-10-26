@@ -525,7 +525,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(rec.notes, ["ran first", "ran last"]);
-        assert!(rec.warns.is_empty());
+        assert_eq!(rec.warns.len(), 0);
     }
 
     /// A processor that summarized its inputs runs once and then stops, and the
@@ -548,7 +548,7 @@ mod tests {
         let mut first = Recorder::default();
         registry.run(&site(&config), &mut first, &mut memo).unwrap();
         assert_eq!(first.notes, ["ran summarized", "ran always"]);
-        assert!(first.kept.is_empty());
+        assert_eq!(first.kept.len(), 0);
 
         let mut second = Recorder::default();
         registry

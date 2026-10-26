@@ -130,7 +130,7 @@ fn nested_parent_sections() {
     assert_eq!(cfg.paths.dist.to_str(), Some("out"));
     assert_eq!(cfg.paths.r#static.to_str(), Some("public-files"));
     assert!(!cfg.generate.sitemap);
-    assert!(cfg.client.is_empty());
+    assert_eq!(cfg.client.len(), 0);
     assert!(cfg.generate.robots.enabled);
     assert_eq!(cfg.generate.robots.disallow, vec!["/private/".to_owned()]);
     assert!(cfg.generate.llms.enabled);
@@ -191,7 +191,7 @@ fn bare_flag_node_enables() {
 
 #[test]
 fn prune_keeps_what_it_is_told_to() {
-    assert!(parse("prune").prune.keep.is_empty());
+    assert_eq!(parse("prune").prune.keep.len(), 0);
 
     let cfg = parse("prune {\n  keep \"themes/**\" \"v*/**\"\n}\n");
     assert!(cfg.prune.enabled, "a block alone still enables");

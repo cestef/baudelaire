@@ -42,7 +42,7 @@ fn schema_reads_the_type_as_a_positional_or_an_attribute() {
     assert_eq!(schema[1].1.ty, FieldType::List(Box::new(FieldType::Str)));
     assert_eq!(schema[2].1.ty, FieldType::Str);
     assert!(schema[2].1.optional);
-    assert!(cfg.schema("notes").is_empty());
+    assert_eq!(cfg.schema("notes").len(), 0);
 }
 
 /// A field's type is an expression, and a block declares the fields of the

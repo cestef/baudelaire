@@ -414,7 +414,7 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let config = Config::default();
         let root = Root::at(tmp.path());
-        assert!(Filter::registered(&config, &root).is_empty());
+        assert_eq!(Filter::registered(&config, &root).len(), 0);
 
         std::fs::create_dir_all(tmp.path().join(&config.paths.content)).expect("mkdir");
         assert_eq!(

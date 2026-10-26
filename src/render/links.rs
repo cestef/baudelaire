@@ -537,7 +537,7 @@ mod tests {
         assert_eq!(sources[0].url, "/posts/a/");
         assert_eq!(sources[0].title, "A");
         assert_eq!(sources[0].fragments, ["install", "usage"]);
-        assert!(backlinks.of(&source).is_empty());
+        assert_eq!(backlinks.of(&source).len(), 0);
     }
 
     fn urls(outbound: &Outbound) -> Vec<String> {

@@ -265,7 +265,7 @@ mod tests {
 
     #[test]
     fn no_heading_in_range_builds_nothing() {
-        assert!(built(&[]).is_empty());
+        assert_eq!(built(&[]), "");
     }
 
     #[test]

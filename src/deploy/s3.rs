@@ -739,7 +739,7 @@ mod tests {
     fn listing_without_token_ends() {
         let xml = "<ListBucketResult><IsTruncated>false</IsTruncated></ListBucketResult>";
         let listing = Listing::parse(xml).unwrap();
-        assert!(listing.objects.is_empty());
+        assert_eq!(listing.objects.len(), 0);
         assert_eq!(listing.next, None);
     }
 }

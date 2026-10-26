@@ -264,7 +264,7 @@ fn the_shapes_a_key_does_take_still_parse() {
 /// list, which is the only spelling a profile has for undoing an inherited one.
 #[test]
 fn a_bare_list_key_is_the_empty_list_where_a_list_replaces() {
-    assert!(parse("serve {\n  exclude\n}").serve.exclude.is_empty());
+    assert_eq!(parse("serve {\n  exclude\n}").serve.exclude.len(), 0);
     assert!(
         parse("assets {\n  images {\n    responsive {\n      widths\n    }\n  }\n}")
             .assets

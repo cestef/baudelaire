@@ -284,12 +284,9 @@ mod tests {
         ];
 
         let without = walk(false, &entries);
-        assert!(
-            without
-                .of(Path::new("a.typ"))
-                .unwrap()
-                .contributors
-                .is_empty()
+        assert_eq!(
+            without.of(Path::new("a.typ")).unwrap().contributors.len(),
+            0
         );
 
         let with = walk(true, &entries);

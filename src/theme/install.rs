@@ -350,7 +350,7 @@ mod tests {
 
         age(&dir, rel, OLD, Some("0.0.9"));
 
-        assert!(theme.install(&dir).expect("second add").is_empty());
+        assert_eq!(theme.install(&dir).expect("second add").len(), 0);
         let lock = Lock::read(&dir).expect("lock");
         assert_eq!(
             lock.baudelaire, "0.0.9",

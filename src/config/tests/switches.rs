@@ -145,7 +145,7 @@ fn the_cache_policy_off_states_nothing() {
     let cfg = parse("headers {\n  cache #false\n}");
     assert!(!cfg.headers.cache.enabled);
     assert!(cfg.headers.cache.immutable.is_empty(), "no policy invented");
-    assert!(cfg.headers.cache.default.is_empty());
+    assert_eq!(cfg.headers.cache.default, "");
     assert_eq!(cfg.headers.cache.header("/a.css", "assets", true), None);
 }
 

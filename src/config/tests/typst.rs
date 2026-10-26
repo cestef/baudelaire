@@ -63,7 +63,7 @@ fn err_insecure_registry_rejected() {
 #[test]
 fn fonts_default_to_the_machines_own() {
     let cfg = Config::default();
-    assert!(cfg.typst.fonts.paths.is_empty());
+    assert_eq!(cfg.typst.fonts.paths.len(), 0);
     assert!(cfg.typst.fonts.system);
 }
 

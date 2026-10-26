@@ -171,7 +171,7 @@ mod tests {
                 "{}: no templates",
                 theme.name
             );
-            assert!(fetched.install(&dir).expect("reinstall").is_empty());
+            assert_eq!(fetched.install(&dir).expect("reinstall").len(), 0);
         }
     }
 
