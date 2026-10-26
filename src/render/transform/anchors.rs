@@ -8,7 +8,7 @@ use typst_html::{HtmlDocument, HtmlElement, HtmlNode, attr, tag};
 use crate::config::{AnchorConfig, Config, Place};
 use crate::content::Slug;
 
-use super::{Cx, DocumentExt, ElementExt, Exempt, Transform};
+use super::{Cx, DocumentExt, ElementExt, Exempt, Labels, Transform};
 
 /// The [`Transform`] that adds heading `id` anchors.
 pub(super) struct Anchors;
@@ -19,7 +19,7 @@ impl Transform for Anchors {
     }
 
     fn after(&self) -> &'static [&'static str] {
-        &[Exempt::NAME]
+        &[Exempt::NAME, Labels::NAME]
     }
 
     /// Always: `html { anchors }` decides whether ids are *derived*, not

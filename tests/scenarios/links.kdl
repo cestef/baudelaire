@@ -468,3 +468,49 @@ scenario "two pages claiming one path is an error" {
     fails { code "baudelaire::content::collision" }
   }
 }
+
+scenario "a link lands on any labelled element, not only a heading" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      """#
+    "content/guide.typ" #"""
+      #let frontmatter = (title: "Guide",)
+      == Getting started <start>
+      #block[a note] <note>
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "H",)
+      #link("guide.typ#start")[heading] #link("guide.typ#note")[block]
+      """#
+  }
+  expect {
+    ok
+    file "guide/index.html" {
+      contains #"id="start""#
+      contains #"id="note""#
+      missing #"id="getting-started""#
+    }
+  }
+}
+
+scenario "labels off leaves an unreferenced label without an id" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      html { anchors { labels #false } }
+      """#
+    "content/guide.typ" #"""
+      #let frontmatter = (title: "Guide",)
+      == Getting started <start>
+      #block[a note] <note>
+      """#
+  }
+  expect {
+    ok
+    file "guide/index.html" {
+      contains #"id="getting-started""#
+      missing #"id="note""#
+    }
+  }
+}

@@ -30,6 +30,11 @@ pub struct AnchorConfig {
     /// left alone.
     pub enabled: bool,
 
+    /// Give every element carrying a Typst label that label as its `id`, so
+    /// `page.typ#label` lands on it. A labelled heading takes the label over its slug.
+    #[key(flag)]
+    pub labels: bool,
+
     /// The heading levels that get an id, as `1` to `6`. Unset, every level does.
     #[key(numbers(u8, 1, 6))]
     pub levels: Vec<u8>,
@@ -67,6 +72,7 @@ impl Default for AnchorConfig {
     fn default() -> Self {
         Self {
             enabled: true,
+            labels: true,
             levels: Vec::new(),
             link: None,
             place: Place::default(),

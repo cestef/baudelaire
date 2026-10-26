@@ -117,7 +117,8 @@ See #link("../start/quickstart.typ")[the quickstart], or
 
 Relative paths resolve against the linking file; a leading `/` resolves against
 the project root, the same way a Typst import does. Fragments come along:
-`#link("pages.typ#slugs")` lands on the heading.
+`#link("pages.typ#slugs")` lands on the heading, and `#link("pages.typ#note")`
+on anything labelled `<note>` there (see #link(<labels>)[labels as anchors]).
 
 Only source targets are rewritten, which means `.typ` and, where markdown is on,
 `.md`. Every other href passes through as authored, so a link to `/robots.txt` or
@@ -153,6 +154,7 @@ html {
   columns: 3,
   align: (left, left, left),
   table.header([Key], [Default], [Does]),
+  [`labels`], [on], [Give every Typst label its element as an `id`. See #link(<labels>)[below].],
   [`levels`], [every level], [The heading levels that get an `id`, as `1` to `6`.],
   [`link`], [none], [The text of a link back to the heading, e.g. `#`. Empty is the same as none, which is how a site takes back a theme's.],
   [`place`], [`after`], [Which side of the heading's text that link sits on.],
@@ -163,6 +165,18 @@ still collected, so the deep-link check keeps working on those, and a link namin
 a heading that would have been derived one now reports as broken. `levels`
 narrows the same way: a level it leaves out gets no `id`, and a fragment naming
 one dangles.
+
+=== Labels as anchors <labels>
+
+A Typst label is the anchor: `#block[..] <note>` ships as `id="note"`, and another
+page reaches it with `#link("pages.typ#note")`. Typst alone only emits the `id` when
+something in the same page links to the label, which is why a label nothing
+points at used to dangle.
+
+A labelled heading takes the label over its slug, so `== Setup <install>` is
+`#install`, not `#setup`. A label Typst cannot spell as an `id` (spaces, a leading
+digit) is skipped for a generated one. `anchors { labels #false }` goes back to
+slugs for every heading and leaves unreferenced labels without an `id`.
 
 `link` is opt-in because it is markup you did not write: a theme with no rule for
 it gets a stray `#` in its titles. When it is on, the link carries

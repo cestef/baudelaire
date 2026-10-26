@@ -15,6 +15,7 @@ mod footnotes;
 mod highlight;
 mod image;
 mod integrity;
+mod labels;
 mod lang;
 mod math;
 mod meta;
@@ -52,6 +53,7 @@ use footnotes::Footnotes;
 use highlight::Highlight;
 use image::Images;
 use integrity::Integrity;
+use labels::Labels;
 use lang::Lang;
 use math::Math;
 use meta::Meta;
@@ -419,6 +421,7 @@ impl Transforms {
             Box::new(Links),
             Box::new(Svg),
             Box::new(Lang),
+            Box::new(Labels),
             Box::new(Anchors),
             Box::new(Footnotes),
             Box::new(Toc),
