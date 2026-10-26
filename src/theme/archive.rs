@@ -170,7 +170,11 @@ impl Archive {
             if !entry.is_file() {
                 continue;
             }
-            let path = Self::inside(url, Path::new(entry.name()))?;
+            let name = entry
+                .name()
+                .map_err(|why| ThemeError::unpack(url, why))?
+                .into_owned();
+            let path = Self::inside(url, Path::new(&name))?;
             entries.insert(path, budget.read(url, &mut entry)?);
         }
         Ok(entries)
