@@ -10,6 +10,31 @@ chores are visible in the git history and change nothing for a site.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/spec/v2.0.0.html
 
+## [Unreleased]
+
+### Added
+
+- **A Typst label is an anchor.** `#block[..] <note>` ships as `id="note"`, so
+  `#link("page.typ#note")` lands on it from another page, and the deep-link
+  check accepts it. Typst alone only emitted the `id` when something on the same
+  page linked to the label, so a link from elsewhere had nothing to land on. A
+  label Typst cannot spell as an `id` gets a generated one, and the same label
+  written twice is numbered (`note-1`, `note-2`). `html { anchors { labels } }`
+  turns it off.
+
+### Upgrading
+
+- **A labelled heading keeps its label as its id, not its slug.** `== Setup
+  <install>` is now `#install` where it was `#setup`, so a deep link written
+  against the slug of a labelled heading stops resolving. Headings without a
+  label are unchanged. To keep the old ids for every heading:
+
+  ```kdl
+  html {
+    anchors { labels #false }
+  }
+  ```
+
 ## [0.0.18] - 2026-09-14
 
 ### Added
