@@ -10,7 +10,7 @@ chores are visible in the git history and change nothing for a site.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/spec/v2.0.0.html
 
-## [Unreleased]
+## [0.0.19] - 2026-10-26
 
 ### Added
 
@@ -4193,7 +4193,8 @@ take these as warnings.
 - CSS import order, `url()` tails, EXIF rotation in assets
 - Orphans properly cleaned by `clean`
 
-[unreleased]: https://github.com/cestef/baudelaire/compare/v0.0.18...HEAD
+[unreleased]: https://github.com/cestef/baudelaire/compare/v0.0.19...HEAD
+[0.0.19]: https://github.com/cestef/baudelaire/compare/v0.0.18...v0.0.19
 [0.0.18]: https://github.com/cestef/baudelaire/compare/v0.0.17...v0.0.18
 [0.0.17]: https://github.com/cestef/baudelaire/compare/v0.0.16...v0.0.17
 [0.0.16]: https://github.com/cestef/baudelaire/compare/v0.0.15...v0.0.16
