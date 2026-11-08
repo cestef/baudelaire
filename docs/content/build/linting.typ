@@ -1,5 +1,5 @@
 #let frontmatter = (
-  title: "Linting & budgets",
+  title: "Linting",
   order: 6,
 )
 #import "/templates/theme.typ": callout
@@ -41,7 +41,7 @@ Each is on while the block is present, and off by name.
   [`alt`], [Reports an `<img>` with no `alt` attribute at all.],
   [`ids`], [Reports an `id` used more than once on a page.],
   [`aria`], [Reports an unknown ARIA role or attribute, and one pointing at an id that is not there.],
-  [`snippets`], [Checks each code fence as the language it claims. One line per language; see #link(<snippets>)[below].],
+  [`snippets`], [Checks each code fence as the language it claims. One line per language; see #link("linting/fences.typ")[Code fences].],
 )
 
 === How loud each one is
@@ -170,142 +170,10 @@ still there; a rate limiter answers 429 and says nothing about the link.
 
 == Budgets
 
-A ceiling on what one page ships, written in bytes or in the units the build
-summary prints (`50kB`, `1.5MB`, `0`).
-
-```kdl
-check {
-  budget {
-    html "50kB"
-    js 0
-    css "20kB"
-    images "300kB"
-    total "400kB"
-  }
-}
-```
-
-#table(
-  columns: 2,
-  align: (left, left),
-  table.header([Key], [Does]),
-  [`html`], [Weighs the page's own markup, exactly as written to the output.],
-  [`js`], [Weighs every script it loads, plus its inline `<script>` bodies.],
-  [`css`], [Weighs every stylesheet it loads, plus its inline `<style>` bodies.],
-  [`images`], [Weighs every image it references, responsive alternatives excluded.],
-  [`total`], [Weighs its whole transfer weight: markup plus everything fetched alongside it.],
-  [`strict`], [Whether going over fails the build. On by default.],
-)
-
-Every key is optional and each is checked per page. Responsive `srcset`
-candidates don't count against `images`: they're alternatives to `src`, and a
-visitor is served one of them. An inline script counts once in `total`, as part
-of `html`, even though `js` counts it too. `js` answers how much JavaScript runs;
-`total` answers how many bytes cross the wire.
-
-Going over fails the build. Unlike a lint finding, a budget is a limit you wrote
-down, and a limit that only warns is a number in a config file.
-
-Adopting one on a site that already has pages is the exception, and it says so:
-
-```kdl
-check {
-  budget {
-    strict #false
-    html "50kB"
-  }
-}
-```
-
-That reports the same pages without failing, so a number can be a target before
-it is a limit.
-
-```text
-× 1 page over budget
-├─▶ posts/heavy.typ: `images` is 412.6 KiB, over the 300 KiB budget
-╰─▶ help: ship less, or raise the limit under `check { budget { } }`
-```
-
-A file this build did not write weighs nothing: a script pulled from a CDN, or
-anything under `static/`, is somebody else's byte and counting it would be a
-guess. An asset inlined by `html { embed }` is already inside the markup, so it
-is billed to `html`.
-
-#callout(kind: "warn")[
-  `baudelaire check` compiles every page but processes no assets, so it can see
-  *what* a page loads and not how large any of it is. It runs the rules and
-  leaves the budgets to `baudelaire build`, which has the bytes.
-]
-
+A ceiling on what one page ships, in bytes: #link("linting/budgets.typ")[Budgets].
 == Code fences <snippets>
 
-A fence claims a language. `snippets` is where a site says what that claim is
-worth: nothing until a language is named, and from then on every fence of it is
-read by something that knows the language.
-
-```kdl
-check {
-  snippets {
-    kdl  run="$BAUDELAIRE config check --isolated --compact {file}"
-    json
-    typ "warn"
-    sh   run="shellcheck -s sh {file}"
-  }
-}
-```
-
-A line with no `run` is checked by the parser this binary already carries:
-
-#table(
-  columns: 2,
-  align: (left, left),
-  table.header([Language], [Read by]),
-  [`kdl`], [The KDL parser, for syntax alone.],
-  [`json`], [`serde_json`.],
-  [`toml`], [`toml_edit`.],
-  [`yaml`, `yml`], [`saphyr`.],
-  [`typ`, `typst`], [Typst's own parser, which parses without evaluating.],
-)
-
-Naming any other language without a `run` is a config error rather than a line
-that checks nothing.
-
-#table(
-  columns: 3,
-  align: (left, left, left),
-  table.header([Key], [Type], [Does]),
-  [`run`], [str], [The command that checks one snippet. `{file}` is the snippet on disk, as one shell word, and `{lang}` the language it claimed. Nonzero exit is a finding; what the command wrote is the message.],
-  [`hidden`], [str], [A line prefix that is checked and never shown, for the context a fragment needs. See #link(<hidden>)[hidden lines].],
-)
-
-A `run` command is run through the system shell in the project root, like a
-#link("hooks.typ")[hook], and `$BAUDELAIRE` is the binary running the build, so a
-site checks its own config examples with the very build that renders them rather
-than with whatever is on `PATH`. A command that reports `file:line:column:` has
-its message placed on that line of the fence; one that reports anything else is
-reported against the fence itself.
-
-=== Hidden lines <hidden>
-
-A documentation fence usually shows a fragment: the block that matters, not the
-three blocks around it. `hidden` is the prefix that carries the rest:
-
-````typ
-```kdl
-//! content { collections { posts {
-schema { title "str" }
-//! } } }
-```
-````
-
-The reader sees the `schema` block. The checker reads all five lines. The prefix
-is yours to pick, and a comment in the language keeps the raw file readable to
-anyone who never renders it.
-
-One line is a directive rather than context: `//! @ignore` (the prefix, then
-`@ignore`) says this fence is not meant to check at all, which is what a snippet
-that is wrong on purpose needs.
-
+`snippets` says what each fenced language is checked by: #link("linting/fences.typ")[Code fences].
 == Keeping a rule off one place
 
 A finding can be right about the markup and wrong about the page. `nolint` marks
