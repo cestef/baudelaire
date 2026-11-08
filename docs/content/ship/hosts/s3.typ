@@ -140,8 +140,12 @@ deploy {
 }
 ```
 
+A request that fails with `429`, a `5xx` or a dropped connection is tried up to
+four times, waiting a quarter second and doubling each time. Any other status
+(`403`, `404`) fails at once.
+
 Digesting the local files runs over the build's threads either way, since that
-half asks the bucket nothing. A key that fails stops the run, and the report
+half asks the bucket nothing. A key that still fails stops the run, and the report
 names it and how many objects had finished; with requests in flight together it
 names *a* key that failed rather than the first one in order.
 

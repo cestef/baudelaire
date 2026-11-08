@@ -2,6 +2,7 @@
 //! [`Backend`] and supplies the [`Store`] that [`Dist::reconcile`] mirrors into.
 
 mod digest;
+mod retry;
 mod s3;
 mod sigv4;
 #[cfg(feature = "ssh")]

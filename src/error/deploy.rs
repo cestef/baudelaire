@@ -393,6 +393,22 @@ impl DeployError {
         }
     }
 
+    /// Whether trying the same request again may succeed: the host was busy or
+    /// unreachable, not unwilling.
+    pub fn transient(&self) -> bool {
+        match self {
+            Self::Request { status, .. } => matches!(status, 429 | 500 | 502 | 503 | 504),
+            Self::Http { source } => matches!(
+                **source,
+                ureq::Error::Io(_)
+                    | ureq::Error::Timeout(_)
+                    | ureq::Error::ConnectionFailed
+                    | ureq::Error::HostNotFound
+            ),
+            _ => false,
+        }
+    }
+
     /// What a status most often means here, so auth failure, a missing bucket
     /// and a rate limit are told apart without reading XML.
     fn hint(status: u16) -> &'static str {
@@ -401,7 +417,9 @@ impl DeployError {
                 "check the access key, secret, and (for temporary credentials) `AWS_SESSION_TOKEN`, and that the key may write this bucket"
             }
             404 => "check the `bucket` name and `region`, and that the bucket exists",
-            429 | 503 => "the host is rate limiting; retry",
+            429 | 503 => {
+                "the host is rate limiting; it was retried before giving up, so wait and run the deploy again"
+            }
             500..=599 => "the host or a proxy in front of it failed; retry",
             _ => "check the `deploy { s3 }` block against the host's requirements",
         }

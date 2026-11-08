@@ -7,6 +7,7 @@ use md5::{Digest as _, Md5};
 use time::OffsetDateTime;
 
 use super::digest::Digest;
+use super::retry::Backoff;
 use super::sigv4::{DATE_HEADER, Request, Signer};
 use super::{Backend, Digests, Dist, Inventory, Listed, Store};
 use crate::config::{CacheControl, S3Config, Slashed};
@@ -265,6 +266,10 @@ impl Bucket {
     /// the method, so sending one verb's signature under another is
     /// `SignatureDoesNotMatch`.
     fn send(&self, uri: &str, query: &str, body: &[u8]) -> Result<String> {
+        Ok(Backoff::DEFAULT.run(|| self.get(uri, query, body))?)
+    }
+
+    fn get(&self, uri: &str, query: &str, body: &[u8]) -> Result<String, DeployError> {
         const METHOD: Method = Method::Get;
 
         let url = if query.is_empty() {
@@ -273,15 +278,9 @@ impl Bucket {
             format!("{}?{query}", self.url(uri))
         };
         let auth = self.authorize(METHOD, uri, query, body);
-        let mut response = self
-            .signed(self.agent.get(&url), &auth)
-            .call()
-            .map_err(DeployError::from)?;
+        let mut response = self.signed(self.agent.get(&url), &auth).call()?;
         Self::check(METHOD, uri, response.status().as_u16(), &mut response)?;
-        response
-            .body_mut()
-            .read_to_string()
-            .map_err(|e| DeployError::from(e).into())
+        Ok(response.body_mut().read_to_string()?)
     }
 
     /// A signed PUT (with a body) or DELETE (without); ureq types the two
@@ -293,6 +292,16 @@ impl Bucket {
         body: &[u8],
         headers: &[(&str, &str)],
     ) -> Result<()> {
+        Ok(Backoff::DEFAULT.run(|| self.put_or_delete(method, uri, body, headers))?)
+    }
+
+    fn put_or_delete(
+        &self,
+        method: Method,
+        uri: &str,
+        body: &[u8],
+        headers: &[(&str, &str)],
+    ) -> Result<(), DeployError> {
         let url = self.url(uri);
         let auth = self.authorize(method, uri, "", body);
         let mut response = if method == Method::Delete {
@@ -303,8 +312,7 @@ impl Bucket {
                 request = request.header(*name, *value);
             }
             request.send(body)
-        }
-        .map_err(DeployError::from)?;
+        }?;
         Self::check(method, uri, response.status().as_u16(), &mut response)
     }
 
@@ -364,12 +372,12 @@ impl Bucket {
         uri: &str,
         status: u16,
         response: &mut ureq::http::Response<ureq::Body>,
-    ) -> Result<()> {
+    ) -> Result<(), DeployError> {
         if (200..300).contains(&status) {
             return Ok(());
         }
         let body = response.body_mut().read_to_string().unwrap_or_default();
-        Err(DeployError::request(method, uri, status, &body).into())
+        Err(DeployError::request(method, uri, status, &body))
     }
 }
 
