@@ -80,7 +80,9 @@ impl Lock {
             .files
             .iter()
             .map(|(rel, digest)| {
-                let Some(inside) = crate::fs::Contained::new(rel) else {
+                let Some((inside, at)) = crate::fs::Contained::new(rel)
+                    .and_then(|inside| Some((inside, inside.under_real(dir)?)))
+                else {
                     return Tracked {
                         rel: PathBuf::from(rel),
                         state: State::Foreign,
@@ -88,7 +90,7 @@ impl Lock {
                 };
                 Tracked {
                     rel: inside.path().to_owned(),
-                    state: match std::fs::read(inside.under(dir)) {
+                    state: match std::fs::read(at) {
                         Err(_) => State::Gone,
                         Ok(bytes) if Hash::of_bytes(&bytes).hex() == *digest => State::Pristine,
                         Ok(_) => State::Edited,
@@ -168,7 +170,7 @@ impl Fetched {
     pub fn install(&self, dir: &Path) -> Result<Vec<PathBuf>> {
         let mut written = Vec::new();
         for (rel, contents) in &self.files {
-            let dst = dir.join(rel);
+            let dst = Self::target(dir, rel)?;
             if dst.exists() {
                 continue;
             }
@@ -198,7 +200,7 @@ impl Fetched {
                 State::Gone | State::Foreign => false,
             };
             if replace {
-                Self::place(&dir.join(&file.rel), contents)?;
+                Self::place(&Self::target(dir, &file.rel)?, contents)?;
                 written.push(file.rel.clone());
             }
         }
@@ -273,6 +275,12 @@ impl Fetched {
         crate::fs::write(dir.join(Lock::FILE), json)
     }
 
+    fn target(dir: &Path, rel: &Path) -> Result<PathBuf> {
+        crate::fs::Contained::new(rel)
+            .and_then(|inside| inside.under_real(dir))
+            .ok_or_else(|| ThemeError::linked(dir.join(rel).display()).into())
+    }
+
     fn place(dst: &Path, bytes: &[u8]) -> Result<()> {
         if let Some(parent) = dst.parent() {
             crate::fs::create_dir_all(parent)?;
@@ -310,6 +318,30 @@ mod tests {
                 "update {run} took the edit"
             );
         }
+    }
+
+    /// A directory inside the copy that was swapped for a link elsewhere must
+    /// not turn an update into a write, or a remove into a delete, out there.
+    #[test]
+    #[cfg(unix)]
+    fn a_symlinked_directory_is_never_written_or_deleted_through() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let dir = tmp.path().join("albatros");
+        let outside = tmp.path().join("outside");
+        std::fs::create_dir_all(&outside).expect("mkdir");
+        let theme = albatros();
+        theme.install(&dir).expect("install");
+
+        let victim = outside.join("style.css");
+        std::fs::write(&victim, b"precious").expect("write");
+        std::fs::remove_dir_all(dir.join("assets")).expect("rm assets");
+        std::os::unix::fs::symlink(&outside, dir.join("assets")).expect("link");
+
+        theme.update(&dir, true).expect("update");
+        Lock::uninstall(&dir, true).expect("remove");
+
+        assert_eq!(std::fs::read(&victim).expect("read"), b"precious");
+        assert_eq!(std::fs::read_dir(&outside).expect("ls").count(), 1);
     }
 
     /// A file already there when the install ran was never ours, so the record

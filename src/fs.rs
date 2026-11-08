@@ -39,6 +39,22 @@ impl<'a> Contained<'a> {
     pub fn under(&self, root: impl AsRef<Path>) -> PathBuf {
         root.as_ref().join(self.0)
     }
+
+    /// [`under`](Self::under), or `None` when an existing component resolves
+    /// outside `root` or the last one is itself a symlink, so a write or a delete
+    /// at the result cannot land anywhere else.
+    pub fn under_real(&self, root: impl AsRef<Path>) -> Option<PathBuf> {
+        let root = root.as_ref();
+        let joined = root.join(self.0);
+        if std::fs::symlink_metadata(&joined).is_ok_and(|meta| meta.is_symlink()) {
+            return None;
+        }
+        let real = |path: &Path| {
+            let nearest = path.ancestors().find(|ancestor| ancestor.exists())?;
+            std::fs::canonicalize(nearest).ok()
+        };
+        real(&joined)?.starts_with(real(root)?).then_some(joined)
+    }
 }
 
 /// A leading `~` replaced by `home`, and any other path left alone.
@@ -373,6 +389,28 @@ mod tests {
 
         assert_eq!(rel.under(&project), project.join("escape/secret.svg"));
         assert!(!super::canonical(rel.under(&project)).starts_with(super::canonical(&project)));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn under_real_refuses_a_symlink_out_of_the_root() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("theme");
+        let outside = tmp.path().join("outside");
+        super::create_dir_all(&root).unwrap();
+        super::create_dir_all(&outside).unwrap();
+        super::write(outside.join("secret"), "").unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("escape")).unwrap();
+        std::os::unix::fs::symlink(outside.join("secret"), root.join("link")).unwrap();
+        super::write(root.join("plain"), "").unwrap();
+
+        let under = |rel: &str| Contained::new(rel).unwrap().under_real(&root);
+
+        assert!(under("escape/secret").is_none());
+        assert!(under("escape/new").is_none());
+        assert!(under("link").is_none());
+        assert_eq!(under("plain"), Some(root.join("plain")));
+        assert_eq!(under("not/yet/there"), Some(root.join("not/yet/there")));
     }
 
     #[test]

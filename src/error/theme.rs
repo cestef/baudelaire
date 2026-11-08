@@ -158,6 +158,13 @@ pub enum ThemeError {
     )]
     Escapes { url: String, entry: String },
 
+    #[error("{} leads outside the theme directory through a symbolic link", Code(.path))]
+    #[diagnostic(
+        code(baudelaire::theme::linked),
+        help("nothing was written; replace the link with the file it points at")
+    )]
+    Linked { path: String },
+
     /// A theme's `theme.kdl` naming a section that is not a theme's to name.
     ///
     /// Refused rather than ignored, so a theme author learns their block does
@@ -247,6 +254,12 @@ impl ThemeError {
         Self::Escapes {
             url: url.to_owned(),
             entry: entry.to_owned(),
+        }
+    }
+
+    pub fn linked(path: impl std::fmt::Display) -> Self {
+        Self::Linked {
+            path: path.to_string(),
         }
     }
 

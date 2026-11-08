@@ -21,6 +21,12 @@ chores are visible in the git history and change nothing for a site.
 
 ### Fixed
 
+- **`theme add`, `update` and `remove` no longer follow a symlink out of the theme.** A
+  directory inside an installed copy that had been replaced by a link elsewhere let an
+  update write, or a remove delete, at the link's target. A path that resolves outside
+  the copy is now left alone, and an install or update that would write there stops
+  with `baudelaire::theme::linked`.
+
 - **A theme can no longer read the build machine's environment.** `${VAR}` expanded in
   every string a theme's `theme.kdl` sets, and only four credential variables were
   refused, so a fetched theme could publish any other variable (`html { meta { image
