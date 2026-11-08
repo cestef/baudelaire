@@ -109,8 +109,11 @@ echo "$PASSPHRASE" | baudelaire deploy --secret - --yes
 == Host keys
 
 `strict` is the man-in-the-middle guard, and it mirrors OpenSSH. A key already
-in `~/.ssh/known_hosts` is trusted, an unseen host is learned on first connect,
-and a *changed* key is refused before anything uploads.
+in `~/.ssh/known_hosts` is trusted, an unseen host is learned on first connect and
+the fingerprint is printed so you can compare it out of band, and a *changed*
+key is refused before anything uploads. A `known_hosts` that cannot be read is
+reported, and under `strict` it fails the deploy. Setting a session up has a
+ceiling, and keepalives close a connection that stops answering mid-transfer.
 
 #callout(kind: "note")[
   If you trust the change (a rebuilt server, a rotated key), run
