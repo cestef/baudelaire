@@ -10,7 +10,11 @@ Fenced code blocks are highlighted by Typst itself. Register a grammar once with
 #show raw.where(lang: "powershell"): set raw(syntaxes: "/highlight/powershell.sublime-syntax")
 ```
 
-`syntaxes` points at a Sublime-syntax grammar (`.sublime-syntax`). Typst ships grammars for most common languages, and baudelaire adds `kdl` -- the language its own config is written in, and the one it highlights a `config show` with -- so you only need your own for the niche ones. This site adds `powershell.sublime-syntax` for the Windows install steps and nothing else.
+`syntaxes` points at a Sublime-syntax grammar (`.sublime-syntax`). Typst ships grammars
+for most common languages, and baudelaire adds `kdl`, the language its own config is
+written in, and the one it highlights a `config show` with, so you only need your own
+for the niche ones. This site adds `powershell.sublime-syntax` for the Windows install
+steps and nothing else.
 
 #callout(kind: "note")[
   Typst builds a syntax set from the files you hand it and nothing else, so a grammar that reaches into another Sublime package (`embed: scope:source.regexp`, `set: scope:source.cs`) cannot resolve that reference, and the text it covers is dropped from the output rather than left unhighlighted. Vendoring a grammar from the wild usually means replacing those few contexts with plain handling.
