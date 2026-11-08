@@ -1,6 +1,6 @@
 #let frontmatter = (
   title: "Reading time",
-  order: 7,
+  order: 6,
 )
 #import "/templates/theme.typ": callout
 

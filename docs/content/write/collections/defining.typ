@@ -1,6 +1,6 @@
 #let frontmatter = (
   title: "Defining a collection",
-  order: 8,
+  order: 1,
 )
 #import "/templates/theme.typ": callout
 

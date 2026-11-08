@@ -1,6 +1,6 @@
 #let frontmatter = (
   title: "Taxonomies",
-  order: 10,
+  order: 3,
 )
 #import "/templates/theme.typ": callout
 

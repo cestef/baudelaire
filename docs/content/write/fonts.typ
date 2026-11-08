@@ -1,6 +1,6 @@
 #let frontmatter = (
   title: "Fonts",
-  order: 8,
+  order: 7,
 )
 #import "/templates/theme.typ": callout
 

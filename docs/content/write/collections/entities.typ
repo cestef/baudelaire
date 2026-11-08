@@ -1,6 +1,6 @@
 #let frontmatter = (
   title: "Authors and other entities",
-  order: 11,
+  order: 4,
 )
 #import "/templates/theme.typ": callout
 

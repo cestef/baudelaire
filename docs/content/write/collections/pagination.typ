@@ -1,6 +1,6 @@
 #let frontmatter = (
   title: "Listings & pagination",
-  order: 9,
+  order: 2,
 )
 #import "/templates/theme.typ": callout
 

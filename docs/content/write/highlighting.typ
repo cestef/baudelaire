@@ -1,6 +1,6 @@
 #let frontmatter = (
   title: "Code highlighting",
-  order: 6,
+  order: 5,
 )
 #import "/templates/theme.typ": callout
 
