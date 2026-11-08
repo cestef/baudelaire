@@ -218,7 +218,7 @@ tar = { version = "0.4.46", optional = true }
 zip = { version = "9.1.2", default-features = false, features = [
   "deflate",
 ], optional = true }
-pulldown-cmark = { version = "0.13.4", default-features = false, optional = true }
+pulldown-cmark = { version = "0.13.6", default-features = false, optional = true }
 # Read by the markdown frontmatter dialects and by the snippet lint, which is
 # in every flavor: a `toml` or `yaml` fence is checked whether or not this build
 # can publish a `.md` page.
