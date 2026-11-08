@@ -18,6 +18,8 @@ enum Unexpanded {
     Missing(String),
     /// The variable carries a credential, which no config value may.
     Secret(String),
+    /// A theme named the variable, and a theme may not read the environment.
+    Theme(String),
 }
 
 /// A [`KdlValue`] written back as the KDL source that parses to it, for a
@@ -76,6 +78,9 @@ enum Unset {
     /// A [`Structural`] pass, which checks which keys are written and not what
     /// they say: the reference stands in as [`PLACEHOLDER`](Unset::PLACEHOLDER).
     Stands,
+    /// A theme's floor: the environment is not consulted at all, and a reference
+    /// with no `:-default` is an error of its own.
+    Themed,
 }
 
 impl Unset {
@@ -88,7 +93,7 @@ impl Unset {
     /// reference is an error.
     fn stand_in(self) -> Option<String> {
         match self {
-            Self::Fails => None,
+            Self::Fails | Self::Themed => None,
             Self::Stands => Some(Self::PLACEHOLDER.to_owned()),
         }
     }
@@ -97,6 +102,9 @@ impl Unset {
 thread_local! {
     /// Whether this thread is inside a [`Structural`] pass.
     static STRUCTURAL: Cell<bool> = const { Cell::new(false) };
+
+    /// Whether this thread is reading a theme's `theme.kdl`.
+    static THEMED: Cell<bool> = const { Cell::new(false) };
 }
 
 /// A pass that reads a config for its *shape* rather than its content: for as
@@ -117,7 +125,9 @@ impl Structural {
 
     /// How an unset variable resolves on this thread right now.
     fn mode() -> Unset {
-        if STRUCTURAL.get() {
+        if THEMED.get() {
+            Unset::Themed
+        } else if STRUCTURAL.get() {
             Unset::Stands
         } else {
             Unset::Fails
@@ -131,6 +141,24 @@ impl Drop for Structural {
     }
 }
 
+/// A read of a theme's `theme.kdl`: for as long as the guard is alive, no
+/// `${VAR}` reads the environment, since a fetched theme could otherwise
+/// publish any variable of the build machine in a config string.
+pub(super) struct Themed(bool);
+
+impl Themed {
+    #[must_use]
+    pub(super) fn begin() -> Self {
+        Self(THEMED.replace(true))
+    }
+}
+
+impl Drop for Themed {
+    fn drop(&mut self) {
+        THEMED.set(self.0);
+    }
+}
+
 /// Expands `${VAR}` references in config string values from the process
 /// environment, with an optional `${VAR:-default}` fallback. The single place
 /// the config surface reads the environment.
@@ -138,7 +166,12 @@ struct Env;
 
 impl Env {
     fn expand(raw: &str) -> Result<String, Unexpanded> {
-        Self::expand_with(raw, |name| std::env::var(name).ok(), Structural::mode())
+        let unset = Structural::mode();
+        let lookup = |name: &str| match unset {
+            Unset::Themed => None,
+            Unset::Fails | Unset::Stands => std::env::var(name).ok(),
+        };
+        Self::expand_with(raw, lookup, unset)
     }
 
     /// Expansion against an arbitrary variable lookup, kept free of the process
@@ -167,7 +200,10 @@ impl Env {
             let value = lookup(name)
                 .or_else(|| default.map(str::to_owned))
                 .or_else(|| unset.stand_in())
-                .ok_or_else(|| Unexpanded::Missing(name.to_owned()))?;
+                .ok_or_else(|| match unset {
+                    Unset::Themed => Unexpanded::Theme(name.to_owned()),
+                    Unset::Fails | Unset::Stands => Unexpanded::Missing(name.to_owned()),
+                })?;
             out.push_str(&value);
             rest = &after[end + 1..];
         }
@@ -211,6 +247,7 @@ impl ValueExt for KdlValue {
                 Env::expand(s).map_err(|why| match why {
                     Unexpanded::Missing(name) => ConfigError::env(text, &name, span).into(),
                     Unexpanded::Secret(name) => ConfigError::secret(text, &name, span).into(),
+                    Unexpanded::Theme(name) => ConfigError::theme_env(text, &name, span).into(),
                 })
             },
         )
@@ -289,7 +326,7 @@ impl ValueExt for KdlValue {
 
 #[cfg(test)]
 mod tests {
-    use super::{Env, Kdl, Structural, Unexpanded, Unset};
+    use super::{Env, Kdl, Structural, Themed, Unexpanded, Unset};
     use kdl::KdlValue;
 
     /// A help that says "write this instead" is copied, so what it prints has
@@ -355,6 +392,21 @@ mod tests {
                 "{err:?}"
             );
         }
+    }
+
+    #[test]
+    fn env_is_not_read_for_a_theme() {
+        let err = Env::expand_with("x/${HOME}", |_| None, Unset::Themed).unwrap_err();
+        assert!(
+            matches!(&err, Unexpanded::Theme(name) if name == "HOME"),
+            "{err:?}"
+        );
+        assert_eq!(
+            Env::expand_with("${HOME:-fallback}", |_| None, Unset::Themed).unwrap(),
+            "fallback"
+        );
+        let _themed = Themed::begin();
+        assert!(matches!(Structural::mode(), Unset::Themed));
     }
 
     #[test]

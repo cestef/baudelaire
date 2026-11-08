@@ -156,6 +156,26 @@ fn a_theme_cannot_set_the_sections_a_site_owns() {
     }
 }
 
+/// A theme may set `html { meta }`, but it may not read the build machine's
+/// environment into it: any variable would be published in the page.
+#[test]
+fn a_theme_cannot_read_the_environment() {
+    use miette::Diagnostic;
+
+    let site = site();
+    site.write(
+        "themes/plume/theme.kdl",
+        "html {\n  meta {\n    image \"https://x.test/${HOME}\"\n  }\n}\n",
+    );
+
+    let err = Config::load(&site.read("config.kdl"), &site.root, None).expect_err("env read");
+
+    assert_eq!(
+        err.code().map(|code| code.to_string()).as_deref(),
+        Some("baudelaire::config::theme_env")
+    );
+}
+
 /// Two keys a theme may not carry from inside a section it is otherwise
 /// allowed: an arbitrary response header on an arbitrary path, and a wildcard
 /// `redirect`, which claims no output file for the collision check to catch.

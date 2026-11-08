@@ -362,6 +362,7 @@ impl Config {
     /// machine runs, what the browser trusts in the site's name, or what a
     /// build fails on. Refused rather than dropped, so a theme author finds out.
     fn floor(at: &Path, root: PathBuf) -> Result<Self> {
+        let _themed = value::Themed::begin();
         let text = crate::fs::read_to_string(at)?;
         let doc: KdlDocument = text.parse().map_err(|e| ConfigError::parse(&text, e))?;
         if let Some(section) = doc

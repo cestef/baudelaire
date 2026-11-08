@@ -440,6 +440,17 @@ impl ConfigError {
         )
     }
 
+    /// A `${VAR}` reference in a theme, which may not read the environment.
+    pub fn theme_env(source: &str, name: &str, span: SourceSpan) -> Self {
+        Self::at(
+            source,
+            ConfigErrorKind::ThemeEnv {
+                name: name.to_owned(),
+            },
+            span,
+        )
+    }
+
     pub fn missing_children(source: &str, span: SourceSpan) -> Self {
         Self::at(source, ConfigErrorKind::MissingChildren, span)
     }
@@ -947,6 +958,16 @@ pub enum ConfigErrorKind {
         )
     )]
     SecretEnv { name: String },
+
+    #[error("a theme cannot read environment variable {}", Code(.name))]
+    #[diagnostic(
+        code(baudelaire::config::theme_env),
+        help(
+            "a fetched theme must not choose what of the build machine's environment it \
+             publishes; set the value in the site's own config"
+        )
+    )]
+    ThemeEnv { name: String },
 
     #[error(transparent)]
     #[diagnostic(transparent)]
