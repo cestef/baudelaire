@@ -258,7 +258,7 @@ impl<'a> Placement<'a> {
                 ui.arrow("missing", Paths(spec));
                 ui.item(
                     format_args!(
-                        "put its directory there before building; {}/start/themes/ covers what a theme is",
+                        "put its directory there before building; {}/theming/using/ covers what a theme is",
                         env!("CARGO_PKG_HOMEPAGE")
                     )
                     .dimmed(),
