@@ -178,12 +178,6 @@ pub struct GlobalArgs {
     pub profile: Option<String>,
 
     /// Build with this theme, whatever `theme` in the config says.
-    ///
-    /// Here beside `--profile` and not in [`CommonOverrides`] because it does
-    /// not edit a config that has been read: a theme supplies the `theme.kdl`
-    /// floor that the site's own keys are layered over, so it has to be known
-    /// during the load rather than applied to its result. The same reason a
-    /// theme cannot be named in a `profiles { }` entry.
     #[arg(long, global = true, value_name = "THEME", help_heading = group::PROJECT)]
     pub theme: Option<String>,
 
