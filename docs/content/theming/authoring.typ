@@ -1,10 +1,10 @@
 #let frontmatter = (
   title: "Writing a theme",
-  order: 10,
+  order: 2,
 )
 #import "/templates/theme.typ": callout
 
-A theme packages templates, assets, and config defaults so a site gets all three by naming one line. Start by copying the closest of the #link("../start/themes.typ")[four shipped themes] and editing it in place.
+A theme packages templates, assets, and config defaults so a site gets all three by naming one line. Start by copying the closest of the #link("using.typ")[four shipped themes] and editing it in place.
 
 ```kdl
 theme "themes/plume"
@@ -81,7 +81,7 @@ None of the shipped themes hardcode a menu, and yours should not either. Two #li
 #let posts = pages(page.lang).filter(p => p.collection == "posts")
 ```
 
-A catalogue row is the same shape a generated listing hands its template as `entries`, so one card component renders a collection index, a term page, and a home-page grid. See #link("templates.typ")[templates] for the row fields.
+A catalogue row is the same shape a generated listing hands its template as `entries`, so one card component renders a collection index, a term page, and a home-page grid. See #link("../write/templates.typ")[templates] for the row fields.
 
 == Every visible word
 
@@ -93,7 +93,7 @@ Read UI text off the site's own string table, so a non-English site translates y
 #label(page, "reading", "min read")
 ```
 
-Dates arrive already localized: `page.date.display` is written the way the page's language writes one, and `page.date.iso` is what a machine wants. Never format one yourself, or a French page reads `July`. See #link("i18n.typ")[multiple languages].
+Dates arrive already localized: `page.date.display` is written the way the page's language writes one, and `page.date.iso` is what a machine wants. Never format one yourself, or a French page reads `July`. See #link("../write/i18n.typ")[multiple languages].
 
 == Publish it
 

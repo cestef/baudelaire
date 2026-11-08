@@ -50,7 +50,7 @@ fallback `author` and `description` follow.
 
 == Counted from the source
 
-The count comes from the page's Typst source, not its rendered HTML. The render has not happened yet when a template is handed its page, and a #link("collections/pagination.typ")[listing] entry is built earlier still. That makes it an estimate, which a reading time is anyway.
+The count comes from the page's Typst source, not its rendered HTML. The render has not happened yet when a template is handed its page, and a #link("../collections/pagination.typ")[listing] entry is built earlier still. That makes it an estimate, which a reading time is anyway.
 
 Two consequences:
 

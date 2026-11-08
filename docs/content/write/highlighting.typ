@@ -112,4 +112,4 @@ Without the block nothing changes: the colors stay inline, exactly as Typst emit
 
 == In a theme
 
-All four #link("../start/themes.typ")[shipped themes] turn `highlight` on in their `theme.kdl` and define the palette in `style.css`. Each maps the twenty-odd tokens onto about eight color variables: the ones a reader has to tell apart get a color of their own, and the rest join whichever is closest.
+All four #link("../theming/using.typ")[shipped themes] turn `highlight` on in their `theme.kdl` and define the palette in `style.css`. Each maps the twenty-odd tokens onto about eight color variables: the ones a reader has to tell apart get a color of their own, and the rest join whichever is closest.

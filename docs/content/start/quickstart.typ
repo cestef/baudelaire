@@ -24,7 +24,7 @@ with a couple of example pages, the `templates/` that render them, and an
 `assets/style.css`. Pass `-y` to take every default and skip the prompts.
 
 The first question offers the four starter shapes and the four
-#link("themes.typ")[themes] the binary carries. Naming either on the command
+#link("../theming/using.typ")[themes] the binary carries. Naming either on the command
 line (`-t`, `--theme`) answers it, and the prompt is skipped.
 
 The default shape is a blog. Four ship:
@@ -58,7 +58,7 @@ A theme the binary carries is written into that directory on the spot, so this
 is a site that builds. A spec naming anything else is a directory `init` cannot
 fill, and it closes by saying so.
 
-See #link("themes.typ")[themes].
+See #link("../theming/using.typ")[themes].
 
 == Serve
 
@@ -115,7 +115,7 @@ The file's location decides its collection and its URL. `content/posts/` is the
 `posts` collection because `config.kdl` says so, and everything about how a page
 is grouped, ordered and addressed follows from there. See
 #link("../write/pages.typ")[pages] and
-#link("../write/collections/defining.typ")[collections].
+#link("../collections/defining.typ")[collections].
 
 Every key frontmatter understands is on
 #link("../write/frontmatter.typ")[frontmatter]. `description` above fills the
@@ -148,10 +148,10 @@ Then #link("../ship/deploy.typ")[deploy it].
   align: (left, left),
   table.header([You want], [Go to]),
   [A look, without writing a template],
-  [#link("themes.typ")[Themes]],
+  [#link("../theming/using.typ")[Themes]],
 
   [To change how pages group and get their URLs],
-  [#link("../write/collections/defining.typ")[Collections]],
+  [#link("../collections/defining.typ")[Collections]],
 
   [To render pages your own way],
   [#link("../write/templates.typ")[Templates]],

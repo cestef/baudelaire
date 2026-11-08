@@ -38,7 +38,7 @@ sit next to the page.
 )
 
 The default permalink is `/{path}/{slug}/`: the directories the page sits under,
-however deep, then its slug. A #link("collections/defining.typ")[collection] can set a
+however deep, then its slug. A #link("../collections/defining.typ")[collection] can set a
 different one.
 
 A file named `index` publishes at its directory's own URL, which is what makes

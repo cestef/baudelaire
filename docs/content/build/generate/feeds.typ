@@ -146,7 +146,7 @@ title, because the element cannot be omitted.
 ```
 
 The title, the dates, the `description` (falling back to `summary`), and every
-#link("../../write/collections/taxonomies.typ")[taxonomy] term as a flat category list. Without
+#link("../../collections/taxonomies.typ")[taxonomy] term as a flat category list. Without
 a description a reader shows the title and nothing else, so write one: the same
 value fills the page's `<meta name="description">` and its
 #link("meta.typ")[social preview].

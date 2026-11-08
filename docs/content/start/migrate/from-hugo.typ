@@ -171,7 +171,7 @@ params:
 
 A `tags` key is nothing at all until the taxonomy is declared. Until then it is
 an unrecognised key like any other, so a copied post publishes with no terms and
-no complaint. See #link("../../write/collections/taxonomies.typ")[taxonomies].
+no complaint. See #link("../../collections/taxonomies.typ")[taxonomies].
 
 The third fence, `;;;`, is KDL, the language the config is written in. Nothing
 about a Hugo migration needs it, and it is the one dialect that cannot spell a

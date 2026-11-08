@@ -67,7 +67,7 @@ date: "2026-08-05",
 `lang` and `translation`
 only matter once a `languages` block exists; see
 #link("i18n.typ")[multiple languages]. `redirect` is covered on
-#link("collections/redirects.typ")[redirects].
+#link("../collections/redirects.typ")[redirects].
 
 `description`, `summary`, `image`, `alt` and `author` drive
 #link("../build/generate/meta.typ")[meta and social tags], the feeds, and what a
@@ -89,7 +89,7 @@ They read the same in a listing, as `entry.description`, `entry.image`,
 == Naming a URL outright
 
 `path` publishes a page where you say, whatever its collection's
-#link("collections/defining.typ")[permalink] pattern would have produced:
+#link("../collections/defining.typ")[permalink] pattern would have produced:
 
 ```typ
 #let frontmatter = (
@@ -132,7 +132,7 @@ a list of terms:
 ```
 
 With `taxonomies { tags }` configured, this page is grouped under both terms.
-See #link("collections/taxonomies.typ")[taxonomies].
+See #link("../collections/taxonomies.typ")[taxonomies].
 
 == Opting out <exclude>
 

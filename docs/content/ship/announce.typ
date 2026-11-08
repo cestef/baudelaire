@@ -70,7 +70,7 @@ A page becomes a document when its
 #link("../write/frontmatter.typ")[frontmatter] carries a `date`. standard.site
 requires a publication date, so undated pages are reported as skipped and the
 run warns with the count. Title, `description` (or `summary`), and
-#link("../write/collections/taxonomies.typ")[taxonomy] terms travel with each document.
+#link("../collections/taxonomies.typ")[taxonomy] terms travel with each document.
 
 == The app password
 

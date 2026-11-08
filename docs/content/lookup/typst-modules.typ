@@ -268,7 +268,7 @@ a language with no pages. Each node is:
 )
 
 Generated pages and the not-found page are excluded. See
-#link("../write/collections/navigation.typ")[navigation] for the ordering rules.
+#link("../collections/navigation.typ")[navigation] for the ordering rules.
 
 == pages
 

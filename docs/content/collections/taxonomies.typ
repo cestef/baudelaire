@@ -16,7 +16,7 @@ content {
 ```
 
 Any page with `tags: ("rust", "cli")` in its
-#link("../frontmatter.typ")[frontmatter] is now grouped automatically, and
+#link("../write/frontmatter.typ")[frontmatter] is now grouped automatically, and
 A `listing { }` block writes:
 
 #table(
@@ -119,10 +119,10 @@ runs of non-alphanumerics collapsed to `-`.
 
 On a multi-language site terms are grouped per language, so a French and an
 English `rust` tag are separate `/fr/tags/rust/` and `/tags/rust/` pages, never
-a merged one. See #link("../i18n.typ")[multiple languages].
+a merged one. See #link("../write/i18n.typ")[multiple languages].
 
 A term can also carry its own feed, with `generate { feed { terms #true } }`;
-see #link("../../build/generate/feeds.typ")[feeds and sitemap].
+see #link("../build/generate/feeds.typ")[feeds and sitemap].
 
 Terms can be more than words. Point a taxonomy at a registry and each term is a
 person, a series, an organization the build knows other things about: see

@@ -109,7 +109,7 @@ which is what a tool reading the output expects; it is what
   [`-c, --config <path>`], [`config.kdl`], [Config file to read.],
   [`-r, --root <dir>`], [--], [Change into `dir` first, so relative paths resolve under it.],
   [`-p, --profile <name>`], [--], [Apply a named #link("../configure/profiles.typ")[profile].],
-  [`--theme <theme>`], [--], [Build with this #link("../start/themes.typ")[theme], whatever `theme` in the config says. A profile cannot name one: the theme's own defaults are read before profiles are overlaid.],
+  [`--theme <theme>`], [--], [Build with this #link("../theming/using.typ")[theme], whatever `theme` in the config says. A profile cannot name one: the theme's own defaults are read before profiles are overlaid.],
   [`-v, --verbose`], [--], [Per-page progress plus debug logs (`-vv` for trace).],
   [`-q, --quiet`], [--], [Less output; `-qq` leaves only diagnostics and the exit code. Conflicts with `-v`.],
   [`--color <when>`], [`auto`], [`auto`, `always` or `never`. Beats every environment signal, including `NO_COLOR` and `CLICOLOR_FORCE`.],
@@ -321,7 +321,7 @@ stylesheet come from the theme instead, and the run closes on where to put it.
   table.header([Flag], [Default], [Does]),
   [`-t, --template <name>`], [`blog`], [Starter shape. Unused with `--theme`.],
   [`--with <feature,..>`], [--], [Switch on optional features. One the shape already configures is skipped.],
-  [`--theme <spec>`], [--], [Scaffold against a #link("../start/themes.typ")[theme]: identity, paths and a preview, and nothing the theme declares. A spec naming a shipped theme also writes it.],
+  [`--theme <spec>`], [--], [Scaffold against a #link("../theming/using.typ")[theme]: identity, paths and a preview, and nothing the theme declares. A spec naming a shipped theme also writes it.],
   [`--title <text>`], [prompted], [Site title.],
   [`--author <name>`], [prompted], [Site author, defaulted from git `user.name`.],
   [`--url <url>`], [prompted], [Canonical base URL.],
@@ -511,8 +511,8 @@ over it only with `--force`.
   spec, resolved through Typst's own package store.
 ]
 
-See #link("../start/themes.typ")[themes] for what each one is, and
-#link("../write/theme-authoring.typ")[writing a theme] for making your own.
+See #link("../theming/using.typ")[themes] for what each one is, and
+#link("../theming/authoring.typ")[writing a theme] for making your own.
 
 #callout(kind: "note")[
   This command only exists in a build with the `themes` feature. A `slim` binary

@@ -90,7 +90,7 @@ naming both.
 `logo`).
 
 A registry's own `fields { }` fills in over the shape's, key by key, in the type
-language a #link("../../configure/reference.typ")[collection schema] speaks.
+language a #link("../configure/reference.typ")[collection schema] speaks.
 Declaring a field *requires* it, which is how you make a roster complete:
 
 ```kdl

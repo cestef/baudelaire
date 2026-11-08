@@ -45,9 +45,9 @@ Per page, in frontmatter, which wins over both:
 #let frontmatter = (title: "Home", template: "home.typ")
 ```
 
-The nearer binding wins: a page's own frontmatter, else its collection's. A #link("../start/themes.typ")[theme] states the collection half in its own `theme.kdl`, which is what makes a themed page render without naming anything.
+The nearer binding wins: a page's own frontmatter, else its collection's. A #link("../theming/using.typ")[theme] states the collection half in its own `theme.kdl`, which is what makes a themed page render without naming anything.
 
-Paths are file names inside `paths { templates }` (`templates/` by default). #link("collections/taxonomies.typ")[Taxonomy] listings take a `template` of their own, and so do #link("../build/generate/cards.typ")[social cards] and #link("../build/generate/pdf.typ")[PDFs], though those two are paged documents rather than HTML.
+Paths are file names inside `paths { templates }` (`templates/` by default). #link("../collections/taxonomies.typ")[Taxonomy] listings take a `template` of their own, and so do #link("../build/generate/cards.typ")[social cards] and #link("../build/generate/pdf.typ")[PDFs], though those two are paged documents rather than HTML.
 
 == What `page` carries
 
@@ -128,7 +128,7 @@ Read optional frontmatter defensively, since a page may not declare it:
   What a page knows is *itself*: its own URL, its own collection, its own directory. Nothing in the wrapper may name _other_ pages, or every page's cache identity would depend on all of them. The site tree and the page catalogue come from #link("../lookup/typst-modules.typ")[virtual modules] instead: `sections(page.lang)` and `pages(page.lang)`.
 ]
 
-`page.nav` and `page.backlinks` sit right on that line, and only because each names a page's neighbours rather than the site. See #link("collections/navigation.typ")[prev / next links], #link("backlinks.typ")[backlinks], #link("reading.typ")[reading time], and #link("i18n.typ")[multiple languages] for the fields that have a page of their own.
+`page.nav` and `page.backlinks` sit right on that line, and only because each names a page's neighbours rather than the site. See #link("../collections/navigation.typ")[prev / next links], #link("backlinks.typ")[backlinks], #link("reading.typ")[reading time], and #link("i18n.typ")[multiple languages] for the fields that have a page of their own.
 
 == A bundle's own files
 
@@ -235,4 +235,4 @@ Templates import each other like any Typst file, so a shell, a byline, and a car
 #import "/templates/parts.typ": byline, shell
 ```
 
-That is a project-root path, which is right for a site. A #link("theme-authoring.typ")[theme] uses relative imports instead, and keeps its shared file outside `templates/`.
+That is a project-root path, which is right for a site. A #link("../theming/authoring.typ")[theme] uses relative imports instead, and keeps its shared file outside `templates/`.

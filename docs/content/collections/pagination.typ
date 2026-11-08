@@ -113,7 +113,7 @@ component renders a collection index, a
   [`alt`], [str or none], [What that image shows. Empty marks it decorative.],
   [`author`], [str or none], [Who wrote it. The page's own; never the site default.],
   [`taxonomies`], [dict], [Its terms, keyed by taxonomy.],
-  [`extra`], [dict], [The #link("../frontmatter.typ")[frontmatter] baudelaire does not name: the theme's own keys.],
+  [`extra`], [dict], [The #link("../write/frontmatter.typ")[frontmatter] baudelaire does not name: the theme's own keys.],
 )
 
 #callout(kind: "warn")[

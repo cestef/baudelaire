@@ -140,7 +140,7 @@ on until the config says so, and each has its own page under
   ("write/templates.typ", "package", "Templates", "A layout is a function taking a page and its body."),
   ("configure/reference.typ", "sliders", "Config reference", "Every key the build reads, in one table."),
   ("build/generate/search.typ", "search", "Search", "A flat index, and a palette to read it."),
-  ("write/collections/taxonomies.typ", "tag", "Taxonomies", "Group pages by tag, with generated index pages."),
+  ("collections/taxonomies.typ", "tag", "Taxonomies", "Group pages by tag, with generated index pages."),
   ("build/generate/feeds.typ", "rss", "Feeds & sitemap", "RSS, Atom, and sitemap.xml from your dated pages."),
 ))
 

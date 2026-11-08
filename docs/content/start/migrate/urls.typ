@@ -31,7 +31,7 @@ without being told.
 == The default
 
 `/{path}/{slug}/`: the directories a page sits under, then its slug. A collection
-sets its own with #link("../../write/collections/defining.typ")[`permalink`],
+sets its own with #link("../../collections/defining.typ")[`permalink`],
 from these tokens:
 
 #table(
@@ -113,7 +113,7 @@ redirects {
 }
 ```
 
-Both are on #link("../../write/collections/redirects.typ")[redirects], including
+Both are on #link("../../collections/redirects.typ")[redirects], including
 why the two cannot be served at once.
 
 `redirect` is a frontmatter key, so only a page that still exists can claim an

@@ -108,7 +108,7 @@ redirects {
   A pattern only works with `redirects { file }` on. A stub is a file at one path, and a family of URLs has no single path to put one at, so without the rule file the pattern is dropped. The build says so rather than dropping it quietly.
 ]
 
-Leave it off for a host that reads no rule file. The stubs work anywhere, which is why they are the default. See #link("../../ship/deploy.typ")[deploying] for which host reads what.
+Leave it off for a host that reads no rule file. The stubs work anywhere, which is why they are the default. See #link("../ship/deploy.typ")[deploying] for which host reads what.
 
 === If you write your own `_redirects`
 
@@ -127,4 +127,4 @@ Two pages claiming the same old path is a warning, not a race. The first claim k
 
 == Translated pages
 
-An old path is localized like the page it forwards to. Copying a page's frontmatter into `config.fr.typ` carries the `redirect` list along, and that copy claims `/fr/setup/` rather than fighting the original for `/setup/`. See #link("../i18n.typ")[multiple languages].
+An old path is localized like the page it forwards to. Copying a page's frontmatter into `config.fr.typ` carries the `redirect` list along, and that copy claims `/fr/setup/` rather than fighting the original for `/setup/`. See #link("../write/i18n.typ")[multiple languages].

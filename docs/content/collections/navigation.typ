@@ -46,7 +46,7 @@ let back = page.strings.at("previous", default: "Previous")
 if nav.prev != none { link(nav.prev.url)[#back] }
 ```
 
-See #link("../i18n.typ")[multiple languages].
+See #link("../write/i18n.typ")[multiple languages].
 
 #callout(kind: "tip")[
   Reordering a collection moves the pager, the generated index and the sidebar
@@ -63,4 +63,4 @@ sidebar is built from:
 #import "@baudelaire/sections:0.1.0": sections
 ```
 
-See #link("../../lookup/typst-modules.typ")[Typst modules] for its shape.
+See #link("../lookup/typst-modules.typ")[Typst modules] for its shape.

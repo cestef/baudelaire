@@ -1,6 +1,6 @@
 #let frontmatter = (
   title: "Themes",
-  order: 3,
+  order: 1,
 )
 #import "/templates/theme.typ": callout
 
@@ -179,5 +179,5 @@ Nothing else has to move. A theme you've overridden two files of is still a
 theme `baudelaire theme update` brings forward: the two files you changed are
 kept, the rest are rewritten.
 
-Writing one of your own is #link("../write/theme-authoring.typ")[a page of its
+Writing one of your own is #link("authoring.typ")[a page of its
 own].

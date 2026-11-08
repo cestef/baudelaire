@@ -44,8 +44,8 @@ a collection named after that top directory, with every default below. Declaring
 )
 
 `paginate` is on #link("pagination.typ")[listings and pagination]; `feed` is on
-#link("../../build/generate/feeds.typ")[feeds]; `schema` is on
-#link("../frontmatter.typ")[frontmatter].
+#link("../build/generate/feeds.typ")[feeds]; `schema` is on
+#link("../write/frontmatter.typ")[frontmatter].
 
 == Which files belong
 
@@ -76,7 +76,7 @@ content {
 }
 ```
 
-A #link("../../start/themes.typ")[theme] states that in its own `theme.kdl`,
+A #link("../theming/using.typ")[theme] states that in its own `theme.kdl`,
 which is what lets a themed page render with nothing bound to it by hand.
 
 == Order
@@ -136,6 +136,6 @@ template, `content/ship/deploy/s3.typ` publishes at `/ship/deploy/s3/`, while
 
 `template` names the layout every member renders through, relative to
 `paths { templates }`. A page overrides it with `template` in its own
-#link("../frontmatter.typ")[frontmatter], and a page whose collection names none
+#link("../write/frontmatter.typ")[frontmatter], and a page whose collection names none
 is written out unwrapped. What the layout receives is on
-#link("../templates.typ")[templates].
+#link("../write/templates.typ")[templates].

@@ -82,9 +82,9 @@ Editions pair on their slug, so renaming one would strand it. Name the pairing w
 
 == What localizes on its own
 
-- #link("collections/taxonomies.typ")[Taxonomies]: terms never merge across languages. A French `rust` tag is `/fr/tags/rust/`, separate from `/tags/rust/`.
-- #link("collections/pagination.typ")[Listings]: each language paginates its own collection under its own prefix.
-- #link("collections/navigation.typ")[Navigation]: prev/next and the section tree only ever reference same-language pages.
+- #link("../collections/taxonomies.typ")[Taxonomies]: terms never merge across languages. A French `rust` tag is `/fr/tags/rust/`, separate from `/tags/rust/`.
+- #link("../collections/pagination.typ")[Listings]: each language paginates its own collection under its own prefix.
+- #link("../collections/navigation.typ")[Navigation]: prev/next and the section tree only ever reference same-language pages.
 - #link("../build/generate/feeds.typ")[Feeds]: one set per language, the default at `/rss.xml`, the rest under `/{code}/rss.xml`.
 - #link("../build/generate/meta.typ")[Meta]: `<html lang>` and `dir`, `og:locale`, and `hreflang` alternates (plus `x-default`) in every head and in `sitemap.xml`.
 

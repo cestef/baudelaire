@@ -149,7 +149,7 @@ of an HTML stub:
 /old-path /posts/hello/ 301
 ```
 
-It *replaces* the #link("../../write/collections/redirects.typ")[stubs] rather than joining
+It *replaces* the #link("../../collections/redirects.typ")[stubs] rather than joining
 them. Both hosts serve a static file in preference to a redirect rule, so a stub
 left at the old path would win and the rule would never fire.
 

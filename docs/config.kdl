@@ -31,6 +31,8 @@ content {
   collections {
     start { sort "order"; template "page.typ"; paginate { template "list.typ" }}
     write { sort "order"; template "page.typ"; paginate { template "list.typ" }}
+    collections { sort "order"; template "page.typ"; paginate { template "list.typ" }}
+    theming { sort "order"; template "page.typ"; paginate { template "list.typ" }}
     configure { sort "order"; template "page.typ"; paginate { template "list.typ" }}
     build { sort "order"; template "page.typ"; paginate { template "list.typ" }}
     ship { sort "order"; template "page.typ"; paginate { template "list.typ" }}
@@ -84,6 +86,15 @@ redirects {
   file #true
   rules {
     "/latest/*" "/:splat"
+    "/write/collections/defining/" "/collections/defining/"
+    "/write/collections/pagination/" "/collections/pagination/"
+    "/write/collections/taxonomies/" "/collections/taxonomies/"
+    "/write/collections/entities/" "/collections/entities/"
+    "/write/collections/navigation/" "/collections/navigation/"
+    "/write/collections/redirects/" "/collections/redirects/"
+    "/start/themes/" "/theming/using/"
+    "/write/theme-authoring/" "/theming/authoring/"
+    "/write/collections/" "/collections/"
   }
 }
 

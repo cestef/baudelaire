@@ -65,7 +65,7 @@ mean the same thing on paper as on screen.
 ]
 
 `print.typ` resolves against your `templates/` directory first and a
-#link("../../write/theme-authoring.typ")[theme]'s second, like any other template.
+#link("../../theming/authoring.typ")[theme]'s second, like any other template.
 
 == One document from many pages
 

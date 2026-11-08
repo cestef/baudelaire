@@ -67,7 +67,7 @@ page that answers it in full is on the right.
 
   [`theme`],
   [The templates and assets this site layers over.],
-  [#link("../start/themes.typ")[themes]],
+  [#link("../theming/using.typ")[themes]],
 
   [`paths`],
   [Where the content, output, asset, template and static trees live.],
@@ -75,7 +75,7 @@ page that answers it in full is on the right.
 
   [`content`],
   [What counts as a page, and how pages group.],
-  [#link("../write/pages.typ")[pages], #link("../write/collections/defining.typ")[collections]],
+  [#link("../write/pages.typ")[pages], #link("../collections/defining.typ")[collections]],
 
   [`languages`],
   [The languages of a multi-language site.],
@@ -95,7 +95,7 @@ page that answers it in full is on the right.
 
   [`redirects`],
   [Old paths no page owns, where each one moved, and how a host is told.],
-  [#link("../write/collections/redirects.typ")[redirects]],
+  [#link("../collections/redirects.typ")[redirects]],
 
   [`check`],
   [What the build verifies: links, markup, size budgets.],

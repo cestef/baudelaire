@@ -101,7 +101,7 @@
   #h("nav", class: "top-nav", aria-label: "Primary")[
     #link-to("/start/install/", "Docs")
     #link-to("/configure/reference/", "Reference")
-    #link-to("/start/themes/", "Themes")
+    #link-to("/theming/using/", "Themes")
     #link-to("/blog/", "Blog")
   ]
   #version-picker(url)
@@ -151,6 +151,8 @@
 #let _doc-groups = (
   ("start", "Start"),
   ("write", "Write"),
+  ("collections", "Collections"),
+  ("theming", "Theming"),
   ("configure", "Configure"),
   ("build", "Build"),
   ("ship", "Ship"),

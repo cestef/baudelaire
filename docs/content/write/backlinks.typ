@@ -140,7 +140,7 @@ decides is whether the build's own listings count.
   columns: 2,
   align: (left, left),
   table.header([Mode], [Names a page when]),
-  [`any`], [nothing points at it at all, a #link("collections/pagination.typ")[paginated index] and a #link("collections/taxonomies.typ")[term page] included. A blog post reached from `/blog/` is reached, so the report names only what a reader cannot get to.],
+  [`any`], [nothing points at it at all, a #link("../collections/pagination.typ")[paginated index] and a #link("../collections/taxonomies.typ")[term page] included. A blog post reached from `/blog/` is reached, so the report names only what a reader cannot get to.],
   [`authored`], [nobody *wrote* about it, an index being no answer. The question a documentation site asks; on a blog it names every post, which is the trade.],
 )
 

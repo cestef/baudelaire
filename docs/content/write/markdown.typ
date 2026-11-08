@@ -176,7 +176,7 @@ compiler opens itself. Anything else is refused rather than read as prose.
 #callout(kind: "note")[
   A page names a *name*, never a path, and `paths { sources }` is the only place
   a path is written. A page cannot reach a file the config did not offer it, and
-  a #link("../start/themes.typ")[theme] cannot add one: `paths` is among the
+  a #link("../theming/using.typ")[theme] cannot add one: `paths` is among the
   sections a theme is refused. The declared path may sit outside the project,
   which is the case this exists for, and that is the config's call to make.
 ]

@@ -147,7 +147,7 @@ for (const node of sections.fr) walk(node);
 
 == taxonomies
 
-Each #link("../write/collections/taxonomies.typ")[taxonomy]'s terms mapped to the pages that
+Each #link("../collections/taxonomies.typ")[taxonomy]'s terms mapped to the pages that
 carry them, for tag filtering or a term cloud.
 
 ```js
