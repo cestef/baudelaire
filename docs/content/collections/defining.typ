@@ -121,15 +121,14 @@ content {
 ```
 
 `{path}` and `{collection}` are the same string for the ordinary layout, since a
-collection *is* a directory. They part company once you nest: with the default
+collection is a directory. They differ once you nest: with the default
 template, `content/ship/deploy/s3.typ` publishes at `/ship/deploy/s3/`, while
 `/{collection}/{slug}/` would flatten it to `/ship/s3/`.
 
 #callout(kind: "note")[
-  A placeholder with nothing to render drops its segment rather than leaving an
-  empty one, so a dateless page under `/{year}/{slug}/` lands at `/hello/`
-  rather than `//hello/`. An unknown token is a config error with a span, not a
-  silent fallback.
+  A placeholder with nothing to render drops its segment, so a dateless page
+  under `/{year}/{slug}/` lands at `/hello/`, not `//hello/`. An unknown token
+  is a config error with a span.
 ]
 
 == Templates

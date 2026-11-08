@@ -2,12 +2,12 @@
   title: "Hello, world",
   date: datetime(year: 2026, month: 7, day: 28),
   tags: ("meta", "typst"),
-  summary: "A page with nothing to say, saying it in every way Typst can. Headings, lists, tables, math, highlighted code, loaded data, computed markup, and a callout, all from one compiler.",
+  summary: "A page that shows every kind of content Typst can render. Headings, lists, tables, math, highlighted code, loaded data, computed markup, and a callout, all from one compiler.",
 )
 #import "/templates/theme.typ": callout
 
-This post has no argument to make. It exists so every part of the rendering
-pipeline has something to render.
+This post exists so every part of the rendering pipeline has something to
+render.
 
 == Text
 
@@ -77,8 +77,8 @@ $ integral_0^oo e^(-x^2) dif x = sqrt(pi) / 2 $
 
 == A page is a program
 
-The three things above are markup. This is not: the table below is a `for` loop
-over a list, and the list came from a string the compiler parsed at build time.
+The sections above are plain markup. The table below is generated: a `for` loop
+over a list that the compiler parsed from a string at build time.
 
 #let rows = csv(
   bytes(
@@ -105,6 +105,6 @@ A function is a function, so markup can be generated:
 == Callout
 
 #callout(kind: "tip", label: "Nothing here")[
-  Every block on this page is a feature test. If one of them stops rendering, the
-  build noticed before you did.
+  Every block on this page is a feature test. If one stops rendering, the build
+  notices.
 ]

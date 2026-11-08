@@ -5,8 +5,7 @@
 #import "/templates/theme.typ": callout
 
 The image a link to your site unfurls into, drawn per page from a Typst
-template. No headless browser, no service: the typesetter is already in the
-binary.
+template. It needs no headless browser or service, since the typesetter is already in the binary.
 
 ```kdl
 artifacts {
@@ -18,9 +17,7 @@ artifacts {
 }
 ```
 
-The block's presence turns it on, and `cards #false` turns it off. Every page
-without an `image` of its own gets
-a PNG under `cards/` in the output directory, and its `og:image` and
+The block's presence turns it on, and `cards #false` turns it off. Every page without an `image` of its own gets a PNG under `cards/` in the output directory, and its `og:image` and
 `twitter:image` point at it. A page at `/posts/hello/` gets
 `/cards/posts/hello.png`; the home page gets `/cards/index.png`.
 
@@ -44,13 +41,12 @@ Generated listings are skipped.
 )
 
 `1200 x 630` is the size every unfurler crops to. The ceiling on either is 4096,
-so a typo can't ask for a gigapixel rasterization.
+so a typo cannot ask for a gigapixel image.
 
 == The template
 
-A card is compiled to a *paged* document, not an HTML one. That's the whole
-difference from a #link("../../write/templates.typ")[layout]: `html.elem` doesn't
-exist here, and page layout does. Write it the way you'd write a poster.
+A card is compiled to a paged document, not an HTML one. That is the only difference from a #link("../../write/templates.typ")[layout]: `html.elem` doesn't
+exist here, and page layout does. Write it like a poster.
 
 ```typ
 #let card(data) = rect(width: 100%, height: 100%, fill: rgb("#fdfcfa"))[
@@ -101,9 +97,7 @@ rule if you want a different shape.
 
 == Cost
 
-This is the most expensive thing a build can do per page: a second compile and a
-rasterization each. That's why it's off unless you ask.
+Cards are the most expensive per-page step: each needs a second compile and a rasterization. They are off unless you ask.
 
-The #link("../incremental.typ")[incremental cache] covers it. A page that didn't
-change keeps last build's card, and editing the card template re-renders every
+The #link("../incremental.typ")[incremental cache] covers it. A page that did not change keeps last build's card, and editing the card template re-renders every
 card, since no page imports it and nothing else would notice.

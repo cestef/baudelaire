@@ -4,9 +4,9 @@
 )
 #import "/templates/theme.typ": callout
 
-An `integrity` attribute on every file a page loads, and a
-`Content-Security-Policy` naming every inline block it runs. Both derived from
-the pages this build just produced.
+Every file a page loads gets an `integrity` attribute, and a
+`Content-Security-Policy` names every inline block the page runs. Both are
+derived from the pages this build just produced.
 
 ```kdl
 assets {
@@ -144,7 +144,7 @@ forbid inline code in general and still run the blocks your own pages carry: the
 speculation rules, the SPA runtime, a theme's inline style. Digests are unioned
 across the site and deduplicated, so a block emitted on every page is one entry.
 
-The attributes matter more than they sound. Typst resolves an element's CSS
+Typst resolves an element's CSS
 properties into a `style` attribute, and so do the image rule and the syntax
 highlighter, so a typical page carries several nobody wrote. Allowing one by
 digest takes `'unsafe-hashes'` beside it, which the build adds only when the

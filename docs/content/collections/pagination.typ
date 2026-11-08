@@ -18,9 +18,9 @@ content {
 }
 ```
 
-That's one page at `/notes/` holding every member, in the collection's sort
-order. A collection's own `template` wraps each *member*; the index over them is
-a different page and needs its own.
+That gives one page at `/notes/` holding every member, in the collection's sort
+order. A collection's own `template` wraps each member. The index is a different
+page and needs its own.
 
 Add a `size` when the collection is long enough to split:
 
@@ -37,8 +37,8 @@ content {
 ```
 
 Now the build writes `/blog/`, `/blog/page/2/`, `/blog/page/3/` and so on, five
-entries each, with previous and next links. Splitting is a modifier on a
-listing, not a separate feature: the same template renders both.
+entries each, with previous and next links. The same template renders the single
+page and the split one.
 
 == Keys
 
@@ -80,7 +80,7 @@ appends the localized word for page and the number: `Blog - page 2`.
 == What the template receives
 
 The index is an ordinary templated page, so it looks like the rest of your site.
-Its data arrives as `page.frontmatter`, structured, never as HTML:
+Its data arrives as structured values on `page.frontmatter`, not as HTML:
 
 ```typ
 #let list(page, body) = {
@@ -119,9 +119,9 @@ component renders a collection index, a
 #callout(kind: "warn")[
   `page.frontmatter.nav` on a listing carries plain URL strings for the previous
   and next *index* page. `page.nav`, on every page, carries `(url, title)` dicts
-  for the neighboring #link("navigation.typ")[content pages]. Two different
-  things with similar names.
+  for the neighboring #link("navigation.typ")[content pages]. The names are
+  similar and the values differ.
 ]
 
-An index generated for an empty collection still gets its page 1, since nav
-links point at it and an empty listing beats a 404.
+An index generated for an empty collection still gets its page 1, because nav
+links point at it.

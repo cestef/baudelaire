@@ -17,7 +17,7 @@ content {
 
 Any page with `tags: ("rust", "cli")` in its
 #link("../write/frontmatter.typ")[frontmatter] is now grouped automatically, and
-A `listing { }` block writes:
+the `listing { }` block writes:
 
 #table(
   columns: 2,
@@ -33,8 +33,8 @@ they inherit the site layout. They receive the same
 
 == Keys
 
-A taxonomy is a block named by its id, and what it *generates* is the
-`listing { }` block inside it, spelled the way a collection's `paginate { }` is.
+A taxonomy is a block named by its id. The `listing { }` block inside it turns
+on page generation and is spelled like a collection's `paginate { }`.
 
 #table(
   columns: 4,
@@ -113,7 +113,7 @@ runs of non-alphanumerics collapsed to `-`.
 
 #callout(kind: "warn")[
   Two terms that slug to the same segment (`C++` and `C--` both give `c`) are a
-  build error naming both, not a silent overwrite. A term with no letters or
+  build error naming both. A term with no letters or
   digits at all has no slug and errors the same way.
 ]
 

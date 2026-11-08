@@ -59,7 +59,7 @@ A profile accepts every key the top level accepts. Two things fail:
   [Replaced wholesale. The base set is dropped, not merged.],
 )
 
-Filling in place is what makes a one-key overlay useful:
+Because blocks fill in place, a one-key overlay works:
 
 ```kdl
 assets {
@@ -87,8 +87,8 @@ alone.
 ]
 
 Every profile is checked when `config.kdl` is read, whether or not it is the
-one selected: a key no scope has is an error on the next build, not a silent
-no-op on the day someone passes `--profile` for it.
+one selected. A key no scope has is an error on the next build, before anyone
+passes `--profile` for it.
 
 == Environment variables
 
@@ -118,8 +118,8 @@ profiles {
 }
 ```
 
-An unset variable with no default is a hard error, not an empty string, so a
-missing secret fails the build instead of shipping a blank value. Give it a
+An unset variable with no default is a hard error, so a missing secret fails the
+build instead of shipping a blank value. Give it a
 `${VAR:-default}` when an empty or fallback result is acceptable.
 
 #callout(kind: "note")[
@@ -134,7 +134,7 @@ survives.
 
 == Profiles or flags
 
-`--drafts`, `--base-url`, `--out` and `--no-cache` do the common one-off
+`--drafts`, `--base-url`, `--out` and `--no-cache` cover common one-off
 overrides without a profile, and they apply on top of whichever profile is
-active. Reach for a profile when the change is more than one setting, or when
-you want it committed. See the #link("../lookup/cli.typ")[CLI reference].
+active. Use a profile when the change is more than one setting, or when you want
+it committed. See the #link("../lookup/cli.typ")[CLI reference].

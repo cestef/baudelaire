@@ -4,9 +4,7 @@
 )
 #import "/templates/theme.typ": callout
 
-A fence claims a language. `snippets` is where a site says what that claim is
-worth: nothing until a language is named, and from then on every fence of it is
-read by something that knows the language.
+A code fence names a language. `snippets` says how to check it: nothing is checked until a language is named, and then every fence in that language is checked by a tool that understands it.
 
 ```kdl
 check {
@@ -32,8 +30,7 @@ A line with no `run` is checked by the parser this binary already carries:
   [`typ`, `typst`], [Typst's own parser, which parses without evaluating.],
 )
 
-Naming any other language without a `run` is a config error rather than a line
-that checks nothing.
+Naming any other language without a `run` is a config error.
 
 #table(
   columns: 3,
@@ -44,16 +41,13 @@ that checks nothing.
 )
 
 A `run` command is run through the system shell in the project root, like a
-#link("../hooks.typ")[hook], and `$BAUDELAIRE` is the binary running the build, so a
-site checks its own config examples with the very build that renders them rather
-than with whatever is on `PATH`. A command that reports `file:line:column:` has
+#link("../hooks.typ")[hook], and `$BAUDELAIRE` is the binary running the build, so a site checks its own config examples with the same build that renders them, not whatever is on `PATH`. A command that reports `file:line:column:` has
 its message placed on that line of the fence; one that reports anything else is
 reported against the fence itself.
 
 == Hidden lines <hidden>
 
-A documentation fence usually shows a fragment: the block that matters, not the
-three blocks around it. `hidden` is the prefix that carries the rest:
+A documentation fence usually shows a fragment: the block that matters, without the blocks around it. `hidden` is the prefix for the missing context:
 
 ````typ
 ```kdl
@@ -63,10 +57,8 @@ schema { title "str" }
 ```
 ````
 
-The reader sees the `schema` block. The checker reads all five lines. The prefix
-is yours to pick, and a comment in the language keeps the raw file readable to
-anyone who never renders it.
+The reader sees the `schema` block. The checker reads all five lines. Pick the prefix yourself; a comment in the language keeps the raw file readable.
 
-One line is a directive rather than context: `//! @ignore` (the prefix, then
+One line is a directive, not context: `//! @ignore` (the prefix, then
 `@ignore`) says this fence is not meant to check at all, which is what a snippet
 that is wrong on purpose needs.

@@ -195,8 +195,8 @@ costs bytes. `prerender` costs a hidden page render and runs the target's
 scripts, so it's off by default. The rules are scoped to your own base path, so
 a site under `/docs` never speculates on a neighbor sharing the host.
 
-Treat this as an alternative to `spa`, not a companion: with the SPA runtime
-mounted, its own prefetch already warms the same links.
+Use this instead of `spa`: with the SPA runtime mounted, its own prefetch
+already warms the same links.
 
 == What gets written
 

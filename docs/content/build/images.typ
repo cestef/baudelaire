@@ -4,8 +4,7 @@
 )
 #import "/templates/theme.typ": callout
 
-Images ride the #link("assets.typ")[asset pipeline], plus four things of their
-own in `assets { images }`.
+Images go through the #link("assets.typ")[asset pipeline] and have four settings of their own in `assets { images }`.
 
 ```kdl
 assets {
@@ -36,7 +35,7 @@ assets {
   [`extract`],
   [flag],
   [`#true`],
-  [Writes typst-embedded images out as files instead of inlining them.],
+  [Writes Typst-embedded images out as files instead of inlining them.],
 
   [`responsive`],
   [block],
@@ -53,14 +52,12 @@ Only PNG and JPEG are processed. Anything else is copied through.
 
 == Lazy loading
 
-`lazy` is attribute-only: it fills `loading` and `decoding` on an `<img>` that
-doesn't already set them, and touches no bytes. Anything you wrote yourself is
+`lazy` only sets attributes: it fills `loading` and `decoding` on an `<img>` that does not already set them, and touches no bytes. Anything you wrote yourself is
 left as authored.
 
 == Extraction
 
-Typst inlines `#image("photo.png")` into the HTML as a base64 `data:` URI. That
-bloats the page and the browser can't cache it separately. With `extract`, the
+Typst inlines `#image("photo.png")` into the HTML as a base64 `data:` URI. That bloats the page, and the browser cannot cache it separately. With `extract`, the
 bytes are written under the asset URL and the `<img>` points at them:
 
 ```typ
@@ -68,7 +65,7 @@ bytes are written under the asset URL and the `<img>` points at them:
 ```
 
 becomes an `<img src="/assets/photo.png">` with the sizing preserved as inline
-CSS, so the output matches typst's own layout. With `assets { fingerprint }` on,
+CSS, so the output matches Typst's own layout. With `assets { fingerprint }` on,
 the served name carries a content hash like any other asset.
 
 The name keeps the directories the picture was authored under, relative to
@@ -95,7 +92,7 @@ call its picture `cover.png`. A template reaches the same URL through
 An extracted image gets everything a file in the asset tree gets: `optimize`,
 `responsive` variants, a fingerprinted name, and the same cross-build memo, so a
 photo sitting beside its page (the #link("../write/pages.typ")[page bundle]
-layout) is not the poor relation of one under `assets/`.
+layout) is treated the same as one under `assets/`.
 
 ```typ
 #image("photo.png")
@@ -107,21 +104,17 @@ layout) is not the poor relation of one under `assets/`.
      sizes="(min-width: 60rem) 640px, 100vw">
 ```
 
-The page names those variants before they exist, from the source's own width;
-the copy that materializes the image cuts exactly the widths the page promised.
+The page names those variants before they exist, from the source's own width, and the copy that writes the image cuts exactly those widths.
 
 Referencing an image that already lives under `assets/`
 (`#image("/assets/photo.png")`) points the page at the pipeline's own copy
 rather than making a second one.
 
-Set `extract #false` to keep typst's inlining.
+Set `extract #false` to keep Typst's inlining.
 
 == Responsive variants
 
-The block's presence turns variants on, and `responsive #false` turns them off.
-Each raster gets a downscaled copy per
-width, and the `<img>` gets a `srcset` so the browser fetches the smallest one
-that fits:
+The block's presence turns variants on, and `responsive #false` turns them off. Each raster gets a downscaled copy per width, and the `<img>` gets a `srcset` so the browser fetches the smallest one that fits:
 
 ```kdl
 assets {
@@ -162,7 +155,7 @@ width at or above the source width is skipped, never upscaled, and the source
 itself is always the largest candidate.
 
 `sizes` has no default. A `w`-descriptor `srcset` already implies `100vw` to the
-browser, so emitting it would cost bytes for nothing. Set it to your real content
+browser, so emitting it would add bytes for nothing. Set it to your real content
 width.
 
 == Optimizing

@@ -3,7 +3,7 @@
   template: "page.typ",
 )
 
-Nothing here. The page moved, or the link was wrong from the start.
+This page does not exist. It may have moved, or the link may be wrong.
 
 - #link("/")[Home], what baudelaire is and why Typst.
 - #link("/start/quickstart/")[Quickstart], a site running in about a minute.
@@ -11,4 +11,4 @@ Nothing here. The page moved, or the link was wrong from the start.
 - #link("/theming/using/")[Themes], the four that ship, with live demos.
 - #link("/blog/")[Blog], what changed lately.
 
-Faster than guessing: press #html.elem("kbd")[/] and search.
+Or press #html.elem("kbd")[/] and search.

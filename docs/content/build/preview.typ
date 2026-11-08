@@ -4,14 +4,13 @@
 )
 #import "/templates/theme.typ": callout
 
-A local server that rebuilds on save, reloads the browser, and can open the typst
-line behind anything you alt-click.
+A local server that rebuilds on save, reloads the browser, and can open the Typst line behind anything you alt-click.
 
 ```sh
 $ baudelaire serve
 ```
 
-Builds the site, serves it on `http://127.0.0.1:1821`, opens a browser, and
+It builds the site, serves it on `http://127.0.0.1:1821`, opens a browser, and
 watches for changes.
 
 == Configuration
@@ -121,8 +120,7 @@ injected into a `build`.
 A rebuild that only moved stylesheets pushes a *restyle* instead: each
 `<link rel="stylesheet">` is fetched again and swapped once the new sheet is
 in, so the page keeps its scroll, its open menus and whatever you had typed
-into a field. It is the narrow case on purpose. Every changed file has to be a
-stylesheet and the rebuild has to have recompiled no page, since a stylesheet
+into a field. This only applies in a narrow case: every changed file has to be a stylesheet and the rebuild has to have recompiled no page, because a stylesheet
 reaches the markup by more than one route: a
 #link("assets.typ")[fingerprinted name], a sheet inlined by `html { embed }`, a
 hash in the #link("../ship/security.typ")[content security policy]. Each of
@@ -151,9 +149,9 @@ The location comes from the compiler, so an inline `#emph` names its own column,
 and what a layout emitted names the *template* rather than the page it was
 rendering. Paths are project-relative; lines and columns are one-based.
 
-Elements baudelaire synthesizes carry no stamp, because nobody wrote them: the
+Elements baudelaire generates carry no stamp, because nobody wrote them: the
 meta tags, an inlined icon body, the speculation rules. Neither does anything
-from a typst package, whose files live in a download cache.
+from a Typst package, whose files live in a download cache.
 
 Then name the command that opens a location:
 
@@ -172,7 +170,7 @@ serve { editor "idea" "--line" "{line}" "{file}" }
 serve { editor "nvim" "--server" "/tmp/nvim" "--remote-send" ":e +{line} {file}<CR>" }
 ```
 
-The program and each argument are their own word. `{file}`, `{line}` and
+The program and each argument are separate words. `{file}`, `{line}` and
 `{column}` are substituted per argument, so a value lands inside whatever shape
 your editor wants and never splits in two. The nearest stamped ancestor wins, so
 clicking a word inside a paragraph asks for the paragraph. A link is not

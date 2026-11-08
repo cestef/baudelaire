@@ -35,7 +35,7 @@ commit link in the footer.
 )
 
 `site` mirrors the config, and unset values read as `none`. It is the same data
-`@baudelaire/site` binds by name, which is the nicer way to reach it: see
+`@baudelaire/site` binds by name, which is easier to use: see
 #link("typst-modules.typ")[Typst modules]. `client` is the same set of constants
 the #link("js-modules.typ")[`baudelaire:config`] module hands your client
 JavaScript, so Typst and the browser read one source.
@@ -66,9 +66,8 @@ git can supply them, so guard those reads:
 ]
 ```
 
-This is the repository as a whole, at the moment of the build. What a *page*
-knows about its own file is `page.git`, which is a different question and its
-own opt-in: see #link("../write/templates.typ")[templates].
+This is the repository as a whole, at the moment of the build. `page.git` is
+separate and opt-in: it describes one page's own file. See #link("../write/templates.typ")[templates].
 
 == Your own inputs
 

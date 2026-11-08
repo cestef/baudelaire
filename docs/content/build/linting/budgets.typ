@@ -32,15 +32,13 @@ check {
 )
 
 Every key is optional and each is checked per page. Responsive `srcset`
-candidates don't count against `images`: they're alternatives to `src`, and a
-visitor is served one of them. An inline script counts once in `total`, as part
+candidates do not count against `images`: they are alternatives to `src`, and a visitor is served one of them. An inline script counts once in `total`, as part
 of `html`, even though `js` counts it too. `js` answers how much JavaScript runs;
 `total` answers how many bytes cross the wire.
 
-Going over fails the build. Unlike a lint finding, a budget is a limit you wrote
-down, and a limit that only warns is a number in a config file.
+Going over fails the build, since a limit that only warns is just a number in a config file.
 
-Adopting one on a site that already has pages is the exception, and it says so:
+To adopt a budget on a site that already has pages, turn `strict` off:
 
 ```kdl
 check {
@@ -51,8 +49,7 @@ check {
 }
 ```
 
-That reports the same pages without failing, so a number can be a target before
-it is a limit.
+That reports the same pages without failing, so a number can be a target before it becomes a limit.
 
 ```text
 × 1 page over budget
@@ -61,12 +58,10 @@ it is a limit.
 ```
 
 A file this build did not write weighs nothing: a script pulled from a CDN, or
-anything under `static/`, is somebody else's byte and counting it would be a
-guess. An asset inlined by `html { embed }` is already inside the markup, so it
+anything under `static/`, is somebody else's byte, and counting it would be a guess. An asset inlined by `html { embed }` is already inside the markup, so it
 is billed to `html`.
 
 #callout(kind: "warn")[
-  `baudelaire check` compiles every page but processes no assets, so it can see
-  *what* a page loads and not how large any of it is. It runs the rules and
+  `baudelaire check` compiles every page but processes no assets, so it can see what a page loads but not how large any of it is. It runs the rules and
   leaves the budgets to `baudelaire build`, which has the bytes.
 ]

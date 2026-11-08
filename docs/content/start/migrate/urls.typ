@@ -4,13 +4,13 @@
 )
 #import "/templates/theme.typ": callout
 
-A migration that changes paths loses inbound links, search rankings and every
-bookmark. Most old shapes are one `permalink` line; the rest are redirects.
+Changing paths during a migration breaks inbound links, search rankings and
+bookmarks. Most old URL shapes need one `permalink` line; the rest need
+redirects.
 
-== Say it outright
+== Set the URL on the page
 
-The blunt instrument, and the one that cannot be got wrong: a page names the URL
-it answers at.
+The simplest option: a page names the URL it answers at.
 
 ```typ
 #let frontmatter = (
@@ -19,16 +19,14 @@ it answers at.
 )
 ```
 
-Whatever the old site's permalink rules were, a converter can copy each old URL
-onto the page that answers it and the URL set matches by construction. A path
-ending in a file name publishes as that file, which is the shape a Jekyll site
-carries. See #link("../../write/frontmatter.typ")[frontmatter].
+A converter can copy each old URL onto the page that answers it, whatever the
+old site's permalink rules were, and the URL set then matches. A path ending in
+a file name publishes as that file, which is the shape a Jekyll site uses. See #link("../../write/frontmatter.typ")[frontmatter].
 
-The patterns below are what you want when the old URLs follow a *rule*: one line
-per collection beats one line per page, and new pages then land in the same shape
-without being told.
+When the old URLs follow a rule, use the patterns below instead: one line per
+collection replaces one line per page, and new pages get the same shape.
 
-== The default
+== Default permalink
 
 `/{path}/{slug}/`: the directories a page sits under, then its slug. A collection
 sets its own with #link("../../collections/defining.typ")[`permalink`],
@@ -63,10 +61,10 @@ an `index.html` or a bare `.html` file, canonical tags, feeds and sitemap
 included.
 
 #callout(kind: "warn")[
-  Jekyll takes the date out of the filename, baudelaire does not.
+  Jekyll takes the date from the filename, baudelaire does not.
   `2026-07-09-hello.md` becomes the slug `2026-07-09-hello` unless you rename the
-  file or set `slug: "hello"` in its frontmatter. Do it before the permalink, or
-  the token you added lands next to a date you already had.
+  file or set `slug: "hello"` in its frontmatter. Do this before setting the permalink, or
+  the date token ends up next to a date already in the slug.
 ]
 
 == Listings
@@ -92,7 +90,7 @@ content {
 }
 ```
 
-== Everything that still moved
+== Pages that moved
 
 List the old paths on the page that replaced them:
 
@@ -131,14 +129,14 @@ redirects {
 ```
 
 Same output, same `redirects { file }` switch. A pair aiming at a path some
-page already publishes fails the build rather than burying that page.
+page already publishes fails the build.
 
 == Feeds
 
 Feed files are named by format: `rss.xml`, `atom.xml`, `feed.json`. Zola's
 default `atom.xml` matches; Hugo's `index.xml` and Jekyll's `feed.xml` do not,
-and a subscriber's reader fetches the file rather than following a meta refresh.
-Say what yours is called:
+and a subscriber's reader fetches the file without following a meta refresh. Set
+the name:
 
 ```kdl
 generate {
@@ -163,4 +161,4 @@ diff old-urls.txt new-urls.txt
 ```
 
 Every line that only appears in `old-urls.txt` needs a `redirect` or a permalink
-fix. `baudelaire check` covers the other half, the links inside your own pages.
+fix. `baudelaire check` covers the links inside your own pages.

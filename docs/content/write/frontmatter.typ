@@ -14,14 +14,14 @@ A page's metadata is a Typst binding, not a header in another language:
 )
 ```
 
-The build reads that one top-level `frontmatter` export from the evaluated
-module. Because Typst evaluates it, the value is an ordinary dict: it can be
-computed from `sys.inputs`, from a loaded data file, or from anything else in
+The build reads the top-level `frontmatter` export from the evaluated
+module. Typst evaluates it, so the value is an ordinary dict (a set of key/value
+pairs) and can be computed from `sys.inputs`, from a loaded data file, or from anything else in
 scope.
 
 A #link("markdown.typ")[markdown page] declares the same keys in a fenced block
-instead, in YAML, TOML or KDL. Every key on this page behaves identically there:
-the block is read into the same dict, and everything below is the same walk.
+instead, in YAML, TOML or KDL. Every key below behaves the same there, because
+the block is read into the same dict.
 
 #callout(kind: "warn")[
   Single-element arrays need the trailing comma. `("intro")` is a string;
@@ -55,8 +55,8 @@ the block is read into the same dict, and everything below is the same walk.
   [`exclude`], [list], [The generated files this page declines to appear in. See #link(<exclude>)[Opting out].],
 )
 
-Values are typed. A key with the wrong type stops the build with a diagnostic
-naming the file and the field, never a silent drop. The three dates take either a
+A key with the wrong type stops the build with a message naming the file and
+the field. The three dates take either a
 Typst `datetime` or a string spelled exactly `YYYY-MM-DD`, so a day needs no
 `datetime(..)` call:
 
@@ -110,8 +110,8 @@ which is what a site arriving from Jekyll needs:
   [`/2019/post.html`], [`2019/post.html`, served at that URL],
 )
 
-It is the migration escape hatch: copy each old URL onto the page that answers
-it and the URL set matches by construction, with no permalink archaeology. Two
+For a migration, copy each old URL onto the page that answers it and the URL
+set matches the old site. Two
 pages claiming one path is an error naming both files, not a race.
 
 `path` does not touch the page's identity. Translations still pair on
@@ -137,7 +137,7 @@ See #link("../collections/taxonomies.typ")[taxonomies].
 == Opting out <exclude>
 
 The site decides whether a sitemap, a feed, a search index, a social card or a
-PDF is generated at all. A page decides whether it is *in* them:
+PDF is generated at all. A page decides whether it appears in them:
 
 ```typ
 #let frontmatter = (
@@ -167,7 +167,7 @@ A name outside that list fails the build rather than being ignored.
 
 == Everything else
 
-Unknown keys aren't errors. They pass through as *extra* frontmatter, yours to
+Unknown keys are not errors. They pass through as *extra* frontmatter, yours to
 read in a #link("templates.typ")[template] as `page.frontmatter.<key>` and in a
 listing as `entry.extra.<key>`.
 
@@ -178,8 +178,8 @@ listing as `entry.extra.<key>`.
 
 == Schemas
 
-Free-form keys are easy to get wrong: a template reading a `hero` that a page
-never set renders an empty hole and the build stays green. A collection can say
+A template reading a `hero` that a page never set renders an empty hole and
+the build stays green. A collection can say
 what its members must carry:
 
 ```kdl
@@ -212,8 +212,7 @@ schema fails the build, pointing at the line in its frontmatter:
   help: write it as `hero: ".."`, or change the `blog` collection's schema
 ```
 
-The types are the Typst ones a frontmatter dict can hold, not a second type
-system:
+The types are the Typst ones a frontmatter dict can hold:
 
 #table(
   columns: 2,
@@ -256,7 +255,7 @@ broke, down to the element:
 
 == Values, not just shapes
 
-A type says what a field *is*. Three keys beside it say what it may hold.
+A type says what a field is. Four keys beside it say what it may hold.
 
 ```kdl
 //! content { collections { posts {
@@ -284,9 +283,9 @@ fault names the element that broke (`tags.2`). It is unanchored, as a regular
 expression is: write `^..$` to hold the whole of the value rather than a part
 of it. A pattern that does not compile is refused where it is written.
 
-`one-of` is part of the type language rather than a key, so it composes like
-every other type: `list<one-of<draft|published>>` is a list of them, and a
-`dict` field can hold one.
+`one-of` is a type, not a key, so it nests like any other:
+`list<one-of<draft|published>>` is a list of them, and a `dict` field can hold
+one.
 
 A value of the right type that a field refuses anyway says so as a value:
 
@@ -304,8 +303,7 @@ have: `page.frontmatter.status` reads `"draft"` on a page that declared none,
 and every listing, feed and card sees it too. What the page wrote always wins.
 
 #callout(kind: "note")[
-  A constraint the type cannot answer for is refused where it is written, not
-  left to never fire: `min` on a `bool`, a floor above its own ceiling, or a
+  A constraint the type cannot satisfy is refused where it is written: `min` on a `bool`, a floor above its own ceiling, or a
   `default` the declared type would reject are all config errors.
 ]
 

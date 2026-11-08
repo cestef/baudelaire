@@ -4,11 +4,10 @@
 )
 #import "/templates/theme.typ": callout
 
-Every generator turns a content tree into HTML. What differs is the language a
-page is written in, what ships inside the binary, and what you reach for a plugin
-to get.
+Every generator turns a content tree into HTML. They differ in the language a
+page is written in, what ships inside the binary, and what needs a plugin.
 
-== The shape of each
+== Languages and runtimes
 
 #table(
   columns: 4,
@@ -23,23 +22,22 @@ to get.
   [mdBook], [Markdown], [a Handlebars template], [one binary],
 )
 
-Baudelaire is the row where the content language and the template language are
-the same language, and that is most of the difference below.
+In baudelaire the content language and the template language are the same
+language. Most of the differences below follow from that.
 
 == The page is a program
 
 Markdown has no variables, no functions, and no way to read a file, so every
-generator built on it grows a second layer for the moment you want one. Zola and
-Hugo call it a shortcode, Eleventy a filter or a paired shortcode, Astro an MDX
-component.
+generator built on it adds a second layer for those. Zola and Hugo call it a
+shortcode, Eleventy a filter or a paired shortcode, Astro an MDX component.
 
 ```html
 <!-- Zola: templates/shortcodes/sales.html, then in the post -->
 {{ sales(file="sales.csv") }}
 ```
 
-In baudelaire the page is a Typst module, so the thing you would register is just
-a binding:
+In baudelaire the page is a Typst module, so what you would register is a
+binding:
 
 ```typ
 #let rows = csv("/data/sales.csv")
@@ -51,17 +49,16 @@ a binding:
 )
 ```
 
-Nothing is registered, nothing is discovered by directory name, and the failure
-mode is a compile error with a span rather than an empty div. The same applies to
-what Markdown ecosystems ship as plugins: math, figures with numbering,
-footnotes, bibliographies and cross references are Typst's, not baudelaire's.
+Nothing is registered or discovered by directory name, and a mistake is a
+compile error pointing at the line, not an empty div. Math, numbered figures,
+footnotes, bibliographies and cross references, which Markdown ecosystems ship
+as plugins, come from Typst itself.
 
-Because a page compiles rather than expands, one source reaches more than one
-target. `artifacts { pdf }` typesets the same page as a document, and
-`artifacts { cards }` draws its social card with a Typst template, both from the
-page you already wrote.
+A page compiles, so one source can reach more than one target.
+`artifacts { pdf }` typesets the same page as a document, and
+`artifacts { cards }` draws its social card with a Typst template.
 
-== What ships in the box
+== Built-in features
 
 #table(
   columns: 6,
@@ -84,10 +81,10 @@ page you already wrote.
   [Plugin API], [none], [none], [modules], [plugins], [integrations],
 )
 
-The last row is the trade. Baudelaire has no plugin interface: a capability is
-either a switch in `config.kdl`, a Typst package you import, or a command in
-`hooks { }`. That keeps the binary one file and the config exhaustive, and it
-means a capability nobody has built does not exist yet.
+The last row is the trade-off. Baudelaire has no plugin interface: a capability
+is a switch in `config.kdl`, a Typst package you import, or a command in
+`hooks { }`. The binary stays one file and the config lists everything, but a
+capability nobody has built does not exist yet.
 
 == Builds
 
@@ -96,31 +93,28 @@ something that page actually read changed: its own source, an import, an asset i
 named, a permalink one of its links resolves to. See
 #link("../build/incremental.typ")[incremental builds]. Zola rebuilds from cold
 every run. Hugo caches processed resources but recompiles pages. Eleventy has
-`--incremental`, Astro leans on Vite's cache.
+`--incremental`, and Astro uses Vite's cache.
 
-A warm build here is proportional to what you touched, not to how many pages you
-have. A cold one is a full Typst compile per page, which is slower per page than
-a Markdown parse, so a first build of thousands of pages is not where baudelaire
-wins.
+A warm build takes time in proportion to what you touched. A cold one is a full
+Typst compile per page, which is slower than a Markdown parse, so a first build
+of thousands of pages is where baudelaire is weakest.
 
 == What you give up
 
 *Markdown as the primary format.* A `.md` file under `content/` is a page, with
 frontmatter in YAML, TOML or KDL, so an existing corpus builds as it stands. But
-Typst is the format the rest of the tool is shaped around: a `.md` page is
-lowered to Typst before it compiles, and anything Typst does that Markdown has no
-spelling for is reached through a fenced `typ` block rather than natively. See
+the rest of the tool is built around Typst: a `.md` page is converted to Typst
+before it compiles, and anything Markdown has no syntax for goes in a fenced
+`typ` block. See
 #link("migrate/content.typ")[Markdown to Typst].
 
 *Maturity of the target.* Typst's HTML export is the newest part of Typst, and
-baudelaire pins one Typst version at a time. A page that leans on paged layout
-(columns, placement, page breaks) has no HTML meaning, and an upgrade can move
-the emitted markup.
+baudelaire pins one Typst version at a time. Paged layout (columns, placement,
+page breaks) has no HTML meaning, and an upgrade can change the emitted markup.
 
-*The ecosystem.* Four themes ship, there is no theme marketplace, no shortcode
-registry, and no plugin API. Typst's own package registry is available to pages
-and templates, which covers a lot of the gap for content but nothing for the
-build.
+*The ecosystem.* Four themes ship. There is no theme marketplace, no shortcode
+registry, and no plugin API. Typst's package registry is available to pages
+and templates, which helps with content but not with the build.
 
 *PostCSS.* Sass compiles in the build, `assets { tailwind }` generates the
 utility sheet, and `assets { minify }` runs the result through Lightning CSS.
@@ -131,20 +125,20 @@ There is no PostCSS step, and no LESS or Stylus: run those from
 strips the markup.
 
 *Components and islands.* Client JavaScript is yours to write and gets bundled.
-There is no component model, no framework integration, no server rendering.
+There is no component model, framework integration or server rendering.
 
 == Pick something else if
 
-- Your site is really an application: interactive UI, framework components, SSR.
+- Your site is an application: interactive UI, framework components, SSR.
 - Non-technical authors write the content and expect a CMS.
 - You need a theme you can install today rather than a layout you write.
 
 #callout(kind: "note")[
-  A migration is not all or nothing at the URL level. Keeping the old paths alive
-  is a frontmatter key, so a section can move over at a time. See
+  You can migrate one section at a time. Keeping the old paths alive is a
+  frontmatter key. See
   #link("migrate/urls.typ")[keeping your URLs].
 ]
 
-Ready to move a site? There is a page per source:
+To move a site, pick your source:
 #link("migrate/from-zola.typ")[Zola], #link("migrate/from-hugo.typ")[Hugo],
 #link("migrate/from-jekyll.typ")[Jekyll or Eleventy].

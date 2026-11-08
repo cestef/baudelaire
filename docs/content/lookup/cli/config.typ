@@ -36,7 +36,7 @@ apply:
   align: (left, left),
   table.header([Layer], [Is]),
   [`default`], [What a site holds before anything is written down.],
-  [`theme`], [The theme's own `theme.kdl`, the floor a site stands on.],
+  [`theme`], [The theme's own `theme.kdl`, the base a site starts from.],
   [`config`], [Your `config.kdl`.],
   [`profile`], [The profile `-p` names, applied over it.],
 )
@@ -52,8 +52,8 @@ A key is a dotted path, completed by every generated
 `blog`.
 
 #callout(kind: "note")[
-  `set` edits the KDL as a document, not as text: comments, blank lines and the
-  order of blocks come back out unchanged. Nothing is written that would not
+  `set` edits the KDL as a document: comments, blank lines and the order of
+  blocks come back out unchanged. Nothing is written that would not
   parse, so a value the key refuses leaves the file alone.
 ]
 

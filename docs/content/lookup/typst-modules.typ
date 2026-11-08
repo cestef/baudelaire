@@ -34,9 +34,8 @@ can never disagree about what the site is called.
 == Versions
 
 *Every module is served at `0.1.0`, and that is the only version there is.* Write
-`:0.1.0` on every import and stop thinking about it. Typst's package syntax
-requires a version, and this one tracks the module API, not baudelaire's own
-version, so it does not move when you upgrade. Asking for any other version fails
+`:0.1.0` on every import. Typst's package syntax requires a version. This one
+tracks the module API and does not move when you upgrade baudelaire. Asking for any other version fails
 at the import, naming the one that exists, rather than reaching for the network.
 
 == Editor support
@@ -475,4 +474,4 @@ Two things decide what is listed:
   or turning it off narrows what a table of contents can list too.
 
 A page with no heading in range gets an empty `<nav>`, which `nav:empty { display: none }`
-hides along with nothing else.
+hides.

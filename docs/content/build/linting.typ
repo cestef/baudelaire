@@ -25,9 +25,7 @@ instead. The link rules below answer for themselves either way, so
 `check #false { links "warn" }` is a site that checks its links and lints
 nothing.
 
-Because pages are post-processed as a typed DOM and every element still carries
-the typst span it came from, a finding is reported against the line you wrote,
-not a byte offset in generated markup.
+Every element still carries the Typst source span it came from, so a finding is reported against the line you wrote, not a byte offset in generated markup.
 
 == The rules
 
@@ -46,8 +44,7 @@ Each is on while the block is present, and off by name.
 
 === How loud each one is
 
-`strict` is the default the rules follow, not an override. A rule that names its
-own severity keeps it, so a site can hold everything to `error` and still let one
+`strict` is the default severity. A rule that names its own severity keeps it, so a site can hold everything to `error` and still let one
 report:
 
 ```kdl
@@ -76,8 +73,7 @@ only reports two you wrote yourself. The `doc-` and `graphics-` role vocabularie
 are accepted by prefix, since they are real ARIA extension modules.
 
 #callout(kind: "note")[
-  Expect `headings` to have something to say the first time you turn it on.
-  typst-html reserves `<h1>` for the document title, so a `=` in your content is
+  `headings` often has findings the first time you turn it on. Typst's HTML export reserves `<h1>` for the document title, so a `=` in your content is
   an `<h2>` and a `==` is an `<h3>`. A layout that emits its own `<h1>` over
   pages opening at `==` goes `h1` straight to `h3`. Open your sections at `=`, or
   say which level yours open at:
@@ -99,9 +95,7 @@ are accepted by prefix, since they are real ARIA extension modules.
 == Internal links
 
 `links` is the same kind of rule for a `.typ` link that names no page, and it
-takes the same severities. It defaults to `"error"` rather than following
-`strict`, and that asymmetry is deliberate: a link naming no page is a certainty,
-while a missing `alt` is a judgement about content baudelaire did not write.
+takes the same severities. It defaults to `"error"` rather than following `strict`: a link naming no page is certainly wrong, while a missing `alt` is a judgement about content baudelaire did not write.
 
 ```kdl
 check {
@@ -114,9 +108,7 @@ still gets its links checked.
 
 == Outbound links
 
-`external` verifies every `http(s)` link the pages carry. It reaches
-the network, so only `baudelaire check` runs it: a build produces the same bytes
-offline, on a plane, and when somebody else's host is having a bad afternoon.
+`external` verifies every `http(s)` link the pages carry. It uses the network, so only `baudelaire check` runs it: a build produces the same bytes offline and when somebody else's host is down.
 
 ```kdl
 check {
@@ -130,8 +122,7 @@ check {
 }
 ```
 
-The block's presence turns the check on, so `check { external }` alone is the
-whole of it; `external #false` turns it back off.
+The block's presence turns the check on, so `check { external }` alone enables it; `external #false` turns it back off.
 
 #table(
   columns: 3,
@@ -164,8 +155,7 @@ still there; a rate limiter answers 429 and says nothing about the link.
 
 #callout(kind: "note")[
   A dead link fails the check. A link that could not be reached at all (DNS, TLS,
-  a timeout) is only a warning: the most likely cause is the network in between,
-  not the site.
+  a timeout) is only a warning, since the likely cause is the network in between.
 ]
 
 == Budgets
@@ -176,7 +166,7 @@ A ceiling on what one page ships, in bytes: #link("linting/budgets.typ")[Budgets
 `snippets` says what each fenced language is checked by: #link("linting/fences.typ")[Code fences].
 == Keeping a rule off one place
 
-A finding can be right about the markup and wrong about the page. `nolint` marks
+A finding can be correct about the markup and still wrong for the page. `nolint` marks
 a region the lint does not look at:
 
 ```typ
@@ -202,14 +192,13 @@ it.
 
 == Elsewhere
 
-Two more checks are documented elsewhere, because neither is about a page's own
-markup: broken internal links (`check { links }`, see
+Two more checks are documented elsewhere, because neither concerns a page's own markup: broken internal links (`check { links }`, see
 #link("../write/pages.typ")[pages]) and the pages nothing links to
 (`check { orphans }`, see #link("../write/backlinks.typ")[backlinks]).
 
 == Under the cache
 
-Both halves survive an #link("incremental.typ")[incremental build]. A page
+The lint findings and the budgets both survive an #link("incremental.typ")[incremental build]. A page
 records its findings and its weights alongside its markup, and a cache hit
 replays them, so the second build of a site reports exactly what the first did.
 Byte weights are read fresh from what this build emitted, so a fatter stylesheet

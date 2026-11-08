@@ -4,17 +4,16 @@
 )
 #import "/templates/theme.typ": callout
 
-Hugo has the larger feature surface, so this is the migration where you should
-check what you actually use. The posts themselves copy across as files: a `.md`
-file under `content/` is a page here too, and its frontmatter block is read in
-the language its fence already says it is. `---` is YAML, `+++` is TOML. What
-has to change is a handful of frontmatter *key names*, the shortcodes, the
-internal links and the config. Go templates and render hooks collapse into
-ordinary Typst functions.
+Hugo has more features than baudelaire, so check what you actually use before
+you start. Posts copy across as files: a `.md` file under `content/` is a page
+here too, and its frontmatter block is read in the language its fence names:
+`---` is YAML, `+++` is TOML. What has to change is a few frontmatter key names,
+the shortcodes, the internal links and the config. Go templates and render hooks
+become ordinary Typst functions.
 
 #callout(kind: "note")[
-  Converting a post to `.typ` is a choice, not a step. Make it when you want what
-  Typst gives you: math, a figure, a chart, a template helper mid-page. See
+  Converting a post to `.typ` is optional. Do it when you want math, a figure, a
+  chart or a template helper mid-page. See
   #link("../../write/markdown.typ")[Markdown pages] for what a `.md` page can
   carry, and #link("content.typ")[Markdown to Typst] for the conversion and its
   pandoc pass.
@@ -101,9 +100,8 @@ footnotes, strikethrough and tasklists are on; Hugo's typographer is not, and is
 
 == Frontmatter
 
-The block does not change language. The fence picks it, so a Hugo post's `---`
-is read as YAML and a `+++` as TOML, exactly as Hugo read them. What changes is
-the spelling of a few keys:
+The block keeps its language. The fence picks it, so a Hugo post's `---` is read
+as YAML and `+++` as TOML, as Hugo read them. A few keys are spelled differently:
 
 ```yaml
 ---
@@ -154,45 +152,44 @@ params:
 )
 
 #callout(kind: "warn")[
-  *A key nobody recognises is not an error.* It lands in `page.frontmatter` for a
+  *An unrecognised key is not an error.* It lands in `page.frontmatter` for a
   template to read, and no built-in behaviour attaches to it: a `weight` left
   alone sorts nothing, an `aliases` left alone publishes no redirect, a `url`
   left alone moves no page. Only a key within an edit or two of a real one is
-  caught as a typo, and none of Hugo's are. So the renames in the table are the
-  whole risk of the copy: do them first, then grep the tree for the old spellings.
+  caught as a typo, and none of Hugo's are. Do the renames in the table first,
+  then grep the tree for the old spellings.
 ]
 
 #callout(kind: "warn")[
-  *A date is the bare ISO day.* `hugo new` writes `date: 2026-07-09T10:00:00+02:00`,
+  *A date must be a bare ISO day.* `hugo new` writes `date: 2026-07-09T10:00:00+02:00`,
   and that fails the build with *a string that is not an ISO day*. Cut it to
   `2026-07-09`. TOML's date literal (`date = 2026-07-09`) is accepted and reaches
   the same reader; a TOML datetime does not.
 ]
 
-A `tags` key is nothing at all until the taxonomy is declared. Until then it is
-an unrecognised key like any other, so a copied post publishes with no terms and
-no complaint. See #link("../../collections/taxonomies.typ")[taxonomies].
+A `tags` key does nothing until the taxonomy is declared. Until then it is an
+unrecognised key like any other, so a copied post publishes with no terms and no
+warning. See #link("../../collections/taxonomies.typ")[taxonomies].
 
-The third fence, `;;;`, is KDL, the language the config is written in. Nothing
-about a Hugo migration needs it, and it is the one dialect that cannot spell a
-one-element list. See #link("../../write/markdown.typ")[Markdown pages].
+The third fence, `;;;`, is KDL, the language the config is written in. A Hugo
+migration does not need it, and it cannot write a one-element list. See #link("../../write/markdown.typ")[Markdown pages].
 
-A collection can require the fields its template reads, which is the checked
-version of what Hugo leaves to `.Params` and an empty string. See
+A collection can require the fields its template reads. Hugo leaves that to
+`.Params` and an empty string. See
 #link("../../write/frontmatter.typ")[schemas].
 
 #callout(kind: "warn")[
   Hugo's `.Summary` is generated from the first paragraphs or a `<!--more-->`
-  marker. Nothing here does that: write a `description`, which then fills the
-  meta tag, the feed entry, the search index and the social card at once. A
+  marker. Nothing here does that: write a `description`, which fills the
+  meta tag, the feed entry, the search index and the social card. A
   listing template reads it back as `entry.description`, and `summary` is
   accepted as a spelling of the same key.
 ]
 
-=== The slug is not the same string
+=== Slugs come from different places
 
-This is the one that quietly rewrites every URL. Hugo's `:slug` token falls back
-to the *title*, urlized. Baudelaire's slug comes from the *filename*.
+This can change every URL without any error. Hugo's `:slug` token falls back to
+the title, urlized. Baudelaire's slug comes from the filename.
 
 #table(
   columns: 3,
@@ -203,18 +200,18 @@ to the *title*, urlized. Baudelaire's slug comes from the *filename*.
   [`/2025/11/tickets/`],
 )
 
-So a Hugo site whose filenames are short and whose titles are sentences moves
-every post the moment you copy the permalink pattern across. Either rename the
+A Hugo site with short filenames and sentence titles moves every post as soon as
+you copy the permalink pattern across. Either rename the
 files to the old slugs, or write `slug` into each page's frontmatter, before
 comparing sitemaps. `slug` in Hugo frontmatter already pinned the URL and carries
 over unchanged.
 
 == Raw HTML
 
-Hugo's Goldmark passes HTML through once `renderer.unsafe` is on, and themes lean
-on it. Here a `.md` page that contains any is refused, because the DOM a build
-produces is typed and a string of markup has nowhere to be spliced into it. Three
-answers, in the order worth trying:
+Hugo's Goldmark passes HTML through once `renderer.unsafe` is on, and many themes
+rely on it. Here a `.md` page that contains any is refused, because the build's
+DOM is typed and a string of markup cannot be spliced into it. Three options, in
+the order to try them:
 
 #table(
   columns: 2,
@@ -225,8 +222,8 @@ answers, in the order worth trying:
   [convert the page to `.typ`], [`h("div", class: "x")[..]`, from `@baudelaire/html`],
 )
 
-The refusal names the file, the line and the tag, so a tree is worked through by
-building it. `html "drop"` is the one to be careful with: an embedded widget is a
+The refusal names the file, the line and the tag, so you can work through a tree
+by building it. Be careful with `html "drop"`: an embedded widget is a
 block-level run, and dropping it drops what it contained.
 
 == Shortcodes and render hooks
@@ -242,8 +239,8 @@ imports:
 ))
 ```
 
-A markdown page reaches it through an `eval` fence, which is where
-`{{< youtube id >}}` used to be:
+A Markdown page calls it through an `eval` fence, where `{{< youtube id >}}`
+used to be:
 
 ````md
 ```typ eval
@@ -255,9 +252,9 @@ A markdown page reaches it through an `eval` fence, which is where
 A `.typ` page calls `#youtube("dQw4w9WgXcQ")` outright. Either way `eval #false`
 turns the fences off for a site that imports content it did not write.
 
-A render hook, which in Hugo rewrites every link or image in the Markdown, is a
-`#show` rule in the template that draws the page, so it applies to a `.md` body
-the same as a `.typ` one:
+A render hook, which in Hugo rewrites every link or image in the Markdown, becomes
+a `#show` rule in the template that draws the page. It applies to `.md` and
+`.typ` bodies alike:
 
 ```typ
 #let page(page, body) = {
@@ -268,14 +265,14 @@ the same as a `.typ` one:
 
 #callout(kind: "warn")[
   A shortcode left in a page is not an error. `{{< youtube .. >}}` and
-  `{{% notice %}}` are ordinary text to a markdown parser, so they publish as
-  text on a green build. Grep for `{{<` and `{{%` before you ship.
+  `{{% notice %}}` are ordinary text to a Markdown parser, so they publish as
+  text and the build passes. Grep for `{{<` and `{{%` before you ship.
 ]
 
 == Internal links
 
-`{{< relref "sleepers.md" >}}` and `{{< ref >}}` have no meaning here, and no
-error either: they are the text above. What they wrapped is what you keep.
+`{{< relref "sleepers.md" >}}` and `{{< ref >}}` have no meaning here and raise
+no error: they publish as text. Keep what they wrapped.
 
 ```md
 [sleepers](sleepers.md)
@@ -284,8 +281,8 @@ error either: they are the text above. What they wrapped is what you keep.
 A plain link naming a source path is resolved against the linking file and
 rewritten to that page's permalink, and if no page is there the build fails.
 Both extensions work and either may name either kind of page, so a `.md` post
-linking a converted `.typ` one needs no thought. That is the mechanism that
-finds the links a migration broke.
+can link a converted `.typ` one. This is how the build finds the links a
+migration broke.
 
 #table(
   columns: 3,
@@ -296,9 +293,9 @@ finds the links a migration broke.
   [`https://..`, `mailto:`, `#anchor`], [itself], [no; external links have a pass of their own],
 )
 
-So convert `{{< relref >}}` to the source path, not to the URL it produced: a URL
-survives a rename only if the URL does. `check { links "warn" }` demotes the
-failure to a warning, which is the setting for working through a large tree. See
+Convert `{{< relref >}}` to the source path, not to the URL it produced, because
+a URL breaks when a page is renamed. `check { links "warn" }` demotes the failure
+to a warning, which helps when working through a large tree. See
 #link("../../write/pages.typ")[pages].
 
 == Templates
@@ -349,7 +346,7 @@ failure to a warning, which is the setting for working through a large tree. See
   [render hooks], [a `#show` rule in the template],
 )
 
-The absent `.Permalink` is deliberate: nothing site-wide may go into a page's
+`.Permalink` is absent on purpose: nothing site-wide may go into a page's
 wrapper, or every page's cache identity would depend on every other page. The
 site tree and the page catalogue come from `@baudelaire/sections` and
 `@baudelaire/pages`, which typst tracks as files. See
@@ -358,7 +355,7 @@ site tree and the page catalogue come from `@baudelaire/sections` and
 == Page resources
 
 A Hugo page bundle addresses its own files. A bundle here is a directory with an
-`index.md` or `index.typ` in it, and the same files are reached two ways:
+`index.md` or `index.typ` in it:
 
 #table(
   columns: 2,
@@ -370,7 +367,7 @@ A Hugo page bundle addresses its own files. A bundle here is a directory with an
   [`{{ $img.Resize "600x" }}`], [`assets { images { responsive } }`, applied to every extracted image],
 )
 
-The body names it the way Markdown always did:
+The body refers to the image as in any Markdown file:
 
 ```md
 ![Vienna](vienna.png)
@@ -379,8 +376,8 @@ The body names it the way Markdown always did:
 The picture publishes at `/assets/posts/hello/vienna.png`: an extracted image
 keeps the directories it was authored under, relative to `content/`, so a tree
 where every post has its own `cover.png` does not collide. Only a file the page
-actually shows is written, so a `hero` the template draws from `page.assets` has
-to be named in the body as well, or it has a URL and no file. See
+actually shows is written, so a `hero` the template draws from `page.assets` must
+also be named in the body, or it has a URL and no file. See
 #link("../../build/images.typ")[images].
 
 == Commands
@@ -411,6 +408,6 @@ to be named in the body as well, or it has a URL and no file. See
   formats beyond the generated ones, and the whole `resources` chain except
   bundling, minifying, fingerprinting and image variants. Hugo also writes
   `/posts/page/1/` and a `page/1` under every term; nothing here does, and a
-  `redirects { rules }` pair is what claims those paths back. Check what your
-  theme relies on before you start.
+  `redirects { rules }` pair is what claims those paths back. Check what your theme
+  relies on before you start.
 ]

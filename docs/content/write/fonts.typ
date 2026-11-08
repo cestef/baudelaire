@@ -5,11 +5,11 @@
 #import "/templates/theme.typ": callout
 
 Typst resolves a glyph against the faces a build can see. By default those are its
-own bundled ones and whatever is installed on the machine, which makes the output
-depend on the machine: a page typeset in a face you have installed renders in a
-fallback on CI, out of a build that reported success.
+own bundled ones and whatever is installed on the machine, so the output
+depends on the machine: a page typeset in a face you have installed renders in a
+fallback on CI, and the build still reports success.
 
-Ship the faces with the site instead:
+To ship the faces with the site instead:
 
 ```kdl
 typst {
@@ -30,9 +30,9 @@ typst {
 
 Search order runs from most specific to least: Typst's bundled faces, then your
 `paths`, then the system's. A face you ship therefore wins over a same-named one
-that happens to be installed, which is the point of shipping it.
+that happens to be installed.
 
-`system #false` is what makes the build reproducible. With it off, a page can only
+`system #false` makes the build reproducible. With it off, a page can only
 resolve to a bundled face or one in the project, so the same commit typesets the
 same bytes on your laptop and on CI.
 
@@ -43,11 +43,11 @@ same bytes on your laptop and on CI.
 ]
 
 The faces under `paths` are build inputs, so replacing one rebuilds the site: a
-new cut of a face reaches the pages, the social cards and the PDFs together. The
-contents are what count, not the timestamps, so a fresh checkout on CI is not a
-cold build. A site that names no directory pays nothing for this.
+new cut of a face reaches the pages, the social cards and the PDFs together. Contents
+count, not timestamps, so a fresh checkout on CI is not a cold build. A site
+that names no directory is unaffected.
 
-A face is used by naming it in Typst, as usual. The config only decides what can
+Use a face by naming it in Typst, as usual. The config only decides what can
 be found:
 
 ```typ

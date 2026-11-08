@@ -18,11 +18,10 @@ assets {
 #html.elem("p", attrs: (class: "flex gap-2 text-sm"), [hello])
 ```
 
-That is the whole of it. The build links the sheet from every page itself, so no
+The build links the sheet from every page itself, so no
 template names a file, and the `<link>` it writes is an ordinary reference:
 minified, fingerprinted, digested for `integrity` and inlinable like any other
-asset. Only the classes the site actually writes get rules. Nothing is
-downloaded, no `node_modules`, no watcher.
+asset. Only the classes the site actually writes get rules. Nothing is downloaded, and there is no `node_modules` or watcher.
 
 #table(
   columns: 4,
@@ -63,9 +62,7 @@ assets {
 ```
 
 #callout(kind: "note")[
-  A class name has to appear *literally* somewhere scanned. A class assembled at
-  runtime (`"text-" + size`) is not a class name anyone can find, in this
-  generator or in Tailwind's own: put the whole names in a `safelist` in the
+  A class name has to appear literally somewhere scanned. A class assembled at runtime (`"text-" + size`) cannot be found, here or in Tailwind: put the whole names in a `safelist` in the
   encre-css config.
 ]
 

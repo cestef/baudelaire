@@ -4,7 +4,7 @@
 )
 #import "/templates/theme.typ": callout
 
-Edit one page in a thousand and one page recompiles. It's on by default.
+Edit one page of a thousand and only that page recompiles. This is on by default.
 
 ```sh
 $ baudelaire build
@@ -18,8 +18,7 @@ $ baudelaire build          # after editing one post
 == What invalidates what
 
 A page is fingerprinted by the exact typst source it compiles and by every file
-that compilation actually read. Typst tracks its own imports and data loads, so
-the dependency list is measured, not guessed. A page is reused only when its
+that compilation actually read. Typst tracks its own imports and data loads, so the dependency list comes from the compiler. A page is reused only when its
 fingerprint and all of its dependencies are unchanged.
 
 #table(
@@ -33,7 +32,7 @@ fingerprint and all of its dependencies are unchanged.
   [A build value, like the git hash], [Only the pages that read that value.],
 )
 
-That last row is per-field. A page printing `sys.inputs.baudelaire.git.hash`
+The last row is per field. A page printing `sys.inputs.baudelaire.git.hash`
 rebuilds on a commit; one that only reads `.version` does not. See
 #link("../lookup/context.typ")[Build metadata].
 
@@ -50,7 +49,7 @@ written yet invalidates the moment you write it.
   objects/ab/abcd...     # rendered HTML, content-addressed
 ```
 
-The manifest holds metadata only, so a warm start parses a small JSON file
+The manifest holds metadata only, so a warm start parses one small JSON file
 instead of every page's markup. Identical output is stored once, and an unchanged
 blob is never rewritten. `build` and `serve` share the cache, so switching
 between them recompiles nothing.

@@ -5,8 +5,7 @@
 #import "/templates/theme.typ": callout
 
 A `manifest.webmanifest` is what a browser reads when a visitor installs the
-site to a home screen: what to call it, what to launch, what to paint before the
-first page renders. The block's presence writes it, and `manifest #false` stops
+site to a home screen: its name, what to launch, and what colour to paint before the first page renders. The block's presence writes it, and `manifest #false` stops
 it.
 
 ```kdl
@@ -38,7 +37,7 @@ when you set `theme`. Without the link a browser never looks for the file.
   align: (left, left, left, left),
   table.header([Key], [Type], [Default], [Does]),
   [`name`], [string], [the site title], [The installed app's name.],
-  [`short`], [string], [--], [What a launcher shows when the full name doesn't fit.],
+  [`short`], [string], [--], [What a launcher shows when the full name does not fit.],
   [`description`], [string], [--], [One line, shown by an install prompt.],
   [`display`], [`standalone` | `fullscreen` | `minimal` | `browser`], [`standalone`], [How the app is presented. `minimal` writes `minimal-ui`.],
   [`theme`], [string], [--], [CSS colour of the browser UI, and of every page's `theme-color`.],
@@ -48,7 +47,7 @@ when you set `theme`. Without the link a browser never looks for the file.
   [`icons`], [block], [--], [One line per icon, named by the path it is served from.],
 )
 
-What the build already knows it fills in: the name from `site`, `start` and
+The build fills in what it already knows: the name from `site`, `start` and
 `scope` from where that language's site begins, an icon's media type from its
 extension. An authored `start "/home/"` is localized like the default it
 replaces, so the French app launches into `/fr/home/` and stays inside the
@@ -71,9 +70,8 @@ icons {
 ```
 
 The node name is the path, exactly as the browser will request it: put the files
-in `static/` and they're served verbatim. `size` is the square edge in pixels,
-and leaving it out means the image scales to any size, which is the honest
-answer for an SVG.
+in `static/` and they are served verbatim. `size` is the square edge in pixels,
+and leaving it out means the image scales to any size, which suits an SVG.
 
 `purpose` is `any` (the default, and then left unwritten), `maskable` for an
 image safe to crop to the platform's icon shape, or `monochrome` for a
@@ -97,6 +95,4 @@ in.
 
 == What it does not do
 
-The manifest makes a site installable. It does not make it work offline: that
-needs a service worker, which baudelaire does not generate. Write one into
-`static/` and register it from your own script if you want one.
+The manifest makes a site installable, not available offline. Offline use needs a service worker, which baudelaire does not generate. To add one, write it into `static/` and register it from your own script.

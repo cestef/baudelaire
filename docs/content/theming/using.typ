@@ -13,8 +13,8 @@ theme "themes/albatros"
 
 == Pick one
 
-Four ship with baudelaire, one per kind of site. Pick by what the site *is*. The
-look is the part you can change in an afternoon.
+Four ship with baudelaire, one per kind of site. Pick by what the site is. You
+can change the look in an afternoon.
 
 #table(
   columns: 3,
@@ -27,7 +27,7 @@ look is the part you can change in an afternoon.
 
   [#link("/themes/spleen/")[spleen]], [A blog, no JavaScript],
   [A terminal. Monospace throughout, a prompt for a masthead, posts as a
-    directory listing, dark first. Not "minimal JS": none.],
+    directory listing, dark first. No JavaScript at all.],
 
   [#link("/themes/phares/")[phares]], [Documentation],
   [A sidebar built from your own `content/` tree, a search palette, the page's
@@ -58,10 +58,10 @@ baudelaire theme list          # the four, one line each
 baudelaire theme add albatros  # writes themes/albatros/
 ```
 
-Nothing is downloaded: the files land in your project and are yours from that
-moment, to read, edit, or replace.
+Nothing is downloaded. The files land in your project, and you can read, edit
+or replace them.
 
-A theme from anywhere else is the same command with a different spec:
+A theme from anywhere else uses the same command with a different spec:
 
 ```sh
 baudelaire theme add ./elsewhere/plume            # a directory on this machine
@@ -115,9 +115,9 @@ Only the `preview` namespace is ever downloaded. `@local` and any other
 namespace are read from disk and never hit the network.
 
 Scaffolding a new site straight onto a theme writes only what a theme cannot
-decide for you: the site's identity, its paths, and a preview. No templates, no
-assets, and no `collections` of its own, since a `collections` list of yours
-would replace the theme's rather than add to it.
+decide: the site's identity, its paths, and a preview. It writes no templates,
+no assets and no `collections`, since a `collections` list of yours would
+replace the theme's.
 
 ```sh
 baudelaire init my-site --theme "themes/albatros"
@@ -131,8 +131,7 @@ project that builds:
 ➜ albatros  11 files to themes/albatros
 ```
 
-A spec naming anything else is yours to put there, and the run says so rather
-than leaving the first build to find out.
+A spec naming anything else is yours to put there, and the run tells you so.
 
 `--template` is not used with `--theme`: what a starter shape would contribute
 is the part the theme already declares.
@@ -141,8 +140,9 @@ Then read the theme's README for what it wants from a page. All four want a
 `title`; most use `date`, `summary`, and a taxonomy.
 
 #callout(kind: "note")[
-  A theme's `theme.kdl` is a *floor*. Every key you state wins, nested blocks
-  included, so adopting one never touches your `site`, `url`, or `author`.
+  A theme's `theme.kdl` is a floor of defaults. Every key you state wins,
+  nested blocks included, so adopting one never touches your `site`, `url`, or
+  `author`.
 ]
 
 #callout(kind: "warn")[
@@ -153,8 +153,8 @@ Then read the theme's README for what it wants from a page. All four want a
 
 == Change part of it
 
-One rule: *your file wins*, file by file, across `templates/`, `assets/` and
-`static/`. Everything else still comes from the theme.
+Your file wins, file by file, across `templates/`, `assets/` and `static/`.
+Everything else still comes from the theme.
 
 #table(
   columns: 2,
@@ -175,9 +175,7 @@ One rule: *your file wins*, file by file, across `templates/`, `assets/` and
 }
 ```
 
-Nothing else has to move. A theme you've overridden two files of is still a
-theme `baudelaire theme update` brings forward: the two files you changed are
-kept, the rest are rewritten.
+A theme with two overridden files still updates: `baudelaire theme update`
+keeps the two files you changed and rewrites the rest.
 
-Writing one of your own is #link("authoring.typ")[a page of its
-own].
+To write a theme of your own, see #link("authoring.typ")[writing a theme].

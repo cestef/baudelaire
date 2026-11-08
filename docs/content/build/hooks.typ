@@ -31,17 +31,16 @@ Each argument is one whole command line, and they run in the order written.
 
 == How they run
 
-Through the system shell (`sh -c` on Unix, `cmd /C` on Windows), in the project
-root. Not the process working directory: a hook's own relative paths land in the
-site being built, whatever directory you started `baudelaire` from.
+Hooks run through the system shell (`sh -c` on Unix, `cmd /C` on Windows), in the
+project root. The directory you started `baudelaire` from does not matter: a
+hook's relative paths always land in the site being built.
 
-Their stdio is inherited, so their output streams straight to your terminal under
-a dimmed `$ command` line. A non-zero exit fails the build.
+Output streams straight to your terminal under a dimmed `$ command` line. A non-zero exit fails the build.
 
 == Feeding the pipeline
 
-`before` runs first, so anything it writes into `assets/` is a first-class asset:
-minified, bundled and fingerprinted like a file you checked in.
+`before` runs first, so anything it writes into `assets/` is minified, bundled and
+fingerprinted like a file you checked in.
 
 ```kdl
 hooks {
@@ -62,7 +61,7 @@ serve {
 ]
 
 `exclude` and `include` are #link("https://docs.rs/wax")[wax] globs relative to
-the project root. `include` is the other half: use it to watch sources that live
+the project root. `include` does the opposite: it watches sources that live
 outside content, templates and assets. See
 #link("preview.typ")[Dev server & preview].
 
@@ -79,7 +78,7 @@ hooks {
 Several commands go on one line, one string each. Writing `after` twice replaces
 the list rather than extending it, the way every config list behaves.
 
-Nothing downstream re-reads what an `after` hook writes, so files it creates are
+Nothing re-reads what an `after` hook writes, so files it creates are
 outside the #link("incremental.typ")[build cache] and outside
-#link("linting.typ")[budgets]. If you want a generated file weighed and
+#link("linting.typ")[budgets]. To have a generated file weighed and
 fingerprinted, write it in a `before` hook instead.

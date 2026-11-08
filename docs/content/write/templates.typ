@@ -22,7 +22,7 @@ A page with no template bound anywhere is written out as Typst renders it, with 
 
 == Bind it
 
-Per collection, in `config.kdl`, which is how most pages get one. `_root` is the collection a page directly under `content/` lands in, so binding it there covers the home page and its neighbours:
+Most pages get a template from their collection, set in `config.kdl`. `_root` is the collection a page directly under `content/` lands in, so binding it there covers the home page and its neighbours:
 
 ```kdl
 content {
@@ -39,13 +39,13 @@ content {
 }
 ```
 
-Per page, in frontmatter, which wins over both:
+A page can also set one in its frontmatter, which wins:
 
 ```typ
 #let frontmatter = (title: "Home", template: "home.typ")
 ```
 
-The nearer binding wins: a page's own frontmatter, else its collection's. A #link("../theming/using.typ")[theme] states the collection half in its own `theme.kdl`, which is what makes a themed page render without naming anything.
+A page's own frontmatter wins, else its collection's. A #link("../theming/using.typ")[theme] sets the collection template in its own `theme.kdl`, so a themed page renders without naming one.
 
 Paths are file names inside `paths { templates }` (`templates/` by default). #link("../collections/taxonomies.typ")[Taxonomy] listings take a `template` of their own, and so do #link("../build/generate/cards.typ")[social cards] and #link("../build/generate/pdf.typ")[PDFs], though those two are paged documents rather than HTML.
 
@@ -72,16 +72,14 @@ Paths are file names inside `paths { templates }` (`templates/` by default). #li
 )
 
 `page.source` is what an "edit this page" link is built from: it is
-root-absolute, so appending it to a forge URL is concatenation rather than path
-arithmetic.
+root-absolute, so you can append it to a forge URL directly.
 
 ```typ
 #let edit = "https://github.com/you/site/edit/main" + page.source
 ```
 
-`page.git` is the other half of that line: when the page last changed, and who
-has changed it. It is off by default, because reading it walks the repository's
-log:
+`page.git` holds when the page last changed and who changed it. It is off by
+default, because reading it walks the repository's log:
 
 ```kdl
 content {
@@ -109,12 +107,11 @@ content {
 ```
 
 `none` for a page no commit has touched yet, for a generated listing, and for a
-build outside a repository. Read it defensively; a page written since the last
-commit has no history and that is not an error.
+build outside a repository. Read it defensively: a page written since the last
+commit has no history, which is not an error.
 
 This is also where the sitemap's `lastmod` comes from. Frontmatter `updated`
-wins where a page declares it, since that is an author saying so on purpose;
-otherwise the commit date is used, and the publication `date` only where neither
+wins where a page declares it; otherwise the commit date is used, and the publication `date` only where neither
 is available.
 
 Read optional frontmatter defensively, since a page may not declare it:
@@ -125,10 +122,10 @@ Read optional frontmatter defensively, since a page may not declare it:
 ```
 
 #callout(kind: "note")[
-  What a page knows is *itself*: its own URL, its own collection, its own directory. Nothing in the wrapper may name _other_ pages, or every page's cache identity would depend on all of them. The site tree and the page catalogue come from #link("../lookup/typst-modules.typ")[virtual modules] instead: `sections(page.lang)` and `pages(page.lang)`.
+  `page` knows only about itself: its own URL, collection and directory. It may not name other pages, or every page's cache entry would depend on all of them. The site tree and the page catalogue come from #link("../lookup/typst-modules.typ")[virtual modules] instead: `sections(page.lang)` and `pages(page.lang)`.
 ]
 
-`page.nav` and `page.backlinks` sit right on that line, and only because each names a page's neighbours rather than the site. See #link("../collections/navigation.typ")[prev / next links], #link("backlinks.typ")[backlinks], #link("reading.typ")[reading time], and #link("i18n.typ")[multiple languages] for the fields that have a page of their own.
+`page.nav` and `page.backlinks` are the near exceptions: each names a page's neighbours, not the whole site. See #link("../collections/navigation.typ")[prev / next links], #link("backlinks.typ")[backlinks], #link("reading.typ")[reading time], and #link("i18n.typ")[multiple languages] for the fields that have a page of their own.
 
 == A bundle's own files
 
@@ -191,7 +188,7 @@ The row shape is shared with `@baudelaire/pages`, so one card component renders 
 
 == `h()`
 
-`html.elem` is the honest way to emit an element and it is wordy. `h` is the same thing with the `attrs:` wrapper removed.
+`html.elem` emits an element but is wordy. `h` is the same thing without the `attrs:` wrapper.
 
 ```typ
 #import "@baudelaire/html:0.1.0": h, classes, svg
@@ -210,7 +207,7 @@ Named arguments become attributes, positional ones become children. Hyphenated n
   See #link("../lookup/typst-modules.typ")[typst modules].
 ]
 
-Values follow what HTML actually wants, which removes most of the guards a template accumulates:
+Values are coerced the way HTML expects, so a template needs fewer guards:
 
 #table(
   columns: 2,
@@ -224,15 +221,15 @@ Values follow what HTML actually wants, which removes most of the guards a templ
 `classes` joins class names, skipping what is absent and taking a `(name, condition)` pair for a conditional one. `svg` inlines an icon file as real DOM. Both are covered on #link("../lookup/typst-modules.typ")[Typst modules], along with every other `@baudelaire/*` package.
 
 #callout(kind: "warn")[
-  A template must never emit `html`, `head`, or `body` elements. typst-html owns those. A page whose layout emits a single `html` root hands Typst the author's document instead, and everything that appends to the head, meta tags and verification links included, silently disappears.
+  A template must never emit `html`, `head`, or `body` elements. typst-html owns those. If a layout emits a single `html` root, Typst uses it as the document, and everything that appends to the head (meta tags, verification links) silently disappears.
 ]
 
 == Sharing pieces
 
-Templates import each other like any Typst file, so a shell, a byline, and a card row live in one file that every layout pulls from:
+Templates import each other like any Typst file, so a shared shell, byline or card row can live in one file:
 
 ```typ
 #import "/templates/parts.typ": byline, shell
 ```
 
-That is a project-root path, which is right for a site. A #link("../theming/authoring.typ")[theme] uses relative imports instead, and keeps its shared file outside `templates/`.
+That is a project-root path, which suits a site. A #link("../theming/authoring.typ")[theme] uses relative imports instead, and keeps its shared file outside `templates/`.

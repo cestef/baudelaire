@@ -4,8 +4,7 @@
 )
 #import "/templates/theme.typ": callout
 
-One binary, no runtime. The Typst compiler is inside it, so there is nothing
-else to install.
+One binary, no runtime. The Typst compiler is inside it.
 
 ```sh
 curl -fsSL https://baudelaire.cstef.dev/install.sh -o install.sh
@@ -13,8 +12,8 @@ less install.sh          # read it first
 sh install.sh
 ```
 
-That picks the right prebuilt binary for your machine, verifies its checksum,
-and drops it in `~/.local/bin`.
+That downloads the prebuilt binary for your machine, verifies its checksum,
+and puts it in `~/.local/bin`.
 
 On Windows, `install.ps1` is the same script with the same knobs under the same
 names. It installs to `%LOCALAPPDATA%\Programs\baudelaire`.
@@ -56,7 +55,7 @@ PREFIX=/usr/local/bin VERSION=v0.0.19 sh install.sh
 Prebuilt binaries exist for Linux (`x86_64` and `aarch64`, each `gnu` and
 `musl`), macOS on Apple Silicon and Intel, and Windows on `x86_64`. Windows on
 ARM has none: it would run the `x86_64` build under emulation, so the installer
-refuses rather than quietly handing you a slow binary. Build a native one with
+refuses instead of giving you a slow binary. Build a native one with
 `cargo install baudelaire`.
 
 #callout(kind: "note")[
@@ -85,7 +84,7 @@ prebuilt binary fits.
 == Slim builds
 
 Every release ships in two flavors. `full` is the default. `slim` drops the
-optional capabilities and most of the binary size with them: the bundled fonts,
+optional capabilities, and most of the binary size with them: the bundled fonts,
 the CSS and JavaScript toolchains, the card renderer.
 
 ```sh
@@ -96,7 +95,7 @@ FLAVOR=slim sh install.sh
 $env:FLAVOR = "slim"; .\install.ps1
 ```
 
-From source that's `cargo install baudelaire --no-default-features`, and you can
+From source, use `cargo install baudelaire --no-default-features`, and you can
 add any single capability back with `--features css`.
 
 What `slim` leaves out:
@@ -131,8 +130,8 @@ What `slim` leaves out:
     `@baudelaire/markdown` is not served, so `md` cannot be imported either.],
 )
 
-Turning one off never changes what a site that doesn't ask for it produces. A
-site that does ask gets a `baudelaire::feature::missing` warning naming the
+A site that doesn't use a feature builds the same without it. A
+site that does use it gets a `baudelaire::feature::missing` warning naming the
 setting, the feature to rebuild with, and what was emitted instead.
 
 #callout(kind: "warn")[
@@ -143,7 +142,7 @@ setting, the feature to rebuild with, and what was emitted instead.
 
 == From a checkout
 
-Working on baudelaire itself:
+To work on baudelaire itself:
 
 ```sh
 just install

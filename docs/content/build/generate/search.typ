@@ -4,8 +4,7 @@
 )
 #import "/templates/theme.typ": callout
 
-A static search index built from your rendered pages, and a ready-made Ctrl-K
-palette that reads it. No service, no account.
+A static search index built from your rendered pages, and a ready-made Ctrl-K palette that reads it. It needs no service or account.
 
 ```kdl
 generate {
@@ -18,11 +17,9 @@ on; `search #false` turns it off again. One index per language, so a visitor on
 `/fr/` searches `/fr/search.json` and never gets English hits.
 
 By default only the page's `<main>` region is indexed. Site chrome (header,
-sidebar, footer) is skipped, so a search for "install" doesn't match every
-page's navigation.
+sidebar, footer) is skipped, so a search for "install" does not match every page's navigation.
 
-A layout that binds its prose to something else names it, and one that keeps
-chrome *inside* that region lists what to drop:
+A layout that binds its prose to something else names it, and one that keeps chrome inside that region lists what to drop:
 
 ```kdl
 html {
@@ -33,9 +30,8 @@ html {
 }
 ```
 
-That lives under `html` and not under `search`, because it is a fact about the
-markup the site emits: the #link("feeds.typ")[feed] carrying each entry in full
-reads the same region, so both mean the same thing by "the page's prose".
+This lives under `html` rather than `search` because it describes the markup the site emits: the #link("feeds.typ")[feed] carrying each entry in full
+reads the same region, so both agree on what "the page's prose" is.
 
 Both are tag names, matched whole and case-insensitively; nesting is counted, so
 an `<article>` inside an `<article>` does not end the region early. A page with
@@ -62,7 +58,7 @@ anything marked `aria-hidden="true"`. The second is why a heading's
   [`ui`], [block], [off], [Ship the generated palette.],
 )
 
-== Weights, not a field list
+== Field weights
 
 Every key of `fields` is what a match in that part of a page is worth. A field
 at `0` is left out of the index entirely, so one block says both what is indexed
@@ -81,13 +77,11 @@ generate {
 ```
 
 `fields { tags 0 }` indexes titles and prose and ignores taxonomy terms. A hit
-still shows its title whatever the title weight is: weights decide ranking, not
-what a result looks like.
+still shows its title whatever the title weight is, because weights only affect ranking.
 
 == Two index shapes
 
-Both shapes tokenize, rank and snippet identically. They differ only in who
-builds the postings, which is a payload trade and nothing else.
+Both shapes tokenize, rank and snippet identically. They differ only in who builds the postings, which trades payload size for client work.
 
 `index "terms"` prebuilds them here: `{ terms, postings }` beside each hit's
 snippet. The browser looks a term up instead of reading every page's prose, so
@@ -101,7 +95,7 @@ but it is the shape any other client library reads, so you can feed it to
 Either way a query matches whole words, and the word still being typed matches
 by prefix: "conf" finds "configuration" before you finish the word.
 
-== The palette, for free
+== The palette
 
 ```kdl
 generate {
@@ -124,12 +118,10 @@ highlighted matches and full keyboard control:
 <script type="module" src="/search.js"></script>
 ```
 
-Cmd/Ctrl-K opens it anywhere, and `hotkey` opens it when you aren't typing in a
+Cmd/Ctrl-K opens it anywhere, and `hotkey` opens it when you are not typing in a
 field. Any element carrying `data-search-open` becomes a trigger too.
 
-The palette ships a minimal stylesheet expressed entirely through `.bd-*`
-classes and custom properties, so your own CSS can restyle it. `styles #false`
-leaves the look entirely to you.
+The palette ships a minimal stylesheet written with `.bd-*` classes and custom properties, so your own CSS can restyle it. `styles #false` leaves the look to you.
 
 == Bundle it into your own JavaScript
 
@@ -145,7 +137,7 @@ import { mountSearch } from "baudelaire:search";
 mountSearch({ styles: false, placeholder: "Search the docs" });
 ```
 
-That is exactly how the palette on this site works. Every option defaults to
+The palette on this site works this way. Every option defaults to
 what `ui { }` configured, so a call overrides only what it names.
 
 #table(
@@ -164,8 +156,7 @@ import and the auto-mount can coexist.
 
 == The engine alone
 
-The client also exports `createSearch`, the headless query function, if you'd
-rather build your own UI:
+The client also exports `createSearch`, the headless query function, for building your own UI:
 
 ```js
 import { createSearch } from "baudelaire:search";
@@ -180,7 +171,5 @@ It picks the index by the page's own `<html lang>`, so the same bundle searches
 the right language on every page. Pass a URL to search another one.
 
 #callout(kind: "note")[
-  The client tokenizes a query exactly the way the index was tokenized, so
-  results stay consistent whichever shape and whichever entry point you reach
-  for.
+  The client tokenizes a query the same way the index was tokenized, so results are consistent across both shapes and both entry points.
 ]

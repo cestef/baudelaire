@@ -61,8 +61,7 @@ a #link("s3.typ")[bucket] or an #link("ssh.typ")[SSH host] in `config.kdl`.
   Codeberg's.],
 
   [`$GITHUB_PATH` for the install dir],
-  [Call `~/.local/bin/baudelaire` outright. One less runner behavior to depend
-  on.],
+  [Call `~/.local/bin/baudelaire` by its full path.],
 
   [`deploy-pages` publishes the artifact],
   [No Pages action exists. Push the files yourself, or use `baudelaire deploy`.],

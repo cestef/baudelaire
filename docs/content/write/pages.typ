@@ -6,7 +6,7 @@
 
 A page is a `.typ` or `.md` file under `content/`. Where it sits decides its URL,
 and everything after the frontmatter binding is the body. This page describes
-`.typ`; #link("markdown.typ")[Markdown pages] covers what differs.
+`.typ`; see #link("markdown.typ")[Markdown pages] for `.md`.
 
 ```typ
 #let frontmatter = (
@@ -14,8 +14,8 @@ and everything after the frontmatter binding is the body. This page describes
   date: datetime(year: 2026, month: 7, day: 9),
 )
 
-This is *real Typst*. Functions, math $x^2$, tables and data loading,
-not just prose.
+This is *real Typst*: functions, math $x^2$, tables and data loading
+work, not just prose.
 ```
 
 Save that as `content/blog/hello.typ` and it publishes at `/blog/hello/`.
@@ -77,7 +77,7 @@ agree with what's actually served.
 
 == The body
 
-It's Typst, so anything a Typst document can do a page can do:
+A page can do anything a Typst document can:
 
 ```typ
 == Headings, lists, tables
@@ -131,7 +131,7 @@ an external URL is left alone.
 ]
 
 Rename a page and the links to it keep working, because they name the file, not
-the URL. Move it and they break loudly at build time.
+the URL. Move it and the build fails.
 
 == Heading anchors
 

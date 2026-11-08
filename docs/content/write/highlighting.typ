@@ -11,10 +11,9 @@ Fenced code blocks are highlighted by Typst itself. Register a grammar once with
 ```
 
 `syntaxes` points at a Sublime-syntax grammar (`.sublime-syntax`). Typst ships grammars
-for most common languages, and baudelaire adds `kdl`, the language its own config is
-written in, and the one it highlights a `config show` with, so you only need your own
-for the niche ones. This site adds `powershell.sublime-syntax` for the Windows install
-steps and nothing else.
+for most common languages, and baudelaire adds `kdl`, the language its config is
+written in, so you only need your own for niche ones. This site adds
+`powershell.sublime-syntax` for the Windows install steps and nothing else.
 
 #callout(kind: "note")[
   Typst builds a syntax set from the files you hand it and nothing else, so a grammar that reaches into another Sublime package (`embed: scope:source.regexp`, `set: scope:source.cs`) cannot resolve that reference, and the text it covers is dropped from the output rather than left unhighlighted. Vendoring a grammar from the wild usually means replacing those few contexts with plain handling.
@@ -22,9 +21,9 @@ steps and nothing else.
 
 == Colors that follow a dark-mode toggle
 
-Typst's HTML export bakes highlight colors *inline*, a `color` style on every span, with no option to emit classes. A color frozen at build time cannot follow a toggle that flips at runtime.
+Typst's HTML export writes highlight colors inline, as a `color` style on every span, with no option to emit classes. A color fixed at build time cannot follow a toggle that flips in the browser.
 
-Add an `html { highlight }` block and baudelaire highlights code blocks itself, emitting a class per token instead:
+With an `html { highlight }` block, baudelaire highlights code blocks itself and emits a class per token:
 
 ```kdl
 html {
@@ -36,7 +35,7 @@ html {
 <span class="sx-keyword">let</span>
 ```
 
-The palette then lives in your stylesheet, where the toggle can reach it:
+The palette then lives in your stylesheet:
 
 ```css
 .sx-keyword { color: var(--sx-keyword); }
@@ -51,7 +50,7 @@ The `theme` a `show raw` rule sets is not read at all in this mode, and neither 
 
 == The vocabulary
 
-A grammar's scopes are its own (`keyword.other.fn.rust`, `keyword.control.import.python`), and a stylesheet naming them would be written once per language. Every grammar funnels into one closed set instead, and so does Typst's own parser, so `#let` in a `typ` block and `let` in a `rust` one are both `sx-keyword`:
+Each grammar names its scopes differently (`keyword.other.fn.rust`, `keyword.control.import.python`). Baudelaire maps every grammar, and Typst's own parser, onto one fixed set of tokens, so `#let` in a `typ` block and `let` in a `rust` one are both `sx-keyword`:
 
 #table(
   columns: 2,
@@ -81,11 +80,11 @@ A grammar's scopes are its own (`keyword.other.fn.rust`, `keyword.control.import
   [`invalid`], [What the grammar could not parse],
 )
 
-Text no token claims gets no span at all: a code block is mostly plain, and a span around every word would be markup nobody reads.
+Text no token claims gets no span.
 
 == Naming and narrowing
 
-The block is where a site says what it wants on the page:
+Class names and the token set are configurable:
 
 ```kdl
 html {
@@ -106,14 +105,14 @@ html {
 
 A dropped token keeps its text and loses its span, so narrowing `tokens` is how a small palette gets small markup.
 
-`scopes` is the way out of the vocabulary when you need to tell one kind of keyword from another:
+Use `scopes` when you need to tell one kind of keyword from another:
 
 ```css
 [data-scope^="keyword.control"] { font-style: italic; }
 ```
 
-Without the block nothing changes: the colors stay inline, exactly as Typst emits them, which is also what a site wanting its own `.tmTheme` rendered as written should keep.
+Without the block the colors stay inline, as Typst emits them. Keep it that way if you want your own `.tmTheme` rendered as written.
 
 == In a theme
 
-All four #link("../theming/using.typ")[shipped themes] turn `highlight` on in their `theme.kdl` and define the palette in `style.css`. Each maps the twenty-odd tokens onto about eight color variables: the ones a reader has to tell apart get a color of their own, and the rest join whichever is closest.
+All four #link("../theming/using.typ")[shipped themes] turn `highlight` on in their `theme.kdl` and define the palette in `style.css`. Each maps the twenty-odd tokens onto about eight color variables: tokens a reader has to tell apart get their own color, and the rest share the closest one.

@@ -37,8 +37,8 @@ Every command has a visible short alias, so `baudelaire b` builds and
 )
 
 #callout(kind: "warn")[
-  `check` takes `c` and `clean` takes `cl`, not the other way around. One
-  keystroke should not be the difference between compiling and deleting.
+  `check` is `c` and `clean` is `cl`, so a single keystroke can't turn a compile
+  into a delete.
 ]
 
 == `config` <config>
@@ -203,9 +203,9 @@ the page will occupy. A bare name lands under the content directory; an explicit
   [`-e, --edit`], [off], [Open the new file in `$EDITOR`.],
 )
 
-Drafting is the default: a page being written is not a page being published.
-`--open` still works as an alias of `-e`, but `serve --open` opens a browser,
-which is a different thing.
+Drafting is the default, so a new page stays unpublished until you clear the
+flag. `--open` still works as an alias of `-e`; it is unrelated to
+`serve --open`, which opens a browser.
 
 == deploy
 
@@ -378,7 +378,7 @@ baudelaire reference assets.images  # that block and below
 ```
 
 Prints every key `config.kdl` accepts, with its value shape, as an indented tree.
-Reads no config: it describes the schema, not your site. A dotted key narrows the
+Reads no config; it describes the schema. A dotted key narrows the
 output, which is usually what you want, since the whole schema is over a hundred
 and fifty keys. An unknown key is an error suggesting the nearest real one.
 
@@ -422,8 +422,7 @@ module it wrote.
 Both families land in the project by default, because three of the four typst
 modules describe *this* site: `site` from its config, `sections` and `pages`
 from its pages. One shared copy of those shows one project's data to every other
-project's editor. The price is that one typst setting; `--global` is the trade
-that buys it back.
+project's editor. The cost is one typst setting, which `--global` avoids.
 
 A project is optional: outside one, `sections` and `pages` are written empty. A
 build never reads any of it, so a stale copy can't change a page, and every

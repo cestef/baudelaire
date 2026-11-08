@@ -19,19 +19,16 @@ tags: [cli, setup]
 One binary, **no runtime**.
 ```
 
-A post copied out of another generator therefore needs no rewriting: `---` is
-YAML and `+++` is TOML, exactly as they are everywhere else.
+A post copied from another generator needs no rewriting: `---` is YAML and
+`+++` is TOML, as in Hugo and Jekyll.
 
-Markdown is a source dialect, not a second pipeline: a page lowers to Typst
-before it compiles. Permalinks, collections, taxonomies, link checking,
-highlighting, feeds, search and the incremental cache are the ones that were
-already there, because by the time the build looks at the page there is nothing
-markdown-shaped left.
+A markdown page is converted to Typst before it compiles, so permalinks,
+collections, taxonomies, link checking, highlighting, feeds, search and the
+incremental cache work the same as for `.typ` pages.
 
 == Frontmatter
 
-The fence says which language the block is in. There is nothing to configure and
-nothing to name after it: a block is never read as a language it is not.
+The fence says which language the block is in. There is nothing to configure.
 
 #table(
   columns: 3,
@@ -69,16 +66,15 @@ tags "rail" "night"
 ```
 
 Every #link("frontmatter.typ")[frontmatter key] behaves as it does on a Typst
-page whichever fence you used: the same built-ins, the same collection schema,
-the same typo suggester. The block is read into the same dict a `.typ` page
-exports, and nothing downstream knows which language it came from.
+page whichever fence you used, with the same collection schema and the same
+typo suggester.
 
 #callout(kind: "note")[
-  *KDL cannot spell a one-element list.* One argument is always the scalar, so
-  `tags "rail"` is the string, not a list of one. That is the counterpart of
+  KDL cannot write a one-element list. One argument is always a single value, so
+  `tags "rail"` is a string, not a list of one. This is the KDL version of
   Typst's trailing comma in `("rail",)`, and it is why the KDL example above
-  carries two tags. YAML (`tags: [rail]`) and TOML (`tags = ["rail"]`) both
-  write one without trouble.
+  has two tags. YAML (`tags: [rail]`) and TOML (`tags = ["rail"]`) both
+  can write one.
 ]
 
 Dates are the one place the dialects differ in what they can hold. TOML has a
@@ -92,15 +88,12 @@ asking, is in the #link("../configure/reference.typ")[reference] under
 `content.markdown.extensions`; a `*` marks the ones you already have.
 
 #callout(kind: "note")[
-  A heading renders one level down, so `#` becomes `<h2>`. That is not markdown
-  being mistreated: Typst's own `=` does the same, and a `.md` page and a `.typ`
-  page with one outline should produce one document. Six `#` clamp to five,
-  because there is no seventh heading for them to be.
+  A heading renders one level down, so `#` becomes `<h2>`. Typst's own `=` does the same, so a `.md` page and a `.typ`
+  page get the same outline. Six `#` clamp to five.
 ]
 
-Raw HTML is refused by default. The DOM a build produces is typed, so a string
-of markup has nowhere to be spliced into it; a comment is the exception, since
-it has nothing to lose. Write the element instead, in a fence that runs (below),
+Raw HTML is refused by default, because the build produces a typed DOM and has
+no place to splice in a string of markup. A comment is the exception. Write the element instead, in a fence that runs (below),
 or let the site drop it (`html "drop"`, further down).
 
 == Fenced blocks
@@ -167,14 +160,13 @@ source "changelog"
 ;;;
 ```
 
-That is the whole page: a `source` and a body of its own is an error, since one
-of the two would have to be dropped. The file is read as the dialect its
+A page with both a `source` and a body of its own is an error. The file is read as the dialect its
 extension names, and under its own name, so a fault in it is reported where the
 prose is. A `.md` is lowered like any other markdown; a `.typ` is a file the
 compiler opens itself. Anything else is refused rather than read as prose.
 
 #callout(kind: "note")[
-  A page names a *name*, never a path, and `paths { sources }` is the only place
+  A page names a name, never a path, and `paths { sources }` is the only place
   a path is written. A page cannot reach a file the config did not offer it, and
   a #link("../theming/using.typ")[theme] cannot add one: `paths` is among the
   sections a theme is refused. The declared path may sit outside the project,
@@ -191,7 +183,7 @@ importing it instead, which is the same names by the same rule.
 #let counts = json(data)    // any other kind is data
 ```
 
-That import is the reason the declaration is worth having for typst pages at all.
+The import exists because
 `#include "../CHANGELOG.typ"` cannot be written: typst refuses a path outside its
 root, and outside the root is where these files live. Each declared file is
 mounted under a project path, so the compiler opens it, tracks it as a dependency
@@ -199,14 +191,14 @@ of the pages that read it, and reports faults inside it against the file itself.
 
 == A worked example
 
-This site's own #link("../lookup/changelog.md")[changelog] is exactly that: a
+This site's own #link("../lookup/changelog.md")[changelog] is a
 five-line frontmatter block whose body is the repository's `CHANGELOG.md`. It
-exercises tables, reference links, nested lists and sixty-odd fenced samples, and
-no copy of it is kept anywhere.
+has tables, reference links, nested lists and sixty-odd fenced samples, and
+no copy of the file is kept.
 
 == The other direction
 
-A whole page need not be markdown for a *part* of one to be. `md` renders a
+A page does not have to be markdown for part of it to be. `md` renders a
 chunk of markdown inside a Typst page, through this same parser and these same
 `extensions`:
 
@@ -233,8 +225,7 @@ checker resolves and verifies it exactly as it does a `.typ` one.
 
 What a page may contain is the site's call, in `content { markdown { } }`. Every
 key and its accepted values are in the
-#link("../configure/reference.typ")[reference]; these are the ones worth knowing
-about.
+#link("../configure/reference.typ")[reference]. The main ones:
 
 ```kdl
 content {
@@ -267,15 +258,14 @@ content {
 )
 
 #callout(kind: "warn")[
-  `eval #false` is worth setting deliberately for content you did not write. An
-  `eval` fence runs arbitrary Typst at build time, and a site accepting
-  contributed or imported markdown should not extend that trust to every author.
+  Set `eval #false` for content you did not write. An `eval` fence runs
+  arbitrary Typst at build time, so a site accepting contributed or imported
+  markdown should not trust every author with it.
 ]
 
 == Turning it off
 
-Two things decide it, and both have to say yes. `.md` support is the `markdown`
-cargo feature, on by default and absent from the `slim` build: that is the
-*binary's* capability. `content { markdown #false }` is the *site's*, for a
-project whose binary has markdown and which still wants its `.md` files left
-alone. Either way the file stays where it lies and nothing is published for it.
+Both must allow it. `.md` support is the `markdown` cargo feature, on by
+default and absent from the `slim` build. `content { markdown #false }` is the
+site's switch, for a project whose binary has markdown but which wants its `.md`
+files left alone. Either way the file stays where it lies and nothing is published for it.

@@ -12,7 +12,7 @@ the output is always served as `.js`, and both spellings resolve:
 #html.elem("script", attrs: (type: "module", src: "/assets/main.js"))
 ```
 
-Nothing is type-checked. The bundler transforms, as esbuild and Vite do; run
+Nothing is type-checked. The bundler only transforms, as esbuild and Vite do; run
 `tsc --noEmit` in CI or a #link("../hooks.typ")[`before` hook] for that. The
 `baudelaire:*` modules an entry imports are typed by `baudelaire mirror`: see
 #link("../../lookup/js-modules.typ")[JS modules].

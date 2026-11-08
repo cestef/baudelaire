@@ -77,11 +77,11 @@ Ordinary prose, a #link(\"https://typst.app\")[link],
 ))
 
 The right pane is not a screenshot. It is the left pane, evaluated while this
-page compiled, by the same Typst that built every other page here. That is the
-whole argument: Markdown has no variables, no functions, no math, and no way to
-load a CSV and build a table from it, so the moment you want one you start
-stacking a template engine and plugins on top. What that trade costs, next to
-Hugo, Zola, Eleventy and Astro, is on #link("start/compare.typ")[compared].
+page compiled, by the same Typst that built every other page here. Markdown has
+no variables, no functions, no math, and no way to load a CSV and build a table
+from it, so wanting one means adding a template engine and plugins. How this
+compares with Hugo, Zola, Eleventy and Astro is on
+#link("start/compare.typ")[the compare page].
 
 == Two blocks, every artifact
 
@@ -127,10 +127,10 @@ Hugo, Zola, Eleventy and Astro, is on #link("start/compare.typ")[compared].
   ),
 ))
 
-Turn one on and the config writes itself, along with what it puts in `dist/`.
-`generate` writes the site's own files; `artifacts` draws a page as something
-other than HTML. Each is built from the pages you already wrote, none of it is
-on until the config says so, and each has its own page under
+Turn one on and the config shows the block to write, along with what lands in
+`dist/`. `generate` writes the site's own files; `artifacts` draws a page as
+something other than HTML. Each is built from the pages you already wrote, stays
+off until the config turns it on, and has its own page under
 #link("/build/")[Build].
 
 == Start here
@@ -153,7 +153,6 @@ on until the config says so, and each has its own page under
 ]
 
 These docs are a baudelaire site: #catalogue.len() pages, one config file, no
-plugins, and the sidebar
-on every other page built from the same content tree the build uses for
-prev/next links. Its source is in
+plugins. The sidebar on every page is built from the same content tree the build
+uses for prev/next links. The source is in
 #link("https://github.com/cestef/baudelaire")[the repository], under `docs/`.

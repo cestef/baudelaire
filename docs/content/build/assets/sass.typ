@@ -15,7 +15,7 @@ assets/
   style.scss    -> /assets/style.css
 ```
 
-There is nothing to turn on and no toolchain to install.
+Nothing to turn on, and no toolchain to install.
 
 ```scss
 // assets/style.scss
@@ -36,7 +36,7 @@ fingerprinted file:
 ```
 
 `@use` and `@import` resolve beside the importing sheet first, then across the
-asset roots -- the project's tree, then the theme's -- so a sheet you wrote can
+asset roots (the project's tree, then the theme's), so a sheet you wrote can
 pull in a partial your theme ships, and a partial you add under the same name
 wins.
 

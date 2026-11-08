@@ -4,8 +4,7 @@
 )
 #import "/templates/theme.typ": callout
 
-Every content page knows its neighbors. The data is always there, no
-configuration, on `page.nav`:
+Every content page has its neighbors on `page.nav`, with no configuration:
 
 ```typ
 #let page(page, body) = {
@@ -49,13 +48,13 @@ if nav.prev != none { link(nav.prev.url)[#back] }
 See #link("../write/i18n.typ")[multiple languages].
 
 #callout(kind: "tip")[
-  Reordering a collection moves the pager, the generated index and the sidebar
-  together. They all read the same ordered set.
+  The pager, the generated index and the sidebar all read the same ordered set,
+  so reordering a collection moves all three.
 ]
 
 == The whole site, in order
 
-`page.nav` names two neighbors, deliberately. For the full ordered tree of
+`page.nav` names two neighbors. For the full ordered tree of
 content directories, a template imports `@baudelaire/sections`, which is what a
 sidebar is built from:
 

@@ -34,7 +34,7 @@ generate {
 A one-line `config.kdl` holding `site "My Site"` is a valid site. `--config`
 points at a file somewhere else, `--root` at a different project directory.
 
-== KDL in one minute
+== KDL basics
 
 ```kdl
 // a line comment
@@ -53,8 +53,8 @@ is what a hook command usually needs, and `"""` opens a multi-line one.
 
 == The shape of the tree
 
-The top level is grouped by concern. Each block answers one question, and the
-page that answers it in full is on the right.
+Each top-level block answers one question. The page that covers it in full is on
+the right.
 
 #table(
   columns: 3,
@@ -164,13 +164,12 @@ prints one subtree of the same thing in the terminal.
 
 The enclosing block is what gives a name its meaning. `paths { assets }` is the
 directory your stylesheets are read from; the top-level `assets` block is the
-pipeline that processes them. Same word, different question, never the same
-scope.
+pipeline that processes them.
 
 == A block's presence is the switch
 
-Writing the block turns the feature on, and a block with nothing to configure can
-be written bare:
+Writing a block turns its feature on. A block with nothing to configure can be
+written bare:
 
 ```kdl
 generate {
@@ -186,15 +185,14 @@ written.
 
 #callout(kind: "note")[
   Only a block that has a switch to flip accepts the bare spelling. `paths` or
-  `html` on their own configure nothing, so they error rather than being read as
-  intent.
+  `html` on their own configure nothing, so they are an error.
 ]
 
 === Turning one back off
 
-Deleting the node is not always available. A #link("profiles.typ")[profile] and a
-theme's `theme.kdl` both *overlay* nodes onto a base, so they can set a key but
-never remove one, and naming the block is exactly what turns it on. Every block
+You cannot always delete the node. A #link("profiles.typ")[profile] and a
+theme's `theme.kdl` both overlay nodes onto a base, so they can set a key but
+never remove one, and naming the block turns it on. Every block
 of this kind takes `#false` on its own line:
 
 ```kdl
@@ -211,12 +209,11 @@ profiles {
 
 `#true` is accepted too, and means what presence already meant.
 
-One block is not switchable this way: `artifacts { bundles }` is on
-whenever it names a target, so naming none is already how it is off.
+`artifacts { bundles }` cannot be switched this way: it is on whenever it names
+a target, so naming none turns it off.
 
-Some blocks have a setting decided before you write anything, so they carry a
-bare flag rather than a presence switch, in whichever polarity the default calls
-for:
+Some blocks have a default setting, so they take a bare flag instead of a
+presence switch, pointing whichever way the default does not:
 
 ```kdl
 content {
@@ -225,7 +222,7 @@ content {
 }
 ```
 
-Each is shorthand for the block's own flag key, and the two keys differ:
+Each is shorthand for the block's own flag key, and the keys differ:
 `markdown #false` is `markdown { enabled #false }`, `drafts #true` is
 `drafts { build #true }`. Write the long form when the block configures something
 else too.
@@ -245,9 +242,9 @@ generate {
 }
 ```
 
-Search is off, and turning it back on is deleting two characters. This composes
-with presence-as-a-switch: `/-llms` is how you keep the `llms { }` block you
-tuned without emitting the file.
+Search is off, and turning it back on means deleting two characters. This works
+with presence-as-a-switch: `/-llms` keeps the `llms { }` block you tuned without
+writing the file.
 
 == Hosting under a subdirectory
 
@@ -272,8 +269,7 @@ maps the path back for you. `baudelaire serve` previews under the same path, and
 
 == Typos are errors
 
-The parser knows every valid key, so a misspelling fails the build instead of
-silently doing nothing:
+The parser knows every valid key, so a misspelling fails the build:
 
 ```text
 unknown config key `prety`

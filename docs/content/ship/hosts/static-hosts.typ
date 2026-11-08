@@ -102,7 +102,7 @@ headers {
 }
 ```
 
-Both keys default to a sensible policy, so a bare `cache { }` is a complete
+Both keys have defaults, so a bare `cache { }` is a complete
 declaration. The asset rule is only written when
 #link("../../build/assets.typ")[`assets { fingerprint }`] is on: without it an
 asset keeps its authored name across builds and is exactly as mutable as a page.

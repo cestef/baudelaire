@@ -4,7 +4,7 @@
 )
 #import "/templates/theme.typ": callout
 
-A taxonomy term is a word. An *entity* is a thing the build knows about: a
+A taxonomy term is a word. An entity is a thing the build knows about: a
 person with a homepage and an avatar, a series with a cover, a publisher with a
 logo. Declare a registry, point a taxonomy at it, and the terms of that taxonomy
 become ids in it.
@@ -32,7 +32,7 @@ and every surface that can name a person names them: the head tags, the JSON-LD
 island, the feed entry, the card, and any template that reads `page.credits`.
 
 #callout[
-  Nothing here is about people. `people` is a name this site chose. A `series`
+  `people` is just a name this site chose. A `series`
   registry with `display` bound to `title` and `image` to `cover` renders
   through the very same code.
 ]
@@ -40,7 +40,7 @@ island, the feed entry, the card, and any template that reads `page.credits`.
 == Sources
 
 A registry's entities come from one or more sources, read in the order written.
-A later source *fills* what an earlier one left out, so a roster can carry
+A later source fills in what an earlier one left out, so a roster can carry
 contact details while profile pages carry the prose.
 
 #table(
@@ -91,7 +91,7 @@ naming both.
 
 A registry's own `fields { }` fills in over the shape's, key by key, in the type
 language a #link("../configure/reference.typ")[collection schema] speaks.
-Declaring a field *requires* it, which is how you make a roster complete:
+Declaring a field makes it required, which is how you make a roster complete:
 
 ```kdl
 //! content { entities {
@@ -105,8 +105,9 @@ people {
 //! } }
 ```
 
-*Slots* say which field answers each question a renderer asks. They are what
-keeps the rest of the build from being written about people.
+Slots say which field answers each question a renderer asks (what is the display
+name, what is the picture). The rest of the build reads slots, so it never has to
+know about people.
 
 #table(
   columns: 3,
@@ -130,11 +131,11 @@ series {
 ```
 
 A slot naming a field the registry does not declare is refused at the line that
-wrote it: unchecked, it would render every entity without its picture out of a
-green build.
+wrote it. Unchecked, every entity would render without its picture and the build
+would still pass.
 
 `display` falls back to the `name` field, then `title`, then the term itself, so
-a profile page whose title *is* the person's name needs no `name` key.
+a profile page whose title is the person's name needs no `name` key.
 
 == Credits
 
@@ -186,7 +187,7 @@ authors its page does.
 
 == A profile page as the term page
 
-`describe=#true` means a term written as a page *is* that page. No listing is
+With `describe #true`, a term written as a page is that page. No listing is
 generated beside it, the term index links to the profile's own permalink, and
 the profile is handed everything credited to it as `page.members`, in the row
 shape every listing carries.
@@ -209,11 +210,10 @@ content {
 }
 ```
 
-One URL for one person, so every link already written to the profile still
-reaches it. A term nobody wrote a page for is generated as an ordinary term
+Each person has one URL, so existing links to the profile keep working. A term nobody wrote a page for is generated as an ordinary term
 listing.
 
-== When a name is not in the roster
+== Names missing from the roster
 
 #table(
   columns: 2,

@@ -66,8 +66,7 @@ reader has no page to resolve `/posts/other/` against, so links, images and
 itself is untouched and keeps the root-relative form.
 
 A layout that emits no region at all falls back to `<body>`, never to the whole
-document. That is where a feed parts company with the search index, which counts
-a page with no region whole rather than not at all. Name a region if your pages
+document. The search index differs here: it counts a page with no region as a whole. Name a region if your pages
 carry chrome, or every entry carries it too.
 
 The summary is not replaced. Each format has a place for both, and a reader's
@@ -83,15 +82,13 @@ list view wants the short one:
 )
 
 #callout(kind: "warn")[
-  A full feed publishes the whole post. That is the point for a personal blog and
-  is not always what a site wants: an aggregator that reprints it is reprinting
-  all of it, and readers may never arrive.
+  A full feed publishes the whole post. That suits a personal blog but not every site: an aggregator that reprints it reprints all of it, and readers may never arrive.
 ]
 
 === Keeping an old feed URL
 
-A feed is the one artifact a redirect cannot save: a reader fetches the file and
-never renders the stub's meta refresh. Coming from a generator that named it
+A redirect cannot save a feed: a reader fetches the file and
+never follows the stub's meta refresh. Coming from a generator that named it
 differently, keep the name:
 
 ```kdl
@@ -113,8 +110,7 @@ browser extension finds them without being told a URL.
 
 === What the channel says
 
-A feed states what the whole site is, next to its title. That is the top-level
-`description`:
+A feed describes the whole site next to its title, using the top-level `description`:
 
 ```kdl
 site "Fernweh"
@@ -127,9 +123,7 @@ Feed's `description`, and a language states its own beside its `site` (see
 title, because the element cannot be omitted.
 
 #callout(kind: "note")[
-  It is not a fallback for a page's own `<meta name="description">`. One
-  sentence stamped on every page is duplicate metadata, which is worse than a
-  page having none. `generate { llms { summary } }` does fall back to it: both
+  It is not a fallback for a page's own `<meta name="description">`: one sentence stamped on every page is duplicate metadata, which is worse than none. `generate { llms { summary } }` does fall back to it: both
   answer the same question about the site.
 ]
 
@@ -151,7 +145,7 @@ a description a reader shows the title and nothing else, so write one: the same
 value fills the page's `<meta name="description">` and its
 #link("meta.typ")[social preview].
 
-The two dates stay apart where the format keeps them apart. Atom emits
+The two dates stay separate where the format allows it. Atom emits
 `published` and `updated`, JSON Feed `date_published` and `date_modified`. RSS
 has only `pubDate`, which is the publication date.
 
@@ -160,9 +154,7 @@ empty one.
 
 === A feed per collection
 
-The site feed carries everything dated, which is the wrong granularity for a
-site that publishes more than one kind of thing: a reader who wants the essays
-takes the release notes too. Ask on the collection:
+The site feed carries everything dated, so on a site with several kinds of content a reader who wants the essays gets the release notes too. Ask on the collection:
 
 ```kdl
 content {
@@ -177,8 +169,7 @@ pages under the same `limit`. Members of the collection advertise it in their
 `<head>` alongside the site feed, named `Site - Posts` so a reader tells the two
 apart in a subscribe dialog.
 
-Per collection rather than one flag over all of them, because most collections
-want no feed: nobody subscribes to a `docs` tree.
+The flag is per collection because most collections want no feed: nobody subscribes to a `docs` tree.
 
 #table(
   columns: 2,
@@ -211,9 +202,7 @@ Adds `/tags/rust/rss.xml` next to `/tags/rust/`, carrying only that term's dated
 pages under the same `limit`. Each identifies itself by its own URL, so an
 aggregator never merges it with another.
 
-Term feeds sit beside term listings, so the taxonomy needs a `listing { }` block. The
-build warns if it doesn't have it. They're off by default: one more file per
-term per format multiplies the output of a heavily tagged site.
+Term feeds sit beside term listings, so the taxonomy needs a `listing { }` block. The build warns if it does not. They are off by default: one more file per term per format adds up on a heavily tagged site.
 
 == Sitemap
 
@@ -263,8 +252,6 @@ Writes an #link("https://llmstxt.org")[llms.txt]: the site title as an H1, your
 `summary` as a blockquote, then one `##` section per collection listing its
 pages as Markdown links. One file per language, beside that language's feeds.
 
-Without a `url` it's still written, with relative links, and the build warns.
+Without a `url` it is still written, with relative links, and the build warns.
 
-The not-found page is the one page left out of all of this, and of the
-#link("search.typ")[search index]: it's what a host answers an unmatched URL
-with, not a destination.
+The not-found page is left out of all of this and of the #link("search.typ")[search index]: a host serves it for an unmatched URL, so it is not a destination.

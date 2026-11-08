@@ -4,7 +4,7 @@
 )
 #import "/templates/theme.typ": callout
 
-One content tree, many languages. Declare them, drop translated files next to their originals, and pages, listings, feeds, and meta tags localize themselves.
+One content tree, many languages. Declare the languages and put translated files next to their originals. Pages, listings, feeds and meta tags follow.
 
 ```kdl
 lang "en"
@@ -56,19 +56,19 @@ The default language keeps clean root URLs. Every other language sits under `/{c
   [`content/posts/hello.fr.typ`], [`/fr/posts/hello/`],
 )
 
-A page with no translation in a language is omitted for that language, so a language only shows what you actually translated. A frontmatter `lang` overrides the filename when a suffix does not fit:
+A page with no translation in a language is omitted for that language, so a language shows only what you translated. A frontmatter `lang` overrides the filename when a suffix does not fit:
 
 ```typ
 #let frontmatter = (title: "Über", slug: "about", lang: "de")
 ```
 
 #callout(kind: "warn")[
-  A `lang` you never declared is a hard error, and so is a filename suffix that looks like a language code (two or three lowercase letters) but is not declared. A mystery URL is the worse outcome.
+  A `lang` you never declared is a hard error, and so is a filename suffix that looks like a language code (two or three lowercase letters) but is not declared. Silently publishing at an unexpected URL would be worse.
 ]
 
 == Localized slugs
 
-Editions pair on their slug, so renaming one would strand it. Name the pairing with `translation` instead and each edition takes the slug its readers expect:
+Editions pair on their slug, so a translated slug would break the pairing. Set `translation` instead and each edition can take its own slug:
 
 ```typ
 // content/posts/hello.typ
@@ -78,7 +78,7 @@ Editions pair on their slug, so renaming one would strand it. Name the pairing w
 #let frontmatter = (title: "Bonjour", translation: "greeting")
 ```
 
-`/posts/hello/` and `/fr/posts/bonjour/` now link to each other. The key is yours to pick and only has to match. It never appears in a URL.
+`/posts/hello/` and `/fr/posts/bonjour/` now link to each other. The key can be any string; it only has to match. It never appears in a URL.
 
 == What localizes on its own
 
@@ -107,7 +107,7 @@ The declared languages are also exported by `@baudelaire/site` as `languages`, a
 
 == Dates
 
-ISO-8601 is right for a machine and wrong for a reader, and Typst cannot fix it in a template: `datetime.display` knows English month names only. Every page and every listing row carries the date twice.
+ISO-8601 suits machines but not readers, and `datetime.display` in a Typst template knows English month names only. So every page and listing row carries the date twice.
 
 ```typ
 html.elem("time", attrs: (datetime: page.date.iso), page.date.display)
@@ -115,7 +115,7 @@ html.elem("time", attrs: (datetime: page.date.iso), page.date.display)
 
 `page.date.iso` is `2026-07-30`; `page.date.display` is what the language writes. A listing row carries the same pair as `entry.date` and `entry.display`. A page with no date has `page.date` as `none`.
 
-Two `strings` keys shape the display form, so a language declares its own with no locale database in the binary:
+Two `strings` keys shape the display form, so each language declares its own and the binary needs no locale database:
 
 ```kdl
 languages {
@@ -133,7 +133,7 @@ languages {
 
 == Client-side
 
-The `baudelaire:i18n` #link("../lookup/js-modules.typ")[virtual module] hands the language list and every string table to bundled JavaScript:
+The `baudelaire:i18n` #link("../lookup/js-modules.typ")[virtual module] provides the language list and every string table to bundled JavaScript:
 
 ```js
 import { languages, strings } from "baudelaire:i18n";

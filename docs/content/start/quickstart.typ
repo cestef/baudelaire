@@ -4,7 +4,7 @@
 )
 #import "/templates/theme.typ": callout
 
-A site running in five minutes. Assumes you've
+This assumes you have
 #link("install.typ")[installed the binary].
 
 ```sh
@@ -13,7 +13,7 @@ cd my-site
 baudelaire serve
 ```
 
-That's a live site on #link("http://localhost:1821")[localhost:1821], rebuilding
+That gives you a live site on #link("http://localhost:1821")[localhost:1821], rebuilding
 on every save.
 
 == Scaffold
@@ -23,11 +23,11 @@ whether to set up version control. It writes a `config.kdl`, a `content/` tree
 with a couple of example pages, the `templates/` that render them, and an
 `assets/style.css`. Pass `-y` to take every default and skip the prompts.
 
-The first question offers the four starter shapes and the four
-#link("../theming/using.typ")[themes] the binary carries. Naming either on the command
-line (`-t`, `--theme`) answers it, and the prompt is skipped.
+The first question offers four starter shapes and the four
+#link("../theming/using.typ")[themes] the binary carries. Naming one on the
+command line (`-t`, `--theme`) skips the prompt.
 
-The default shape is a blog. Four ship:
+The shapes:
 
 #table(
   columns: 2,
@@ -46,17 +46,16 @@ The default shape is a blog. Four ship:
 baudelaire init my-docs -t docs --with search,spa
 ```
 
-`--theme` scaffolds against a theme instead of a shape: the config states the
-site's identity and paths, and the theme brings the templates, the assets and the
+`--theme` scaffolds from a theme instead of a shape: the config holds the
+site's identity and paths, and the theme supplies the templates, assets and
 collections.
 
 ```sh
 baudelaire init my-site --theme "themes/albatros"
 ```
 
-A theme the binary carries is written into that directory on the spot, so this
-is a site that builds. A spec naming anything else is a directory `init` cannot
-fill, and it closes by saying so.
+A theme the binary carries is written into that directory, so the result builds.
+A spec naming anything else is a directory `init` cannot fill, and it says so.
 
 See #link("../theming/using.typ")[themes].
 
@@ -72,7 +71,7 @@ Events on every rebuild. `--port` and `--bind` override the config, `--no-open`
 skips the browser. More on it in
 #link("../build/preview.typ")[the dev server page].
 
-Leave it running for the rest of this page.
+Leave it running while you follow the next steps.
 
 == Write a page
 
@@ -86,7 +85,7 @@ date). Without `--no-draft` the page is written as a draft, and drafts are
 excluded from the build until you pass `--drafts` or set
 `content { drafts }`.
 
-It arrives with the standard fields filled in. Open it and write:
+Open it and write:
 
 ```typ
 #let frontmatter = (
@@ -96,7 +95,7 @@ It arrives with the standard fields filled in. Open it and write:
   description: "Shown under the entry in the index.",
 )
 
-This is *real Typst*, not markdown. You get functions, variables, imports,
+This is Typst, not Markdown. You get functions, variables, imports,
 math like $e^(i pi) + 1 = 0$, and the whole standard library.
 
 #let half-life(name, years) = [#name decays with a half-life of #years years.]
@@ -112,8 +111,8 @@ Save it and the browser reloads. The post is at `/posts/first-post/`, listed on
 ]
 
 The file's location decides its collection and its URL. `content/posts/` is the
-`posts` collection because `config.kdl` says so, and everything about how a page
-is grouped, ordered and addressed follows from there. See
+`posts` collection because `config.kdl` says so, and the page's grouping,
+order and address follow from that. See
 #link("../write/pages.typ")[pages] and
 #link("../collections/defining.typ")[collections].
 
@@ -129,14 +128,14 @@ template as `entry.extra.<key>`.
 baudelaire build
 ```
 
-The site lands in `public/`, ready for any static host. A rebuild only touches
-what you edited; everything else comes from cache. Add `--profile prod` to apply
+The site is written to `public/`, ready for any static host. A rebuild only
+redoes what you edited; the rest comes from cache. Add `--profile prod` to apply
 a #link("../configure/profiles.typ")[profile], `-o dist` to write elsewhere.
 
 #callout(kind: "tip")[
   `baudelaire check` compiles every page and reports broken internal links
-  without writing anything. That plus `--strict`, which fails the run on any
-  warning, is what you want in CI.
+  without writing anything. Add `--strict`, which fails the run on any
+  warning, for CI.
 ]
 
 Then #link("../ship/deploy.typ")[deploy it].

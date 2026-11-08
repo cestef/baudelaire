@@ -4,8 +4,7 @@
 )
 #import "/templates/theme.typ": callout
 
-Everything under `assets/` is copied to the output untouched. A handful of
-switches turn that copy into a build step.
+Everything under `assets/` is copied to the output untouched. A few switches turn that copy into a build step.
 
 ```kdl
 assets {
@@ -55,8 +54,7 @@ Images sit in a nested `images` block and run on their own switches. See
 
 == Minifying <minify>
 
-`minify` is a block whose presence turns every kind on, so the one-line spelling
-above is the whole of it. Name a kind to take just that one back:
+`minify` is a block whose presence turns every kind on, so the one-line spelling above turns on both. Name a kind to take just that one back:
 
 ```kdl
 assets {
@@ -81,8 +79,7 @@ assets {
 
 == Browser targets <targets>
 
-Minifying makes a stylesheet smaller. *Compiling* it makes it work in older
-browsers, and that is a separate ask: name the oldest version of each browser the
+Minifying makes a stylesheet smaller. Compiling it so it works in older browsers is a separate step: name the oldest version of each browser the
 site supports and Lightning CSS flattens nesting, adds vendor prefixes, and
 writes fallbacks for modern colour syntaxes, each only where a named browser
 needs it.
@@ -112,8 +109,7 @@ assets {
   [`samsung`], [Oldest Samsung Internet.],
 )
 
-A version is one to three numbers, each 0-255: `15`, `15.4`, `15.4.1`. Write it
-as a *string*. `15.10` as a KDL number is the float `15.1`, which is a different
+A version is one to three numbers, each 0-255: `15`, `15.4`, `15.4.1`. Write it as a string. `15.10` as a KDL number is the float `15.1`, which is a different
 browser, so a number is refused rather than rounded.
 
 A browser you do not name is not a constraint. The floor is set by the ones you
@@ -142,8 +138,7 @@ paths {
 ```
 
 Files land at `/assets/...`, whatever subdirectory of the project they were
-authored in. Point the pipeline somewhere else without touching any of the
-switches above.
+authored in. This moves the pipeline without touching any of the switches above.
 
 == How references are rewritten
 
@@ -158,8 +153,7 @@ With `fingerprint` on, `style.css` is written as `style.9f3c1a2b4d6e8f01.css` an
 both attributes point at the hashed name after the build. The digest is 16 hex
 digits of blake3 over the file's bytes.
 
-The rewrite runs on the typed HTML tree, not on the serialized string, so it
-can't corrupt markup. Stylesheets get the same treatment inside: `url()` and
+The rewrite runs on the typed HTML tree rather than the serialized string, so it cannot corrupt markup. Stylesheets get the same treatment inside: `url()` and
 `@import` references are rewritten to the hashed names too, and an imported sheet
 is fingerprinted before the sheet that imports it.
 
@@ -234,8 +228,7 @@ assets {
 }
 ```
 
-The value on the line is required: a bare `sourcemap` is an error rather than a
-guess, so that a profile naming the block cannot silently re-apply a default
+The value on the line is required: a bare `sourcemap` is an error, so that a profile naming the block cannot silently re-apply a default
 over what the base config chose. Writing only a block narrows what is already
 there and leaves the rest alone.
 
@@ -244,9 +237,8 @@ and both names are settled before the comment is written, so the pair survives
 `fingerprint`.
 
 #callout(kind: "warn")[
-  *A source map publishes your sources.* It has to: the pipeline never writes
-  your `.ts`, `.jsx` or unminified `.css` to the output, so a map that merely
-  named them would resolve to nothing. Each map therefore carries the original
+  A source map publishes your sources. It has to: the pipeline never writes
+  your `.ts`, `.jsx` or unminified `.css` to the output, so a map that only named them would resolve to nothing. Each map carries the original
   text inside it, and anyone can read it.
 
   That is usually the point in development and rarely what you want in
@@ -283,8 +275,7 @@ none of them reaches `dist`:
 )
 
 Nothing else is treated as an input. A file belonging to a toolchain this build
-does not run -- a `.less`, a `.styl` -- is copied like any other file, because
-the pipeline has no opinion about tools it does not run. Give it a leading `_`,
+does not run (a `.less`, a `.styl`) is copied like any other file. Give it a leading `_`,
 or keep it out of `paths { assets }`, and it stays out of the output.
 
 ```text
@@ -297,7 +288,7 @@ assets/
 ```
 
 Name a preprocessor's input with a leading `_` and it stays out of the output
-whatever its extension: that is how a `tailwindcss -i assets/_app.css` recipe
+whatever its extension. That is how a `tailwindcss -i assets/_app.css` recipe
 publishes only what it produced.
 
 #callout(kind: "note")[

@@ -4,18 +4,19 @@
 )
 #import "/templates/theme.typ": callout
 
-The closest neighbour: one Rust binary, a content tree, a template directory,
-taxonomies and pagination in the config. The posts stay markdown, since a `.md`
-file under `content/` is a page (#link("../../write/markdown.typ")[Markdown
-pages]), and a `+++` block is TOML here exactly as it is there, so a post copies
-over as it stands. What has to change is a handful of frontmatter *key names*,
-the shortcodes, the internal links and the config; the templates are a rewrite.
+Zola is the closest neighbour: one Rust binary, a content tree, a template
+directory, taxonomies and pagination in the config. Posts stay Markdown, since a
+`.md` file under `content/` is a page
+(#link("../../write/markdown.typ")[Markdown pages]), and a `+++` block is TOML
+here as it is there, so a post copies over as it stands. What has to change is a
+few frontmatter key names, the shortcodes, the internal links and the config. The
+templates are a rewrite.
 
 #callout(kind: "note")[
-  Converting a post to `.typ` is a choice, not a migration step. Make it for the
-  pages that want what Typst gives - math, a figure, a template helper mid-page -
-  and leave the rest as they are. #link("content.typ")[Markdown to Typst] has the
-  mapping and a pandoc walkthrough for when you do.
+  Converting a post to `.typ` is optional. Do it for pages that want math, a
+  figure or a template helper mid-page, and leave the rest. See
+  #link("content.typ")[Markdown to Typst] for the mapping and a pandoc
+  walkthrough.
 ]
 
 == The tree
@@ -41,7 +42,7 @@ the shortcodes, the internal links and the config; the templates are a rewrite.
   `content/blog/_index.md` publishes at `/blog/index/`, and its block parses
   cleanly: `sort_by`, `paginate_by` and `transparent` are simply unrecognized
   keys and do nothing. Nothing fails, and nothing tells you the section is
-  configured nowhere. Those settings become a collection block, below.
+  not configured. Those settings become a collection block, below.
 ]
 
 == The config
@@ -110,13 +111,12 @@ same way Zola's does.
 
 == Frontmatter
 
-The *language* needs no conversion: `+++` is TOML here too, and a block copies
-over character for character (#link("../../write/markdown.typ")[Markdown pages]
-has all three fences). TOML's date literal comes with it, so `date = 2026-07-09`
-is read as the ISO day it spells, unquoted, exactly as Zola reads it.
+The language needs no conversion: `+++` is TOML here too, and a block copies
+over unchanged (#link("../../write/markdown.typ")[Markdown pages] describes all
+three fences). TOML's date literal works too, so `date = 2026-07-09` is read as
+an ISO date, unquoted, as in Zola.
 
-What changes is the *names* of two keys, and where two of Zola's tables put their
-contents:
+Two keys change name, and the contents of two Zola tables move to the top level:
 
 ```md
 +++
@@ -144,15 +144,15 @@ hero = "cover.png"           # was under [extra]
   [`in_search_index`], [none],
 )
 
-A taxonomy has to be flat: `tags` is looked up at the top level and nowhere else,
-so a `[taxonomies]` table left in place joins no term. `[extra]` is a choice - it
-survives as a dict, so a template can read `page.frontmatter.extra.hero` instead
-of flattening it. Flattening is what makes the key look like every other one.
+A taxonomy key must be at the top level: `tags` is looked up there and nowhere
+else, so a `[taxonomies]` table left in place joins no term. `[extra]` is
+optional to flatten: it survives as a dict, so a template can read
+`page.frontmatter.extra.hero`. Flattening makes the key behave like any other.
 
 #callout(kind: "warn")[
-  *A key that changed name fails nothing.* Anything unrecognized passes through
+  *A renamed key does not fail the build.* Anything unrecognized passes through
   as extra frontmatter, so a post still carrying `weight`, `aliases` and a
-  `[taxonomies]` table builds green with no ordering, no redirect and no terms.
+  `[taxonomies]` table builds with no ordering, no redirect and no terms.
   Only a near-miss of a real key (`titel`, `oder`) is an error. Grep for those
   three names before you trust the output.
 ]
@@ -170,13 +170,13 @@ A post you convert to `.typ` writes the same fields as a Typst dict instead:
 )
 ```
 
-There a list of one needs the trailing comma - `("rust")` is a string, `("rust",)`
-is a list - which is the one thing TOML's `["rust"]` never made you think about.
+There a list of one needs the trailing comma: `("rust")` is a string, `("rust",)`
+is a list. TOML's `["rust"]` has no such rule.
 
 == Templates
 
 Tera inheritance becomes ordinary imports. A base template is a function you call
-around your body, not a file you extend:
+around your body instead of a file you extend:
 
 ```html
 <!-- templates/page.html -->
@@ -219,7 +219,7 @@ around your body, not a file you extend:
   [`page.permalink`], [not available: a page does not know its own URL],
 )
 
-That last row is deliberate. Nothing site-wide may enter a page's wrapper, or
+The last row is deliberate. Nothing site-wide may enter a page's wrapper, or
 every page's cache identity would depend on every other page. Templates reach the
 site through `@baudelaire/sections` and `@baudelaire/pages` instead, which are
 tracked as files. See #link("../../write/templates.typ")[templates].
@@ -230,9 +230,9 @@ a taxonomy, or a page.
 
 == Shortcodes
 
-Nothing interprets `{{ .. }}` or `{% .. %}` in a page. In markdown they are
-prose, so a shortcode you forget ships to the reader as the braces you wrote and
-no build fails. Grep the tree for them before you call the migration done.
+Nothing interprets `{{ .. }}` or `{% .. %}` in a page. In Markdown they are
+prose, so a shortcode you forget ships to the reader as the braces you wrote, and
+the build passes. Grep the tree for them before you call the migration done.
 
 A shortcode becomes a function in a file you import:
 
@@ -245,8 +245,8 @@ A shortcode becomes a function in a file you import:
 ))
 ```
 
-A markdown page calls it from a fence marked `eval`, which is the one place a
-`.md` page runs Typst:
+A Markdown page calls it from a fence marked `eval`, the one place a `.md` page
+runs Typst:
 
 ````md
 ```typ eval
@@ -258,14 +258,14 @@ A markdown page calls it from a fence marked `eval`, which is the one place a
 A converted page calls it as `#youtube("dQw4w9WgXcQ")` in the body. Body
 shortcodes (`{% quote() %} .. {% end %}`) take the body as a content argument:
 `#let quote(body) = ..`, called as `#quote[..]`. Most shortcodes only wrapped a
-tag or two and are not worth a function at all: write the markup.
+tag or two and need no function: write the markup.
 
 == Internal links
 
-A link names the *source file*, `.md` or `.typ`, and the build rewrites it to
-that page's permalink. `@/blog/hello.md` is Zola's spelling of the same idea and
-means nothing here - but it no longer slips through either, since `@` is not a
-directory and the target does not resolve:
+A link names the source file, `.md` or `.typ`, and the build rewrites it to that
+page's permalink. `@/blog/hello.md` is Zola's spelling of the same idea and means
+nothing here. It does not slip through, since `@` is not a directory and the
+target does not resolve:
 
 ```text
 × `@/blog/other.md` has no matching page
@@ -286,27 +286,27 @@ directory and the target does not resolve:
   [`[a](/blog/hello/)`], [Passed through as authored, and not checked.],
 )
 
-So the `@/` links are a mechanical fix the build finds for you, one page at a
-time. Old absolute URLs are the ones nothing checks: they survive a copy and
-break on the first rename, which #link("urls.typ")[keeping your URLs] is about.
+The build finds the `@/` links for you, so fixing them is mechanical. Nothing
+checks old absolute URLs: they survive a copy and break on the first rename. See
+#link("urls.typ")[keeping your URLs].
 See #link("../../write/pages.typ")[pages].
 
 == Raw HTML
 
-Zola passes raw HTML in a post straight through. Here it fails the build, on the
-line it sits on: the DOM this build produces is typed, and there is nowhere to
-splice a string of markup into it. Three answers:
+Zola passes raw HTML in a post straight through. Here it fails the build, naming
+the line: the build's DOM is typed, and a string of markup cannot be spliced into
+it. Three options:
 
 #table(
   columns: 2,
   align: (left, left),
   table.header([Do], [Get]),
-  [`content { markdown { html "drop" } }`], [An inline run loses its tags and keeps its prose; a *block* loses its contents with them.],
+  [`content { markdown { html "drop" } }`], [An inline run loses its tags and keeps its prose; a block loses its contents with them.],
   [a `typ eval` fence], [`html.elem("aside", ..)`, the same element written in the typed form.],
   [convert the page], [`h("div", class: "x")[..]` from `@baudelaire/html`.],
 )
 
-An HTML comment is dropped either way: it has nothing to lose.
+An HTML comment is dropped either way.
 
 == What Zola wrote that this does not
 
@@ -315,7 +315,7 @@ An HTML comment is dropped either way: it has nothing to lose.
   align: (left, left),
   table.header([Zola output], [Here]),
   [`/blog/page/1/`], [not written. Page 1 of an index is only its own URL; a `redirects { rules { "/blog/page/1/" "/blog/" } }` claims the old path back.],
-  [`404.html`], [authored: write `content/404.typ`. Zola ships a default template, so this one is easy to lose in the move.],
+  [`404.html`], [authored: write `content/404.typ`. Zola ships a default template, so it is easy to lose in the move.],
   [`/blog/hello/cover.png` beside the post], [`/assets/blog/hello/cover.png`. A colocated file is published under the asset tree, mirroring the directory it sat in, not beside the page.],
   [`/style.css` from `sass/`], [`/assets/style.css`. The asset tree's last path segment is the URL prefix, and only `static/` publishes at the root.],
   [`search_index.en.js` + `elasticlunr.min.js`], [`search.json`, and `generate { search { ui } }` for a bundled palette. Custom search code is rewritten, not ported.],
@@ -338,8 +338,8 @@ An HTML comment is dropped either way: it has nothing to lose.
 
 + `baudelaire init` beside the old site, then copy `static/` across and move `sass/` into `assets/`. The `.scss` files are compiled where they lie and published as `.css`; partials keep their leading `_` and are published by nobody.
 + Copy `content/` across as it stands, `+++` blocks included, and delete the `_index.md` files.
-+ Rename the frontmatter keys that moved: `weight` to `order`, `aliases` to `redirect`, and lift `[taxonomies]` to the top level. Nothing fails if you miss one, so this is a grep over the tree, not a build.
++ Rename the frontmatter keys that moved: `weight` to `order`, `aliases` to `redirect`, and lift `[taxonomies]` to the top level. Nothing fails if you miss one, so grep the tree instead of relying on a build.
 + Port `config.toml` to `config.kdl`, one block at a time. An unknown key fails the build with a suggestion, so this converges fast.
 + Rewrite the templates one section needs. Everything else can stay unstyled while you work.
-+ Strip the `@/` from the internal links - the build names them - then replace the shortcodes and convert the pages that actually want Typst.
++ Strip the `@/` from the internal links (the build names them), then replace the shortcodes and convert the pages that want Typst.
 + `baudelaire check` until it is quiet, then compare sitemaps as in #link("urls.typ")[keeping your URLs].

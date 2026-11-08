@@ -4,7 +4,7 @@
 )
 #import "/templates/theme.typ": callout
 
-Every page reaches its template knowing how long it takes to read. Nothing to declare on the page itself.
+Every page's template is told how long the page takes to read. Nothing to declare on the page.
 
 ```typ
 #let page(page, body) = {
@@ -25,8 +25,7 @@ An empty page reads as zero minutes, not one.
 
 == The rate
 
-200 words a minute by default: the figure every other generator uses, and the one
-a reader has been calibrated against by every "6 min read" badge they have seen.
+200 words a minute by default.
 
 ```kdl
 content {
@@ -34,9 +33,9 @@ content {
 }
 ```
 
-It is a fact about the language, not about the site, so a language may state its
-own. Japanese and Chinese are read several times faster by *word*, and a site in
-one reported every article as a fraction of the read it is:
+Reading speed depends on the language, so a language may set its own. Japanese
+and Chinese are read several times faster by word, so a site in one would
+report every article as shorter than it is at 200:
 
 ```kdl
 languages {
@@ -46,13 +45,13 @@ languages {
 ```
 
 A language with no `wpm` uses `content { reading { wpm } }`, which is the same
-fallback `author` and `description` follow.
+fallback `author` and `description` use.
 
 == Counted from the source
 
-The count comes from the page's Typst source, not its rendered HTML. The render has not happened yet when a template is handed its page, and a #link("../collections/pagination.typ")[listing] entry is built earlier still. That makes it an estimate, which a reading time is anyway.
+The count comes from the page's Typst source, not its rendered HTML. The render has not happened yet when a template is handed its page, and a #link("../collections/pagination.typ")[listing] entry is built earlier still. That makes it an estimate.
 
-Two consequences:
+This has two effects:
 
 - Code lines do not count. A line starting with `#` or `//` is machinery (`#import`, `#let`), and counting it inflates a short page most.
 - Inline markup counts as the words it reads as. `#emph[one]` is one word, and a heading contributes its words but not its `=`.

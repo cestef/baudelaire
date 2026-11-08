@@ -136,7 +136,7 @@ Builds are #link("../build/incremental.typ")[incremental], and the state lives
 in `.baudelaire/`. Cache that directory between runs and a rebuild only touches
 what changed. Every CI recipe on the following pages does it.
 
-== Announcing is not deploying
+== Announcing
 
 `baudelaire announce` uploads none of `public/`. It publishes the site's
 metadata to an AT Protocol repo. Deploy the files with one of the methods here,

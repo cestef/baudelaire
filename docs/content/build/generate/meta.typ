@@ -18,8 +18,7 @@ html {
 
 == What the site states
 
-Two of these tags say something no page can. Both live in the `meta` block, which
-is the flag above with settings behind it:
+Two tags say something no single page can. Both live in the `meta` block, which is the flag above with settings behind it:
 
 ```kdl
 html {
@@ -38,7 +37,7 @@ html {
   [`image`], [--], [The preview image for a page that names none and gets no generated card.],
 )
 
-`image` is a floor, not an override: a page's own `image` wins, and so does a
+`image` is only a fallback: a page's own `image` wins, and so does a
 #link("cards.typ")[generated card]. It is resolved and made absolute the same
 way an authored one is, so `/og.png` becomes a full URL under the site's `url`.
 It carries no `og:image:alt`, because one picture standing in for every page is
@@ -46,9 +45,7 @@ not described by any one page's title. A page that wants an alt names its own
 `image` and its own `alt`.
 
 #callout(kind: "note")[
-  typst-html owns the document `<head>`, so these tags can't be written in a
-  layout. baudelaire appends them to the parsed DOM instead, which is why they
-  are config rather than markup.
+  Typst's HTML export owns the document `<head>`, so these tags cannot be written in a layout. baudelaire appends them to the parsed DOM instead, so they are set in config.
 ]
 
 == What the tags read
@@ -76,8 +73,7 @@ not described by any one page's title. A page that wants an alt names its own
   [`updated`], [--], [`article:modified_time`, emitted only when it moved.],
 )
 
-`alt` describes the image for a reader who can't see it. A generated card needs
-none: it draws the page title, so that's what its `og:image:alt` says.
+`alt` describes the image for a reader who cannot see it. A generated card needs none: it draws the page title, so its `og:image:alt` is the title.
 
 == What gets emitted
 
@@ -96,8 +92,7 @@ A dated page is an `article`, everything else a `website`. Several unfurlers
 read `article:published_time` for the dateline. `twitter:card` is
 `summary_large_image` when the page has an image, `summary` when it doesn't.
 
-Only the tags whose data exists are emitted, so a minimal page still gets a
-clean, valid set.
+Only tags with data are emitted, so a minimal page still gets a valid set.
 
 === URLs
 
@@ -130,11 +125,8 @@ Adds a #link("https://json-ld.org")[JSON-LD] island to every page's `<head>`: an
 `description`, `image`, `url`, `datePublished`, `dateModified`, `author` and
 `keywords` from the taxonomy terms.
 
-It's built from the same facts as the meta tags, so the two can never claim
-different things about one page.
+It is built from the same facts as the meta tags, so the two cannot disagree about a page.
 
 #callout(kind: "note")[
-  Unlike its neighbors this is off by default. The meta tags restate what the
-  page already says; structured data is a claim made *to* a search engine about
-  what the page is, and that's yours to make.
+  This is off by default, unlike the meta tags. Structured data is a claim made to a search engine about what the page is, so you opt in.
 ]
