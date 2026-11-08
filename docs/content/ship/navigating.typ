@@ -1,5 +1,5 @@
 #let frontmatter = (
-  title: "SPA & single-file export",
+  title: "Single-page and single-file output",
   order: 2,
 )
 #import "/templates/theme.typ": callout

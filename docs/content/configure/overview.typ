@@ -115,7 +115,7 @@ page that answers it in full is on the right.
 
   [`navigation`],
   [How a visitor moves between built pages.],
-  [#link("../ship/navigating.typ")[SPA & single-file export]],
+  [#link("../ship/navigating.typ")[Single-page and single-file output]],
 
   [`prune`],
   [Whether output this build did not produce is deleted, and what is spared.],

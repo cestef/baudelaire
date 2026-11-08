@@ -1,5 +1,5 @@
 #let frontmatter = (
-  title: "Integrity & CSP",
+  title: "Integrity and CSP headers",
   order: 3,
 )
 #import "/templates/theme.typ": callout
