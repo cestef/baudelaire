@@ -209,9 +209,6 @@ impl Check {
                 true
             }
             (FieldType::Dict(fields), Value::Dict(nested)) => return self.dict(fields, nested),
-            // A string that is not one of the values a choice allows is the
-            // right type and the wrong value, and says so rather than claiming
-            // the page wrote the wrong kind of thing.
             (FieldType::OneOf(values), Value::Str(written))
                 if !values.iter().any(|value| value == written.as_str()) =>
             {
@@ -237,8 +234,6 @@ impl Check {
     pub(super) fn scalar(ty: &FieldType, value: &Value) -> bool {
         match ty {
             FieldType::Any => true,
-            // Which string a choice allows is the field's business, not the
-            // type check's: this only asks whether it is one at all.
             FieldType::Str | FieldType::OneOf(_) => matches!(value, Value::Str(_)),
             FieldType::Bool => matches!(value, Value::Bool(_)),
             FieldType::Int => matches!(value, Value::Int(_)),

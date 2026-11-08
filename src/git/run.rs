@@ -122,7 +122,8 @@ impl<'a> Git<'a> {
     /// Streamed rather than collected: a log holds a line per file per commit,
     /// and what a caller keeps of it is far smaller than the log itself. A read
     /// that fails part way is unanswered rather than short, since git can have
-    /// written every line and still exit zero.
+    /// written every line and still exit zero. Stderr is discarded, because
+    /// draining two pipes from one thread deadlocks on whichever is not being read.
     pub(super) fn walk<const N: usize>(
         &self,
         args: &[&'static str],
@@ -132,8 +133,6 @@ impl<'a> Git<'a> {
         let mut child = self
             .formatted(args, format)
             .stdout(Stdio::piped())
-            // Draining two pipes from one thread deadlocks on whichever is not
-            // being read; what a walk needs from a failure is that it failed.
             .stderr(Stdio::null())
             .spawn()
             .map_err(Unanswered::Unavailable)?;

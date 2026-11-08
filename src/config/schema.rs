@@ -320,8 +320,6 @@ impl FieldType {
             Self::Int | Self::Float => Some(Bound::Value),
             Self::Str => Some(Bound::Length),
             Self::List(_) => Some(Bound::Items),
-            // A choice already enumerates what it allows; bounding the length
-            // of one of its own values says nothing.
             Self::Any | Self::Bool | Self::Date | Self::OneOf(_) | Self::Dict(_) => None,
         }
     }
@@ -428,7 +426,6 @@ impl FieldType {
     pub fn words(&self) -> Words {
         match self {
             Self::Any => words!("any value", "values"),
-            // A choice is a string that names itself; both read as one.
             Self::Str | Self::OneOf(_) => words!("a string", "strings"),
             Self::Bool => words!("a boolean", "booleans"),
             Self::Int => words!("an integer", "integers"),

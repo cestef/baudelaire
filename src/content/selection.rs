@@ -73,7 +73,6 @@ impl<'a> Selection<'a> {
                 .map_or_else(SortKey::default, |c| c.sort);
             bound.sort_by(|a, b| Page::ordered(sort, reverse, a, b));
         } else if reverse {
-            // Nothing was sorted here, so `reverse` still means the arrival order.
             bound.reverse();
         }
     }

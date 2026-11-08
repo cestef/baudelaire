@@ -55,8 +55,6 @@ impl Fonts {
                 if system {
                     fonts.extend(typst_kit::fonts::system());
                 }
-                // Lazily, on the first compile that needs a face: this is the
-                // startup cost that happens after everything else looks ready.
                 tracing::debug!(
                     families = fonts.book().families().count(),
                     dirs = paths.len(),
