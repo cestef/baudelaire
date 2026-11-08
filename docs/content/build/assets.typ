@@ -47,7 +47,7 @@ assets {
   [`tsconfig`],
   [path],
   [discovered],
-  [The `tsconfig.json` TypeScript and JSX are transformed against. See #link(<typescript>)[TypeScript and JSX].],
+  [The `tsconfig.json` TypeScript and JSX are transformed against. See #link("assets/typescript.typ")[TypeScript and JSX].],
 )
 
 Images sit in a nested `images` block and run on their own switches. See
@@ -126,142 +126,10 @@ name, and naming none leaves the CSS exactly as written.
 
 == Sass <sass>
 
-A `.scss` or `.sass` file under the asset tree is a stylesheet. It is compiled
-with #link("https://github.com/connorskees/grass")[grass], served as `.css`, and
-goes on through everything a hand-written sheet gets: `minify`, `targets`,
-`url()` rewriting, `fingerprint`, `integrity`, `embed`.
-
-```text
-assets/
-  _vars.scss    -> nothing; the sheet that imports it carries it
-  style.scss    -> /assets/style.css
-```
-
-There is nothing to turn on and no toolchain to install.
-
-```scss
-// assets/style.scss
-@use "vars";
-
-.card {
-  color: vars.$brand;
-  .title { font-weight: 600 }
-}
-```
-
-Link either spelling. `/assets/style.scss` is the file you put there and
-`/assets/style.css` is what it became, and both resolve to the same compiled,
-fingerprinted file:
-
-```typ
-#html.elem("link", attrs: (rel: "stylesheet", href: "/assets/style.scss"))
-```
-
-`@use` and `@import` resolve beside the importing sheet first, then across the
-asset roots -- the project's tree, then the theme's -- so a sheet you wrote can
-pull in a partial your theme ships, and a partial you add under the same name
-wins.
-
-#table(
-  columns: 2,
-  align: (left, left),
-  table.header([Detail], [Is]),
-  [Syntax], [Both. `.scss` is the CSS-like one, `.sass` the indented one, picked off the extension.],
-  [Partials], [`_vars.scss` is import-only, as everywhere else in the tree.],
-  [`@warn` / `@debug`], [Written to stderr as the sheet asked.],
-  [Source maps], [Map the compiled CSS, not the Sass: grass emits no mapping to chain back to.],
-  [Output], [Always expanded. `minify` is Lightning CSS's pass, one step later.],
-)
-
-#callout(kind: "note")[
-  Sass is the `sass` cargo feature, on in the default build. A binary without it
-  leaves a `.scss` where it lies and warns that it did.
-]
-
+`.scss` and `.sass` files compile to CSS and join the pipeline: #link("assets/sass.typ")[Sass].
 == Tailwind <tailwind>
 
-A `tailwind { }` block generates a utility stylesheet from the class names the
-site is written with, using
-#link("https://gitlab.com/encre-org/encre-css")[encre-css].
-
-```kdl
-assets {
-  tailwind { }
-}
-```
-
-```typ
-#html.elem("p", attrs: (class: "flex gap-2 text-sm"), [hello])
-```
-
-That is the whole of it. The build links the sheet from every page itself, so no
-template names a file, and the `<link>` it writes is an ordinary reference:
-minified, fingerprinted, digested for `integrity` and inlinable like any other
-asset. Only the classes the site actually writes get rules. Nothing is
-downloaded, no `node_modules`, no watcher.
-
-#table(
-  columns: 4,
-  align: (left, left, left, left),
-  table.header([Key], [Type], [Default], [Does]),
-  [`path`],
-  [asset path],
-  [`tailwind.css`],
-  [Where the sheet is served from, relative to the asset root. Relative and inside the tree, or the build refuses it.],
-
-  [`scan`],
-  [list],
-  [`content` and `templates`],
-  [The trees and files read to find class names. A directory is read whole, a file on its own.],
-
-  [`config`],
-  [path],
-  [none],
-  [An #link("https://encre-css.pages.dev/docs/configuration/")[encre-css config] (TOML): theme, safelist, shortcuts, preflight.],
-
-  [`preflight`],
-  [flag],
-  [`#true`],
-  [Whether the sheet opens with the reset rules Tailwind puts in front of its utilities.],
-)
-
-By default the content and template trees are read, and only the `.typ` and
-`.md` files in them: those are the two languages a page can be written in, and a
-photograph colocated with a post is not read on every build. Name `scan`
-yourself and everything under what you named is read, whatever it is called.
-
-```kdl
-assets {
-  tailwind {
-    scan "content" "templates" "themes/plume/templates" "assets/app.js"
-  }
-}
-```
-
-#callout(kind: "note")[
-  A class name has to appear *literally* somewhere scanned. A class assembled at
-  runtime (`"text-" + size`) is not a class name anyone can find, in this
-  generator or in Tailwind's own: put the whole names in a `safelist` in the
-  encre-css config.
-]
-
-#callout(kind: "note")[
-  A tree named by `scan` outside `content` and `templates` is not watched by
-  `baudelaire serve`. Add it to `serve { include }` to rebuild when it changes.
-]
-
-```kdl
-assets {
-  tailwind {
-    path "css/utilities.css"      // -> /assets/css/utilities.css
-  }
-}
-```
-
-A site or theme shipping its own file at that path keeps it: the generated one
-steps aside, as every generated asset does, and the pages go on linking whatever
-is served there.
-
+A `tailwind { }` block generates a utility stylesheet from the classes the site uses: #link("assets/tailwind.typ")[Tailwind].
 == The directory
 
 `paths { assets }` names the tree the pipeline reads, and the last segment is
@@ -398,41 +266,7 @@ The map is fetched only when devtools are open, so it costs a visitor nothing;
 
 == TypeScript and JSX <typescript>
 
-Entry points may be `.ts`, `.mts`, `.cts`, `.tsx` or `.jsx` as well as `.js`,
-`.mjs` and `.cjs`. Types are stripped and JSX is transformed on the way through;
-the output is always served as `.js`, and both spellings resolve:
-
-```typ
-#html.elem("script", attrs: (type: "module", src: "/assets/main.js"))
-```
-
-Nothing is type-checked. The bundler transforms, as esbuild and Vite do; run
-`tsc --noEmit` in CI or a #link("hooks.typ")[`before` hook] for that. The
-`baudelaire:*` modules an entry imports are typed by `baudelaire mirror`: see
-#link("../lookup/js-modules.typ")[JS modules].
-
-A `tsconfig.json` supplies the rest: `paths` aliases, `jsxImportSource`,
-`experimentalDecorators`. One is discovered per script, walking up from the file
-as `tsc` does. Pin one instead when the scripts sit far from it, or when more
-than one is in reach:
-
-```kdl
-assets {
-  bundle #true
-  tsconfig "tsconfig.json"
-}
-```
-
-The path is relative to the project root, and the build fails if nothing is
-there. JSX defaults to the automatic runtime, so `jsxImportSource` (or a plain
-`react` dependency) decides what the transformed code imports.
-
-#callout(kind: "note")[
-  A pinned `tsconfig.json` is not a watched source. Add it to
-  `serve { include "tsconfig.json" }` for the dev server to rebuild when it
-  changes.
-]
-
+Entry points may be `.ts`, `.tsx` or `.jsx`; types are stripped and JSX transformed: #link("assets/typescript.typ")[TypeScript and JSX].
 == What is an input, not an output
 
 The asset tree holds both what the site serves and what the build reads to make
