@@ -70,7 +70,9 @@ serve {
 
 #callout(kind: "warn")[
   The dev server has no authentication. `bind` defaults to loopback for that
-  reason. Binding `0.0.0.0` puts your unfinished drafts on the local network.
+  reason. Binding `0.0.0.0` puts your unfinished drafts on the local network. The server also answers
+  `421` to any `Host` it was not bound as (a DNS-rebinding guard), so reach it by
+  the address you bound, or by `localhost`.
 ]
 
 == Watching
