@@ -15,10 +15,9 @@ report, no second source of truth about what is running.
 
 = Why one question
 
-Because the answer to "what will this do" has to fit on a screen. If the diff is
-too long to read, the change is too large to make, and the tool saying so is
-more useful than the tool doing it.
+The answer to "what will this do" has to fit on a screen. If the diff is too
+long to read, the change is too large to make, and the tool should say so.
 
 = Ongoing
 
-Still in use, still under a hundred kilobytes, still without a dashboard.
+Still in use, still under a hundred kilobytes, still no dashboard.

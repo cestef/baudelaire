@@ -1,7 +1,7 @@
 # paysage
 
-A portfolio. A landing page that says what you do, a grid of work that builds
-itself from the projects you publish, and case studies with room for pictures.
+A portfolio theme. It has a landing page, a grid of work built from the projects
+you publish, and case studies with room for pictures.
 
 ```kdl
 theme "themes/paysage"
@@ -9,14 +9,14 @@ theme "themes/paysage"
 
 ## What you get
 
-- `home.typ` — the landing page: a hero in your own words, then a selection of
+- `home.typ`: the landing page: a hero in your own words, then a selection of
   work read from the `@baudelaire/pages` catalogue. Bind it with
   `template: "home.typ"`.
-- `project.typ` — one case study: title, a fact row (date, role, client,
+- `project.typ`: one case study: title, a fact row (date, role, client,
   duration, stack), a cover image, the write-up, and a link to the next project.
-- `page.typ` — an ordinary page: about, contact, colophon.
-- `list.typ` — the `/work/` index and the `stack` term pages, as the same grid.
-- `not-found.typ` — the page a host serves for an unmatched URL. Bind it from
+- `page.typ`: an ordinary page: about, contact, colophon.
+- `list.typ`: the `/work/` index and the `stack` term pages, as the same grid.
+- `not-found.typ`: the page a host serves for an unmatched URL. Bind it from
   `content/404.typ`, which publishes as a flat `404.html`.
 - A `work` collection over `content/work/`, newest first, a `stack` taxonomy,
   RSS, and a sitemap.
@@ -60,22 +60,22 @@ theme "themes/paysage"
 )
 ```
 
-`selected` caps the grid (default 6) and `collection` picks a different one than
-`work`. Everything under the cap is linked from `All work →`, which is the
-generated index.
+`selected` caps the grid (default 6) and `collection` picks a collection other
+than `work`. The `All work →` link goes to the generated index, which lists
+everything.
 
 The top nav needs no menu in config: content directories come from
 `@baudelaire/sections` and the pages beside your landing page come from the page
-catalogue, so an `about.typ` appears by existing.
+catalogue, so adding an `about.typ` adds it to the nav.
 
 ## Images
 
 `image` is a URL, not a Typst `image()`: it is used as an `<img src>` on the
 card and on the page. Put the files under `static/` (copied verbatim) or
-`assets/` (processed, and then referenced by their built path).
+`assets/` (processed, then referenced by their built path).
 
-It is baudelaire's own `image` field rather than a `cover` of this theme's
-invention, so the same line also names the `og:image` a link preview shows.
+`image` is baudelaire's own field, so the same line also sets the `og:image` a
+link preview shows.
 
 ## Translating it
 
@@ -101,7 +101,7 @@ Keys used: `skip`, `primary`, `theme`, `selected`, `all-work`, `next-project`,
 
 ## Overriding it
 
-Copy any file into your own tree at the same relative path and yours wins. For a
+Copy any file into your own tree at the same relative path and yours wins. To
 recolour, restate the custom properties at the top of `style.css`: `--accent`
 (links, hover, code), `--bg`, `--raised` (cards), `--fg`, `--muted`, `--rule`,
 and the widths `--measure` and `--wide`.

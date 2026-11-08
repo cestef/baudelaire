@@ -9,9 +9,9 @@
 )
 
 Fifteen years of back-office software: ledgers, schedulers, and the reports
-nobody wants to write twice. The work below is invented, because this is a theme
-preview, but the shape is real: a landing page, a grid that builds itself from
-the projects published under `content/work/`, and one case study per project.
+nobody wants to write twice. The work below is invented, since this is a theme
+preview. The layout is real: a landing page, a grid built from the projects
+under `content/work/`, and one case study per project.
 
-Nothing here lists the projects by hand. The grid is the site's own catalogue,
-so adding a file adds a card.
+The projects are not listed by hand. The grid is the site's catalogue, so adding
+a file adds a card.

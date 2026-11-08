@@ -5,9 +5,8 @@
 )
 
 This page sits in `content/guide/advanced/`, one level deeper than its
-neighbours, which is the only reason it exists: a documentation theme has to
-show what it does with a subdirectory, and the answer is a collapsible group
-inside the group above it.
+neighbours, so the theme shows a subdirectory as a collapsible group inside the
+group above it.
 
 = Before and after
 
@@ -17,6 +16,5 @@ before = "wren check"
 after = "wren publish"
 ```
 
-A reader who collapses this group keeps it collapsed on the next page, except
-when the page they are on lives inside it. Hiding someone's own position is the
-one unhelpful thing a nav can do.
+A collapsed group stays collapsed on the next page, unless the current page is
+inside it, so the reader's own position is never hidden.

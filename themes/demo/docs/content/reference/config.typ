@@ -16,20 +16,19 @@ retries = 2
 
 = `name`
 
-What the thing is called. Used in the page title and in nothing else, which is
-a small mercy.
+What the thing is called. It is used in the page title and nowhere else.
 
 = `output`
 
-Where the build writes. Relative to the working directory, not to this file,
-because that is the mistake everyone makes once.
+Where the build writes. The path is relative to the working directory, not to
+this file.
 
 = `build.parallel`
 
-Whether to use every core. Off is useful exactly twice: while profiling, and
-while reading a stack trace.
+Whether to use every core. Turn it off while profiling or reading a stack
+trace.
 
 = `build.retries`
 
-How many times a step may fail before the build does. Zero is honest; two is
-what people set after a flaky afternoon.
+How many times a step may fail before the build does. Zero fails on the first
+error.

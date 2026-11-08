@@ -6,8 +6,7 @@
   summary: "Short, so a listing has something other than long entries in it.",
 )
 
-Not every post is an essay. This one exists so the index has a short entry
-beside the long ones, and so the prev/next pager at the bottom of each post has
-somewhere to point.
+Not every post is an essay. This one is short, so the index has a short entry
+beside the long ones and the prev/next pager has somewhere to point.
 
-The date on it is what orders the collection, and what the feeds carry.
+Its date orders the collection and goes into the feeds.

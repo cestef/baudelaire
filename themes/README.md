@@ -1,9 +1,8 @@
 # Themes
 
-Four themes, one per kind of site, each a complete look: templates, assets, and
-config defaults. They are original work, not ports: the shapes are familiar
-because the genres are, but every line of Typst and CSS here is ours and carries
-no upstream licence.
+Four themes, one per kind of site. Each has templates, assets and config
+defaults. They are original work, not ports, so the Typst and CSS carry no
+upstream licence.
 
 | Theme | For | Shape | Needs JS |
 |---|---|---|---|
@@ -15,16 +14,15 @@ no upstream licence.
 All four ship a `templates/not-found.typ`; bind it from `content/404.typ`, which
 publishes as the flat `404.html` a static host serves for an unmatched URL.
 
-Not sure which: pick by what the site *is*. If you write posts, `albatros` (or
-`spleen` if you want no script at all). If you document something, `phares`. If
-you show work, `paysage`.
+To choose, go by the kind of site. For posts, `albatros`, or `spleen` if you want
+no script at all. For documentation, `phares`. For showing work, `paysage`.
 
-The demos are real sites under [`demo/`](demo), one content set per kind, built
+The demos are sites under [`demo/`](demo), one content set per kind, built
 by [`demo/build.sh`](demo/build.sh), which the docs workflow runs on every
 deploy. Locally: `just previews`.
 
-The full guide, including how to write your own, is at
-<https://baudelaire.cstef.dev/guide/themes/>.
+The guide to using themes is at <https://baudelaire.cstef.dev/theming/using/>.
+Writing your own is covered at <https://baudelaire.cstef.dev/theming/authoring/>.
 
 ## Using one from this repository
 
@@ -53,32 +51,32 @@ Published to Typst Universe, the same theme is `@preview/albatros:0.1.0`. Only
 the `preview` namespace is ever downloaded; anything else is read from those
 local directories.
 
-## What a theme gives you, and what you keep
+## What you keep
 
 Everything a theme provides is a default:
 
-- **Templates.** Your `templates/page.typ` wins over the theme's, file by file.
+- Templates: your `templates/page.typ` wins over the theme's, file by file.
   Copy one out of the theme and edit it; nothing else changes.
-- **Assets.** The theme's `assets/` are processed alongside yours. Shipping your
+- Assets: the theme's `assets/` are processed alongside yours. Shipping your
   own `style.css` replaces the theme's and keeps the rest.
-- **Config.** `theme.kdl` is a floor. Every key you state wins, nested blocks
-  included, so adopting a theme never touches your `site`, `url`, or `author`.
+- Config: `theme.kdl` is a floor. Every key you state wins, nested blocks
+  included, so adopting a theme never touches your `site`, `url` or `author`.
 
-One sharp edge worth knowing: config *lists* replace wholesale. A site that
-declares `content { collections { .. } }` replaces the theme's set rather than
-adding to it, so copy the theme's collection block if you only meant to add one.
+Config lists replace wholesale. A site that declares
+`content { collections { .. } }` replaces the theme's set instead of adding to
+it, so copy the theme's collection block if you only meant to add one.
 
 ## Navigation
 
-None of these themes hardcode a menu. The nav is derived from
-`@baudelaire/sections` (the content tree) and `@baudelaire/pages` (the page
-catalogue), the build's own view of the site, so a new directory or page appears
-in the nav and a removed one disappears, with no config to keep in sync.
+No theme hardcodes a menu. The nav comes from `@baudelaire/sections` (the
+content tree) and `@baudelaire/pages` (the page catalogue), so a new directory
+or page appears in the nav and a removed one disappears, with no config to keep
+in sync.
 
 ## Writing your own
 
-Start by copying the closest one. The layout is fixed (a theme cannot know what
-you renamed your own directories to):
+Start by copying the closest theme. The layout is fixed, because a theme cannot
+know what you renamed your own directories to:
 
 ```text
 templates/   layouts a page binds to, by filename
@@ -88,21 +86,21 @@ theme.kdl    config defaults
 typst.toml   package manifest, for publishing
 ```
 
-Four rules that only bite theme authors:
+Four rules that apply to theme authors:
 
-- **Import siblings relatively.** Inside a theme, `#import "../parts.typ"`
+- Import siblings relatively. Inside a theme, `#import "../parts.typ"`
   resolves in both modes; a root-absolute `/parts.typ` resolves against the
-  *project* root when the theme is a directory and against the *package* root
+  project root when the theme is a directory and against the package root
   when it is published, so it cannot be right in both.
-- **`svg()` is off limits.** Its paths are project-root absolute, and a theme
+- Do not use `svg()`. Its paths are project-root absolute, and a theme
   does not know where it sits in your project. Build icons as inline `<svg>`
   elements instead, the way `parts.typ` does in each theme here.
-- **Read the colour scheme before the first paint.** A `type="module"` script is
+- Read the colour scheme before the first paint. A `type="module"` script is
   deferred, so a reader whose stored choice differs from their system's sees one
   page in the wrong colours on every navigation. Each theme here emits a classic
   inline `<script>` as the first thing in the body (`boot` in `parts.typ`) that
   does nothing but stamp `data-theme`.
-- **Do not write a feed `<link rel="alternate">`.** baudelaire puts one in the
+- Do not write a feed `<link rel="alternate">`. baudelaire puts one in the
   head per configured format, with the base URL and the page's language on it. A
-  *visible* feed link goes through `feeds` and `feed-url` from
+  visible feed link goes through `feeds` and `feed-url` from
   `@baudelaire/site`, so it names the file the build actually wrote.

@@ -23,5 +23,5 @@
 = Exit codes
 
 `0` for success, `1` for a failed build, `2` for a config that could not be
-read. Anything else is a bug, in a tool that does not exist, which makes it hard
-to report.
+read. Anything else is a bug, and since the tool does not exist, a hard one to
+report.

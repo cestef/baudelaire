@@ -1,5 +1,5 @@
-// L'édition française : publiée en `/fr/404.html`, parce qu'une page introuvable
-// est propre à sa langue comme les autres.
+// L'édition française, publiée en `/fr/404.html` : une page introuvable a sa
+// propre langue, comme les autres.
 #let frontmatter = (
   title: "Page introuvable",
   template: "not-found.typ",

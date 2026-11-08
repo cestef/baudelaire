@@ -10,7 +10,7 @@
 // theme writes `#import "@preview/phares:0.1.0": ..` instead.
 #import "/themes/phares/lib.typ": badge, callout, pane, steps, tabs
 
-Wren ships as one static binary, which is easy to promise for a tool nobody has
+Wren ships as one static binary. That is an easy promise for a tool nobody has
 written.
 
 = Pick a channel
@@ -26,9 +26,9 @@ written.
     cargo install wren --locked
     ```
 
-    The `--locked` matters: it builds against the lockfile in the published
-    crate rather than resolving fresh dependencies, so two people on the same
-    version get the same binary.
+    `--locked` builds against the lockfile in the published crate instead of
+    resolving fresh dependencies, so two people on the same version get the same
+    binary.
   ],
   pane("brew")[
     ```sh
@@ -56,6 +56,5 @@ written.
 ]
 
 #callout(kind: "warning", title: "If that prints nothing")[
-  The binary is not on your `PATH`, which is the usual answer and rarely the
-  interesting one.
+  The binary is not on your `PATH`. That is the usual cause.
 ]

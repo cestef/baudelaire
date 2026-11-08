@@ -8,8 +8,8 @@
 
 <p align="center">
     A static site generator where everything is <a href="https://typst.app">Typst</a>.
-    Your pages, your layouts, and your data are one language, so a heading,
-    a footnote, and a nav menu are all written the same way.
+    Pages, layouts and data are one language, so a heading, a footnote and a
+    nav menu are written the same way.
 </p>
 
 <p align="center">
@@ -20,8 +20,8 @@
 
 ## A page
 
-Content is a `.typ` file. Frontmatter is an ordinary Typst binding, not a block
-of YAML the compiler can't see:
+Content is a `.typ` file. Frontmatter is an ordinary Typst binding, so the
+compiler sees it:
 
 ```typ
 #let frontmatter = (
@@ -39,11 +39,11 @@ set: math, figures, footnotes, tables.
 
 Drop that in `content/posts/hello.typ` and it publishes at `/posts/hello/`,
 joins the feeds and the sitemap, shows up under `/tags/typst/`, and gets
-prev/next links from its neighbors. None of it is configuration.
+prev/next links from its neighbors. None of this needs configuration.
 
-Markdown works too, and its frontmatter is whatever its fence opens: `---` is
-YAML, `+++` is TOML, `;;;` is KDL. A post copied out of another generator needs
-no rewriting.
+Markdown works too. Its frontmatter format follows its fence: `---` is YAML,
+`+++` is TOML, `;;;` is KDL. A post copied out of another generator needs no
+rewriting.
 
 ```md
 ---
@@ -55,10 +55,9 @@ Ordinary **prose**, and a [link](https://typst.app).
 ```
 
 A `.md` page lowers to Typst before it compiles, so permalinks, taxonomies,
-feeds, link checking and the incremental cache are the ones above, unchanged.
+feeds, link checking and the incremental cache work as above.
 
-The layout that wraps it is Typst too, and builds real DOM instead of splicing
-strings:
+The layout that wraps it is Typst too. It builds DOM nodes, not strings:
 
 ```typ
 #import "@baudelaire/html:0.1.0": h
@@ -76,8 +75,8 @@ strings:
 
 ## Install
 
-Prebuilt binaries for Linux (x86_64/aarch64), macOS, and Windows. Fetch the
-script, read it, run it:
+Prebuilt binaries exist for Linux (x86_64/aarch64), macOS and Windows. Fetch the
+install script, read it, run it:
 
 ```sh
 curl -fsSL https://baudelaire.cstef.dev/install.sh -o install.sh
@@ -100,13 +99,13 @@ cargo binstall baudelaire # prebuilt tarball, no compile
 cargo install baudelaire  # build from crates.io
 ```
 
-If you're feeling fancy:
+To build from git:
 
 ```sh
 cargo install --git https://github.com/cestef/baudelaire --branch main # build from git
 ```
 
-Flags, slim builds, and what the installer does and does not verify:
+Flags, slim builds, and what the installer does and does not verify are in
 [installation](https://baudelaire.cstef.dev/start/install/).
 
 ## Start
@@ -118,12 +117,12 @@ cd poem
 baudelaire serve
 ```
 
-Your site is at [localhost:1821](http://localhost:1821), rebuilding as you save.
+The site is at [localhost:1821](http://localhost:1821) and rebuilds when you save.
 
 ## Themes
 
-A theme is templates, assets, and config defaults shipped as one unit. Four come
-with the repository:
+A theme is templates, assets and config defaults in one unit. The repository has
+four:
 
 | | |
 |---|---|
@@ -133,24 +132,24 @@ with the repository:
 | [`paysage`](https://github.com/cestef/baudelaire/tree/main/themes/paysage) | A portfolio. Landing page, project grid, one case study per project. |
 
 They are inside the binary, so nothing is fetched. `baudelaire init` offers them
-alongside the starter shapes, and an existing project adds one with:
+with the starter shapes, and an existing project adds one with:
 
 ```sh
 baudelaire theme add albatros            # one this binary ships
 baudelaire theme add gh:owner/repo       # or a directory, archive or package
 ```
 
-Either way the files land in `themes/albatros/` and the config names them:
+Either way the files land in `themes/albatros/` and the config names the theme:
 
 ```kdl
 theme "themes/albatros"
 ```
 
 Everything a theme provides is a default: your file at the same path wins, and
-your config wins key by key. Nine sections are yours alone, and a theme naming
-one is refused rather than obeyed: `paths`, `hooks`, `announce`, `deploy`,
-`profiles`, `serve`, `typst`, `security` and `lint`. They decide what runs on
-your machine and what a browser is told, which is not a styling decision.
+your config wins key by key. Nine sections belong to you, and a theme that sets
+one is refused: `paths`, `hooks`, `announce`, `deploy`, `profiles`, `serve`,
+`typst`, `security` and `lint`. They control what runs on your machine and what
+a browser is told.
 
 ## License
 

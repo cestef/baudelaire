@@ -10,19 +10,19 @@
   stack: ("typescript", "canvas"),
 )
 
-A warehouse floor changes faster than the drawing of it. Atlas is a viewer that
-takes the day's layout as data and renders it at sixty frames a second on the
-sort of tablet that is already three years old.
+A warehouse floor changes faster than its drawing. Atlas is a viewer that takes
+the day's layout as data and renders it at sixty frames a second on a
+three-year-old tablet.
 
 = The trick
 
 Nothing is a DOM node. The floor is one canvas, the labels are drawn, and the
-only elements on the page are the controls. That is why it stays smooth on
-hardware everyone else had given up on.
+only elements on the page are the controls. That keeps it smooth on old
+hardware.
 
 = What shipped
 
 - Pan, zoom, and a search that jumps to a bay.
 - A diff view: today's layout against last week's, in one colour.
-- An export nobody asked for and everybody used: the current view as a PNG,
-  printed and taped to a pillar.
+- An export of the current view as a PNG, which people printed and taped to a
+  pillar.

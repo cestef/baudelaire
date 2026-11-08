@@ -1,8 +1,8 @@
 # phares
 
-A documentation theme. A sidebar built from your own `content/` tree, a search
-palette on `/` or `⌘K`, the page's headings down the right with the section you
-are reading marked, and prev/next that runs the length of the manual.
+A documentation theme. It has a sidebar built from your `content/` tree, a
+search palette on `/` or `⌘K`, the page's headings down the right with the
+current section marked, and prev/next links that run the length of the manual.
 
 ```kdl
 theme "themes/phares"
@@ -10,10 +10,10 @@ theme "themes/phares"
 
 ## What you get
 
-- `page.typ` — one documentation page: breadcrumbs, title, optional lead, body,
+- `page.typ`: one documentation page: breadcrumbs, title, optional lead, body,
   tag chips, an edit link and a last-updated line, prev/next.
-- `list.typ` — the taxonomy indexes (`/tags/` and each term).
-- `not-found.typ` — the page a host serves for an unmatched URL, with the
+- `list.typ`: the taxonomy indexes (`/tags/` and each term).
+- `not-found.typ`: the page a host serves for an unmatched URL, with the
   sidebar still beside it. Bind it from `content/404.typ`, which publishes as a
   flat `404.html`.
 - One `docs` collection over everything in a subdirectory, so the manual is one
@@ -26,11 +26,11 @@ theme "themes/phares"
 ## Writing the manual
 
 Directories are the sections. `content/guide/`, `content/reference/`, and
-`content/guide/advanced/` nest in the sidebar exactly as they nest on disk,
-which is `@baudelaire/sections`, the build's own view of the tree.
+`content/guide/advanced/` nest in the sidebar as they nest on disk, as reported
+by `@baudelaire/sections`.
 
-Order is `order` in frontmatter, and pages without one fall back to source path,
-which is already the order a directory reads in. Number the pages that need to
+Order is set by `order` in frontmatter. Pages without one fall back to source
+path, which is the order a directory reads in. Number the pages that need to
 lead:
 
 ```typ
@@ -80,8 +80,8 @@ renders and takes the default colours, so you can invent one and style it.
 )
 ```
 
-The script builds the strip. Without it every pane is simply visible, one after
-another: nothing is hidden behind a control that did not arrive.
+The script builds the strip. Without it every pane is visible, one after
+another, so nothing hides behind a control that did not load.
 
 ### Steps
 
@@ -92,7 +92,7 @@ another: nothing is hidden behind a control that did not arrive.
 ]
 ```
 
-The numbering is the list's own, so a step holds anything a list item can: a
+The numbering is the list's own, so a step can hold anything a list item can: a
 code block, a callout, a nested list.
 
 ### Cards
@@ -113,16 +113,16 @@ code block, a callout, a nested list.
 `kind` shares the callout palette, so a warning badge and a warning callout are
 the same colour.
 
-## Breadcrumbs, dates, and an edit link
+## Breadcrumbs, dates and an edit link
 
 Breadcrumbs come from the page's own URL, with the site's string table naming
-each directory. A crumb links only where a page is actually published, so the
-middle of the trail is plain text on a manual whose directories have no index
-page of their own, and never a dead link.
+each directory. A crumb links only where a page is published, so on a manual
+whose directories have no index page the middle of the trail is plain text, not
+a dead link.
 
 `updated: datetime(..)` in frontmatter prints a last-updated line under the
-page. It is written as the ISO day: baudelaire localizes `date`, not this one,
-and a manual would rather be language-neutral than wrong.
+page. It is written as the ISO day, because baudelaire localizes `date` but not
+this field.
 
 Beside it, a link to the page's own file. Say where the manual lives and the
 theme appends `page.source`, which is project-root-absolute:
@@ -135,13 +135,13 @@ typst {
 }
 ```
 
-It is a `typst { inputs }` constant rather than a config key of this theme's
-invention: a site's own constants belong to the site. Without one there is no
-link, and a generated page has no file to offer.
+This is a `typst { inputs }` constant, not a theme config key, because a site's
+own constants belong to the site. Without it there is no link, and a generated
+page has no file to link to.
 
 ## What the script does
 
-Three things the layout cannot know, all of them from the rendered page:
+The script does three things the layout cannot, all from the rendered page:
 
 - marks the sidebar link for the current URL and opens the groups above it
 - builds the on-page contents from the headings that ended up in the body, and
@@ -176,7 +176,7 @@ renamed.
 
 ## Overriding it
 
-Copy any file into your own tree at the same relative path and yours wins. For a
+Copy any file into your own tree at the same relative path and yours wins. To
 recolour, restate the custom properties at the top of `style.css`: `--accent`,
 `--fg`, `--bg`, `--raised`, `--rule`, and the widths `--sidebar`, `--toc`,
 `--measure`.

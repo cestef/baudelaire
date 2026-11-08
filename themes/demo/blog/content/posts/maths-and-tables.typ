@@ -8,18 +8,17 @@
   alt: "Curves fanning out from a baseline."
 )
 
-A typesetting language brings its own answers to the things Markdown farms out
-to plugins. None of the following is an extension; it is what Typst does.
+Typst handles the things Markdown leaves to plugins. None of the following is an
+extension.
 
 = An equation
 
-The sum every incremental build is really computing, which is how much work it
-managed not to do:
+The sum an incremental build computes is how much work it managed not to do:
 
 $ "saved" = sum_(p in "pages") "cost"(p) dot [p "unchanged"] $
 
-Inline maths sits in a sentence without ceremony: a page whose fingerprint
-$h(p)$ is unchanged is served from the cache.
+Inline maths sits in a sentence: a page whose fingerprint $h(p)$ is unchanged
+is served from the cache.
 
 = A table
 
@@ -30,7 +29,7 @@ $h(p)$ is unchanged is served from the cache.
   [slim], [about 11 MiB], [fonts, JS, CSS, images, cards],
 )
 
-= A list that means something
+= A numbered list
 
 + Parse the content tree and read every frontmatter.
 + Fingerprint each page against the cache.

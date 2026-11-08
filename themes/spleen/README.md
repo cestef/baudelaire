@@ -1,9 +1,9 @@
 # spleen
 
-A terminal. Monospace throughout, a prompt for a masthead, nav as commands, and
-a post index laid out like a directory listing. Dark by default; a reader whose
-system asks for light gets light. Multilingual sites get an `[en|fr]` switcher,
-plain links like everything else here.
+A terminal theme. It is monospace throughout, with a prompt as the masthead, nav
+as commands, and a post index laid out like a directory listing. It is dark by
+default, and light when the reader's system asks for light. Multilingual sites
+get an `[en|fr]` switcher made of plain links.
 
 ```kdl
 theme "themes/spleen"
@@ -11,32 +11,30 @@ theme "themes/spleen"
 
 ## No JavaScript
 
-Not "minimal JavaScript": none. Colours come from `prefers-color-scheme`, the
-listing is a grid, and the collapsible parts are `<details>` or absent. A page
-built with this theme works with script disabled, and there is no toggle to
-flash on load.
+This theme ships no JavaScript. Colours come from `prefers-color-scheme`, the
+listing is a grid, and the collapsible parts are `<details>` or absent. Pages
+work with script disabled, and there is no toggle to flash on load.
 
 ## What you get
 
-- `page.typ` — a post: title as a comment line, one meta row (author · date ·
+- `page.typ`: a post: title as a comment line, one meta row (author · date ·
   reading time · `[tags]`), lead image, body, prev/next.
-- `list.typ` — every generated index. Dated listings get a fixed date column;
+- `list.typ`: every generated index. Dated listings get a fixed date column;
   the term index drops it rather than leaving a ragged gap.
-- `not-found.typ` — a shell answering a path that is not there, then `ls /`.
+- `not-found.typ`: a shell answering a path that is not there, then `ls /`.
   Bind it from `content/404.typ`, which publishes as a flat `404.html`.
 - A `posts` collection at `/posts/{slug}/` with a paginated index of 20, a
   `tags` taxonomy, RSS and Atom, a sitemap, and `robots.txt`.
 
 ## What it expects from a page
 
-Nothing mandatory beyond `title`. It uses `date`, `tags`, `summary`, `image`
-(with `alt`) and `author` when they are there. `image` is the lead picture over
+Only `title` is required. It also uses `date`, `tags`, `summary`, `image`
+(with `alt`) and `author` when present. `image` is the lead picture over
 the post and the one the social card names; `author`, or a taxonomy carrying
 `credit "author"`, is the name at the head of the meta row.
 
-Listing dates render in ISO form (`2026-07-20`), which is deliberate: a
-fixed-width column is the whole point of the layout. Post bylines use the
-localized date, so the two forms are not in conflict.
+Listing dates render in ISO form (`2026-07-20`) so the date column has a fixed
+width. Post bylines use the localized date.
 
 ## Translating it
 
@@ -51,7 +49,7 @@ Keys used: `skip`, `languages`, `reading`, `pagination`, `newer`, `older`.
 
 ## Overriding it
 
-Copy any file into your own tree at the same relative path and yours wins. For
-a recolour, restate the custom properties at the top of `style.css`:
+Copy any file into your own tree at the same relative path and yours wins. To
+recolour, restate the custom properties at the top of `style.css`:
 `--accent` (prompt and links), `--accent-alt` (hover, hostname), `--dim`,
 `--rule`, `--bg`, `--fg`, `--measure`.

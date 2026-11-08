@@ -5,5 +5,5 @@
   template: "not-found.typ",
 )
 
-Nothing is published at that address. The work is all under one directory, and
+Nothing is published at that address. All the work is under one directory, and
 the links below lead back to it.

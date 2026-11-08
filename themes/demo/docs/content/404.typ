@@ -5,5 +5,5 @@
   template: "not-found.typ",
 )
 
-No page of this manual is published at that address. The sidebar has the whole
-of it, and the search palette will find a page by its title or its words.
+No page of this manual is published at that address. The sidebar lists every
+page, and the search palette finds a page by its title or its words.

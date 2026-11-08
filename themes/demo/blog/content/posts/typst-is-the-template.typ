@@ -5,16 +5,16 @@
   authors: ("cstef",),
   // The theme draws a contents list on a post that asks for one.
   toc: true,
-  summary: "Why the content and the layout being one language is the whole point.",
+  summary: "Why the content and the layout should be one language.",
   // The lead image, and the one the social card names: one field, both uses.
   image: "/assets/cover-typst.svg",
   alt: "Blocks on a grid, one language filling the layout.",
 )
 
 Most site generators ask you to hold two languages at once: one for prose, one
-for the markup around it. The seam between them is where the awkwardness lives.
-A loop belongs to the template language, a footnote to the content language, and
-a footnote inside a loop belongs to an argument.
+for the markup around it. The awkwardness comes from the seam between them. A
+loop belongs to the template language, a footnote to the content language, and
+a footnote inside a loop starts an argument.
 
 = One language
 
@@ -28,18 +28,18 @@ written in the same language, with the same functions:
 })
 ```
 
-That template is not a string being assembled. It builds real elements, which is
-why an attribute with a hyphen, an ARIA role, or an inline `<svg>` needs no
-escape hatch.
+That template builds real elements instead of assembling a string, so an
+attribute with a hyphen, an ARIA role or an inline `<svg>` needs no escape
+hatch.
 
-= What that buys
+= What you get
 
 - Frontmatter is a Typst binding, so the compiler sees it and a typo in a field
-  name is an error rather than a silent `none`.
+  name is an error, not a silent `none`.
 - A helper you write for a page works in a template, and the other way round.
 - Anything Typst can set, a page can contain: maths, tables, footnotes#footnote[Like this one.], figures.
 
 #quote(block: true, attribution: [the README])[
-  Your pages, your layouts, and your data are one language, so a heading, a
-  footnote, and a nav menu are all written the same way.
+  Pages, layouts and data are one language, so a heading, a footnote and a nav
+  menu are written the same way.
 ]

@@ -1,8 +1,8 @@
 # Contributing
 
-Thanks for looking. Baudelaire is a single-maintainer project, so the most useful
-thing you can do before writing code is open an issue and check the direction:
-a design that does not fit is the expensive kind of rejected patch.
+Baudelaire is a single-maintainer project. Before writing code, open an issue and
+check the direction, because a patch whose design does not fit is expensive to
+reject.
 
 ## Getting set up
 
@@ -23,7 +23,7 @@ Required:
   `cargo test` they would share one and the few that set `HOME` or the working
   directory would race the rest.
 
-Optional, and worth having:
+Optional:
 
 - [`just`](https://github.com/casey/just) to run the same checks CI does
 - [`cargo-deny`](https://github.com/EmbarkStudios/cargo-deny) for `just audit`
@@ -62,11 +62,11 @@ just ci
 ```
 
 That mirrors the `check` job: format, workflow lint, dependency audit, then
-clippy and the tests over **both** feature flavors. The second flavor matters:
-`--no-default-features` compiles a different set of modules, so a bare
-`cargo clippy` cannot see a feature-off break.
+clippy and the tests over both feature flavors. `--no-default-features` compiles
+a different set of modules, so a bare `cargo clippy` cannot see a feature-off
+break.
 
-Three things `just ci` does not cover, each its own CI job:
+`just ci` does not cover three things, each its own CI job:
 
 - `just docs` builds the docs site, which is itself a real baudelaire site.
   Run it after touching `docs/`, `themes/` or anything that changes output.
@@ -81,35 +81,35 @@ test where the behaviour allows one.
 
 ## House style
 
-These are enforced, roughly in the order they get violated:
+These are enforced, roughly in the order people break them:
 
-- **One source of truth.** Anything appearing twice (a key list, a name-to-enum
+- One source of truth. Anything appearing twice (a key list, a name-to-enum
   map, a magic path, a default) collapses to one table or const that everything
   else derives from. `config/dispatch.rs` is the worked example: a config struct
   carries its own key table, and the "unknown key" error and its did-you-mean
   suggestions are generated from that same table, so they cannot drift from what
   actually parses.
-- **Behaviour lives on types.** No orphan free functions.
-- **Never use `Debug` or serde output as identity.** Fingerprints use a real
+- Behaviour lives on types. No orphan free functions.
+- Never use `Debug` or serde output as identity. Fingerprints use a real
   `Hash` impl that destructures every field, so a new field fails to compile
   until it is handled.
-- **Errors are precise typed miette diagnostics**, one class per type, with a
+- Errors are precise typed miette diagnostics, one class per type, with a
   stable `baudelaire::..` code. `error/fs.rs` is the model. Never widen an
   existing variant to reuse it, and never swallow one.
-- **Diagnostic messages are marked up and their values escaped.** `` `code` ``
+- Diagnostic messages are marked up and their values escaped. `` `code` ``
   and `*bold*` come from `ui/markup.rs`. A value interpolated into a message
   goes through `Code(.field)` or `Text(.field)`; a bare `{field}` inside a code
   span is a test failure, because a path containing a backtick would close the
   span and restyle the rest of the line.
-- **Conversions are `From`/`Into`**, or Display-adapter newtypes (`Typst(&v)`,
+- Conversions are `From`/`Into`, or Display-adapter newtypes (`Typst(&v)`,
   `Js(&v)`). Not `to_x()`/`from_x()`, and never an overloaded `Display` on a
   data type.
-- **Config keys are one word.** A compound concept nests into a block:
+- Config keys are one word. A compound concept nests into a block:
   `drafts { suffix }`, never `draft-suffix`.
-- **Generated output goes through its emitter**, not `format!`: Typst through
+- Generated output goes through its emitter, not `format!`: Typst through
   `codegen::Value`, XML through `engine/emit/xml.rs`, JS through
   `engine/emit/script.rs`, HTML through the typed DOM.
-- **Generated pages are opt-in or user-overridable**, never opinionated defaults.
+- Generated pages are opt-in or user-overridable, never opinionated defaults.
 - Prefer genericity, but a trait with one impl is a finding, not an abstraction.
 
 Adding an emitter (`engine/emit/mod.rs`), a render transform
@@ -122,9 +122,9 @@ A CLI subcommand is the same shape but a different spelling, since `src/cli/` is
 one module per subcommand: a module holding the clap args struct and its `Run`
 impl, a variant on the `Command` enum, and an arm in `dispatch`.
 
-### Settled, and not worth re-proposing
+### Settled
 
-Each of these was built or seriously considered and decided against:
+Each of these was built or seriously considered, then rejected. Do not re-propose them:
 
 - An embedded scripting language (Rhai was tried).
 - Menus in config (built, then reverted).
@@ -140,9 +140,8 @@ feat(serve): a live status dot and a readable failure overlay
 fix(html): footnotes render inside the layout
 ```
 
-**One concern per commit, and each commit builds and passes on its own.** Work
-naturally accumulates several concerns in one working copy; split before you
-describe, not after.
+One concern per commit, and each commit builds and passes on its own. A working
+copy often collects several concerns. Split them before you describe the commit.
 
 `feat`, `fix`, `perf` and a breaking `refactor!` reach the changelog; `refactor`,
 `docs`, `test`, `build`, `ci`, `chore` and `bench` are filtered out. A `!` marks
@@ -150,19 +149,18 @@ a breaking change.
 
 ## The changelog
 
-**A user-facing change is not done until `CHANGELOG.md` says so.** `just changelog`
-prints what the history claims since the last tag; the file is written by hand on
-top of that, because a generated line says *what* changed and never *what to do
-about it*.
+A user-facing change is not done until `CHANGELOG.md` says so. `just changelog`
+prints what the history claims since the last tag, and the file is written by
+hand on top of that. A generated line says what changed, not what to do about it.
 
-Every breaking change wants its migration inline: the exact config line, flag
-spelling or import that restores the old behaviour. Two things that are not
-breaking still belong under `### Upgrading`: a `Renderer::SCHEMA` bump, which
-costs everyone one cold rebuild, and any new check that can fail a build which
-used to pass.
+Every breaking change needs its migration inline: the exact config line, flag
+spelling or import that restores the old behaviour. Two non-breaking changes
+also belong under `### Upgrading`: a `Renderer::SCHEMA` bump, which costs
+everyone one cold rebuild, and any new check that can fail a build that used to
+pass.
 
-Do not run `just changelog-full`. It overwrites the file and destroys every
-migration note in it.
+Do not run `just changelog-full`. It overwrites the file and destroys its
+migration notes.
 
 ## Reporting a bug
 
@@ -170,5 +168,5 @@ Include `baudelaire --version` (the long form, which lists the features this
 build has), the config, and the smallest content tree that reproduces it. Run
 with `-v` for per-page progress and debug logs, `-vv` for trace.
 
-For anything with a security impact, see [SECURITY.md](SECURITY.md) instead:
-report it privately rather than in an issue.
+For anything with a security impact, report it privately as described in
+[SECURITY.md](SECURITY.md), not in an issue.
