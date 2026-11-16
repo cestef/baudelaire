@@ -39,7 +39,11 @@ impl Target for Typst {
                 tool: "typst",
                 value: format!(
                     "--package-path {}",
-                    Paths(&crate::fs::resolved(&base).display().to_string())
+                    Paths(
+                        &crate::fs::plain(crate::fs::resolved(&base))
+                            .display()
+                            .to_string()
+                    )
                 ),
                 hint: Some("or TYPST_PACKAGE_PATH; tinymist takes it in typstExtraArgs"),
             }]
