@@ -63,7 +63,7 @@ impl Local {
     /// `~` expanded, and the path made absolute, because the record it lands in
     /// is read from wherever the next run happens to be.
     fn resolve(spec: &str) -> PathBuf {
-        crate::fs::canonical(crate::fs::expanded(spec))
+        crate::fs::plain(crate::fs::canonical(crate::fs::expanded(spec)))
     }
 }
 
