@@ -117,6 +117,30 @@ pub fn canonical(path: impl AsRef<Path>) -> PathBuf {
     std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
+/// `path` without the `\\?\` prefix Windows canonicalization adds.
+///
+/// Most tools cannot open a verbatim path. Unchanged off Windows, and for a
+/// verbatim path that has no plain spelling.
+pub fn plain(path: impl AsRef<Path>) -> PathBuf {
+    let path = path.as_ref();
+    if !cfg!(windows) {
+        return path.to_path_buf();
+    }
+    path.to_str()
+        .and_then(unprefixed)
+        .map_or_else(|| path.to_path_buf(), PathBuf::from)
+}
+
+fn unprefixed(text: &str) -> Option<String> {
+    if let Some(share) = text.strip_prefix(r"\\?\UNC\") {
+        return Some(format!(r"\\{share}"));
+    }
+    let drive = text.strip_prefix(r"\\?\")?;
+    let mut chars = drive.chars();
+    let lettered = chars.next()?.is_ascii_alphabetic() && chars.next()? == ':';
+    (lettered && matches!(chars.next(), None | Some('\\'))).then(|| drive.to_owned())
+}
+
 /// One spelling for a path whose file need not exist: the canonical form of its
 /// deepest existing ancestor, with the components below it appended as written.
 ///
@@ -276,7 +300,31 @@ impl<'a> Walk<'a> {
 mod tests {
     use std::path::Path;
 
-    use super::Contained;
+    use super::{Contained, unprefixed};
+
+    #[test]
+    fn a_verbatim_drive_loses_its_prefix() {
+        assert_eq!(
+            unprefixed(r"\\?\D:\git\site").as_deref(),
+            Some(r"D:\git\site")
+        );
+        assert_eq!(unprefixed(r"\\?\D:").as_deref(), Some("D:"));
+    }
+
+    #[test]
+    fn a_verbatim_share_becomes_a_unc_path() {
+        assert_eq!(
+            unprefixed(r"\\?\UNC\host\share\site").as_deref(),
+            Some(r"\\host\share\site")
+        );
+    }
+
+    #[test]
+    fn a_path_that_needs_its_prefix_keeps_it() {
+        for text in [r"D:\git", r"\\?\Volume{1234}\x", r"\\?\1:\x", "/home/x"] {
+            assert_eq!(unprefixed(text), None, "{text}");
+        }
+    }
 
     #[test]
     fn contained_accepts_an_ordinary_relative_path() {

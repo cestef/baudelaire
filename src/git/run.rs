@@ -175,7 +175,10 @@ impl<'a> Git<'a> {
     /// redirect it.
     fn command(&self, args: &[&'static str]) -> Command {
         let mut command = Command::new("git");
-        command.args(OPTIONS).args(args).current_dir(self.dir);
+        command
+            .args(OPTIONS)
+            .args(args)
+            .current_dir(crate::fs::plain(self.dir));
         for name in CLEARED {
             command.env_remove(name);
         }
