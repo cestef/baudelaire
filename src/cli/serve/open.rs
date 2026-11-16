@@ -14,6 +14,10 @@ use crate::error::Result;
 pub(super) struct Open {
     /// The project root, canonical; every requested file must resolve inside it.
     root: PathBuf,
+    /// The project root as the author spelled it, made absolute and never
+    /// canonicalized: on Windows the canonical form is a `\\?\` path most editors
+    /// cannot open.
+    home: PathBuf,
     /// The program, then each of its arguments, run directly and never through
     /// a shell.
     command: Vec<String>,
@@ -26,6 +30,7 @@ impl Open {
     pub(super) fn new(config: &Config) -> Option<Self> {
         let root = config.root.clone();
         (!config.serve.editor.is_empty()).then(|| Self {
+            home: std::path::absolute(&root).unwrap_or_else(|_| root.clone()),
             root: crate::fs::canonicalize(&root).unwrap_or(root),
             command: config.serve.editor.clone(),
         })
@@ -34,15 +39,14 @@ impl Open {
     /// Run the editor at `at`, once the file it names is confirmed to be one of
     /// the project's own.
     pub(super) fn at(&self, at: &At<'_>) -> Result<(), Unopenable> {
-        let path = crate::fs::canonicalize(self.root.join(at.file))
-            .ok()
-            .filter(|path| path.starts_with(&self.root) && path.is_file())
+        let path = self
+            .resolve(at.file)
             .ok_or_else(|| Unopenable::Outside(at.file.to_owned()))?;
         let mut words = self.substituted(&path.display().to_string(), at);
         let program = words.remove(0);
         let mut child = Command::new(&program)
             .args(words)
-            .current_dir(&self.root)
+            .current_dir(&self.home)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -55,6 +59,17 @@ impl Open {
             let _ = child.wait();
         });
         Ok(())
+    }
+
+    /// The project file `file` names, spelled under [`Open::home`], or `None`
+    /// when it is not a file inside the project.
+    ///
+    /// The containment check runs on canonical paths, so a symlink cannot lead
+    /// out; what is returned is the same file without the canonical spelling.
+    fn resolve(&self, file: &str) -> Option<PathBuf> {
+        let real = crate::fs::canonicalize(self.root.join(file)).ok()?;
+        let inside = real.strip_prefix(&self.root).ok()?;
+        real.is_file().then(|| self.home.join(inside))
     }
 
     /// The command with `{file}`, `{line}` and `{column}` filled in, per word,
@@ -138,5 +153,44 @@ impl Unopenable {
             let _ = write!(text, "\nhelp: {help}");
         }
         text
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::Open;
+
+    fn open(root: &std::path::Path, home: &std::path::Path) -> Open {
+        Open {
+            root: crate::fs::canonical(root),
+            home: home.to_path_buf(),
+            command: vec!["true".into()],
+        }
+    }
+
+    #[test]
+    fn a_file_is_spelled_under_the_root_as_the_author_wrote_it() {
+        let tmp = tempfile::tempdir().unwrap();
+        let real = tmp.path().join("real");
+        std::fs::create_dir_all(real.join("content")).unwrap();
+        std::fs::write(real.join("content/a.typ"), "x").unwrap();
+        let link = tmp.path().join("link");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+
+        let found = open(&link, &link).resolve("content/a.typ");
+
+        assert_eq!(found, Some(link.join("content/a.typ")));
+    }
+
+    #[test]
+    fn a_symlink_leading_out_of_the_project_is_refused() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (root, outside) = (tmp.path().join("root"), tmp.path().join("outside"));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("secret.typ"), "x").unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("escape")).unwrap();
+
+        assert_eq!(open(&root, &root).resolve("escape/secret.typ"), None);
     }
 }
