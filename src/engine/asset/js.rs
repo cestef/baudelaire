@@ -79,7 +79,7 @@ impl Js {
             .enable_all()
             .build()
             .map_err(AssetError::runtime)?;
-        let cwd = fs::canonical(&cx.config.paths.assets);
+        let cwd = fs::plain(fs::canonical(&cx.config.paths.assets));
         Ok(Self {
             runtime,
             cwd,
@@ -102,7 +102,7 @@ impl Js {
         let full = root.join(path);
         fs::canonicalize(&full).map_or_else(
             |_| Err(AssetError::tsconfig(path.display()).into()),
-            |full| Ok(TsConfig::Manual(full)),
+            |full| Ok(TsConfig::Manual(fs::plain(full))),
         )
     }
 
@@ -110,7 +110,7 @@ impl Js {
     /// since the pipeline has nowhere to write the extra chunks code splitting
     /// would produce.
     pub(super) fn bundle(&self, entry: &Path) -> Result<Produced> {
-        let import = fs::canonical(entry);
+        let import = fs::plain(fs::canonical(entry));
         let options = BundlerOptions {
             input: Some(vec![InputItem {
                 name: None,
