@@ -61,7 +61,7 @@ templates are a rewrite.
   [`taxonomies = [{ name = "tags" }]`], [`content { taxonomies { tags { listing } } }`],
   [`generate_feeds`, `feed_filenames`], [`generate { feed { formats "atom" } }`],
   [`build_search_index`], [`generate { search { } }`],
-  [`compile_sass`], [always on: a `.scss` under `paths { assets }` is compiled],
+  [`compile_sass`], [a `.scss` under `paths { assets }` is compiled, with `--features sass`],
   [`minify_html`], [none],
   [`[markdown] highlight_code`], [always on; `html { highlight }` maps the colours to classes],
   [`[markdown] smart_punctuation`], [`content { markdown { extensions "smart" } }`, off by default as it is there],
@@ -336,7 +336,7 @@ An HTML comment is dropped either way.
 
 == Order of work
 
-+ `baudelaire init` beside the old site, then copy `static/` across and move `sass/` into `assets/`. The `.scss` files are compiled where they lie and published as `.css`; partials keep their leading `_` and are published by nobody.
++ `baudelaire init` beside the old site, then copy `static/` across and move `sass/` into `assets/`. Install with `cargo install baudelaire --features sass`, and the `.scss` files are compiled where they lie and published as `.css`; partials keep their leading `_` and are published by nobody.
 + Copy `content/` across as it stands, `+++` blocks included, and delete the `_index.md` files.
 + Rename the frontmatter keys that moved: `weight` to `order`, `aliases` to `redirect`, and lift `[taxonomies]` to the top level. Nothing fails if you miss one, so grep the tree instead of relying on a build.
 + Port `config.toml` to `config.kdl`, one block at a time. An unknown key fails the build with a suggestion, so this converges fast.

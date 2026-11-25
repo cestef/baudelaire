@@ -98,6 +98,8 @@ $env:FLAVOR = "slim"; .\install.ps1
 From source, use `cargo install baudelaire --no-default-features`, and you can
 add any single capability back with `--features css`.
 
+`sass` is in neither flavor. Add it with `cargo install baudelaire --features sass`.
+
 What `slim` leaves out:
 
 #table(
@@ -110,8 +112,8 @@ What `slim` leaves out:
   [`js`], [`assets { bundle }` warns and `.js` files are copied verbatim.],
   [`css`], [`assets { minify }` and `assets { targets }` warn, and `.css` files
     are copied verbatim.],
-  [`sass`], [A `.scss` or `.sass` file under the asset tree warns and is left
-    where it lies, so nothing is published from it.],
+  [`sass`], [Off in both flavors. A `.scss` or `.sass` file under the asset
+    tree warns and is left where it lies, so nothing is published from it.],
   [`tailwind`], [`assets { tailwind }` warns and no utility stylesheet is
     generated.],
   [`images`], [`assets { images { optimize } }` and `{ responsive }` warn, and

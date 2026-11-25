@@ -74,7 +74,7 @@ jobs:
           paths: target
 
       - name: build baudelaire
-        run: cargo build
+        run: cargo build --features sass
 
       # The working tree's docs, compiled and link-checked by the working tree's
       # binary, writing nothing. Nothing deploys this: the site serves released

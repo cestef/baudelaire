@@ -122,7 +122,7 @@ name, and naming none leaves the CSS exactly as written.
 
 == Sass <sass>
 
-`.scss` and `.sass` files compile to CSS and join the pipeline: #link("assets/sass.typ")[Sass].
+`.scss` and `.sass` files compile to CSS and join the pipeline, in a binary built with `--features sass`: #link("assets/sass.typ")[Sass].
 == Tailwind <tailwind>
 
 A `tailwind { }` block generates a utility stylesheet from the classes the site uses: #link("assets/tailwind.typ")[Tailwind].

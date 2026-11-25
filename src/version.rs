@@ -41,14 +41,23 @@ impl Version {
         ("themes", cfg!(feature = "themes")),
     ];
 
+    /// The rows of [`Version::FEATURES`] that neither released flavor carries,
+    /// so a binary with one of them on matches no published tarball.
+    pub const OPT_IN: &'static [&'static str] = &["sass"];
+
     /// The released flavor this binary matches, named the way `install.sh`
     /// spells it, or `custom` when no published tarball matches it.
     pub fn flavor() -> &'static str {
-        let on = Self::FEATURES.iter().filter(|(_, on)| *on).count();
-        match on {
-            0 => "slim",
-            n if n == Self::FEATURES.len() => "full",
-            _ => "custom",
+        let released = |name: &str| !Self::OPT_IN.contains(&name);
+        if Self::FEATURES.iter().all(|(_, on)| !on) {
+            "slim"
+        } else if Self::FEATURES
+            .iter()
+            .all(|(name, on)| *on == released(name))
+        {
+            "full"
+        } else {
+            "custom"
         }
     }
 
@@ -120,10 +129,11 @@ mod tests {
     fn flavor_names_a_released_build_or_admits_it_cannot() {
         assert!(matches!(Version::flavor(), "full" | "slim" | "custom"));
         let on = Version::FEATURES.iter().filter(|(_, on)| *on).count();
+        let released = Version::FEATURES.len() - Version::OPT_IN.len();
         match Version::flavor() {
-            "full" => assert_eq!(on, Version::FEATURES.len()),
+            "full" => assert_eq!(on, released),
             "slim" => assert_eq!(on, 0),
-            _ => assert!(on > 0 && on < Version::FEATURES.len()),
+            _ => assert!(on > 0),
         }
     }
 
@@ -137,8 +147,9 @@ mod tests {
         }
     }
 
-    /// `flavor()` calls a build `full` when every row is on, so a default
-    /// feature with no row makes a partial build report as a published one.
+    /// `flavor()` calls a build `full` when every released row is on, so a
+    /// default feature with no row makes a partial build report as a published
+    /// one.
     #[test]
     fn every_default_feature_has_a_row() {
         let manifest = toml_edit::ImDocument::parse(include_str!("../Cargo.toml"))
@@ -154,9 +165,10 @@ mod tests {
             assert!(rows.contains(name), "`{name}` is default-on with no row");
         }
         for name in &rows {
-            assert!(
+            assert_eq!(
                 defaults.contains(name),
-                "`{name}` has a row but is not default-on"
+                !Version::OPT_IN.contains(name),
+                "`{name}` is default-on exactly when it is not opt-in"
             );
         }
     }

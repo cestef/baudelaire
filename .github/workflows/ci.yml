@@ -174,7 +174,7 @@ jobs:
       matrix:
         include:
           - flavor: default
-            features: ""
+            features: --features sass
           - flavor: slim
             features: --no-default-features
     steps:
@@ -304,7 +304,7 @@ jobs:
       matrix:
         include:
           - flavor: default
-            features: ""
+            features: --features sass
           - flavor: slim
             features: --no-default-features
     steps:
@@ -421,7 +421,7 @@ jobs:
       # the tests too. One job rather than a matrix: the second flavor reuses
       # the first's dependency graph, which costs less than a second restore.
       - name: check
-        run: cargo check --workspace --all-targets --locked
+        run: cargo check --workspace --all-targets --locked --features sass
 
       - name: check (slim)
         run: cargo check --workspace --all-targets --locked --no-default-features
@@ -491,7 +491,7 @@ jobs:
         id: cov
         uses: cestef/actions/llvm-cov@548fe09721b21f2405062c24f835e32c04f1e0f2
         with:
-          args: --workspace
+          args: --workspace --features sass
           runner: nextest
           format: cobertura
           output: cobertura.xml

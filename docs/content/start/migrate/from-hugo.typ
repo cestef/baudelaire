@@ -339,7 +339,7 @@ to a warning, which helps when working through a large tree. See
   [`{{ .Site.Data.authors }}`], [`yaml("/data/authors.yaml")`],
   [`{{ i18n "readMore" }}`], [`page.strings.at("read-more", default: "Read more")`],
   [`{{ .Permalink }}`], [not available: a page does not know its own URL],
-  [`resources.Get | toCSS`], [always on: a `.scss` under `paths { assets }` is compiled; Tailwind is `assets { tailwind { } }`],
+  [`resources.Get | toCSS`], [a `.scss` under `paths { assets }` is compiled, with `--features sass`; Tailwind is `assets { tailwind { } }`],
   [`js.Build`], [`assets { bundle }`],
   [`| fingerprint`], [`assets { fingerprint }` and `security { sri }`],
   [`.Resize "600x"`], [`assets { images { responsive { widths .. } } }`],

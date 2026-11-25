@@ -7,6 +7,10 @@
 # The released `slim` flavor: no embedded fonts, js, css, images or cards.
 SLIM := "--no-default-features"
 
+# The released default flavor plus `sass`, which ships in neither flavor and is
+# tested here rather than not at all.
+FULL := "--features sass"
+
 # CI lints and tests twice, once per release flavor, because
 # `--no-default-features` compiles a different set of modules. The slim pass
 # runs last: it is the rarer break, and the default set is what most edits hit.
@@ -15,7 +19,7 @@ SLIM := "--no-default-features"
 #
 # `audit` needs no toolchain and no compile, so it runs alongside `fmt` at the
 # front rather than behind the two test passes.
-ci: fmt workflows audit clippy test (clippy SLIM) (test SLIM)
+ci: fmt workflows audit (clippy FULL) (test FULL) (clippy SLIM) (test SLIM)
 
 # Formatting is compile-free, so it runs first and fails fastest.
 fmt:
@@ -58,7 +62,7 @@ msrv:
     [ -n "$version" ] || { echo "Cargo.toml has no rust-version"; exit 1; }
     rustup toolchain install "$version" --profile minimal --no-self-update
     export RUSTUP_TOOLCHAIN="$version"
-    cargo check --workspace --all-targets --locked
+    cargo check --workspace --all-targets --locked --features sass
     cargo check --workspace --all-targets --locked --no-default-features
 
 # Lint one flavor; compiles the workspace, but cheaper than running the tests.

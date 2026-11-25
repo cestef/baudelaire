@@ -19,6 +19,16 @@ chores are visible in the git history and change nothing for a site.
   wait, where one such response used to fail the whole deploy. Other statuses fail at
   once.
 
+### Changed
+
+- **Sass is no longer in the released binaries.** The `sass` cargo feature is off by
+  default, so a `.scss` or `.sass` file under the asset tree now warns and is left
+  where it lies. To keep compiling Sass, build with it:
+
+  ```sh
+  cargo install baudelaire --features sass
+  ```
+
 ### Fixed
 
 - **The SSH deploy runs on russh 0.65.** It fixes RUSTSEC-2026-0492, where a hostile

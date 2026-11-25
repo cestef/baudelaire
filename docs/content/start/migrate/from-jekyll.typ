@@ -61,7 +61,7 @@ Read #link("urls.typ")[keeping your URLs] before you touch permalinks.
   [`exclude`], [collection globs, or keep the file out of `content/`],
   [`markdown`, `kramdown`], [`content { markdown { extensions } }`. Kramdown's typographic quotes are `extensions "smart"`, which is off until asked for.],
   [`highlighter`], [`html { highlight }`, which maps compiler colours to classes],
-  [`sass`], [always on: a `.scss` under `paths { assets }` is compiled],
+  [`sass`], [a `.scss` under `paths { assets }` is compiled, with `--features sass`],
   [`theme`, `remote_theme`], [`theme`, pointing at a directory],
 )
 
@@ -312,7 +312,7 @@ you now need a workflow that runs baudelaire; see
 
 == Order of work
 
-+ `baudelaire init` beside the old site, then copy the asset tree across, `_sass/` included. A `.scss` under `paths { assets }` is compiled and published as `.css`, and a partial keeps its leading `_`.
++ `baudelaire init` beside the old site, then copy the asset tree across, `_sass/` included. With a binary built `--features sass`, a `.scss` under `paths { assets }` is compiled and published as `.css`, and a partial keeps its leading `_`.
 + Copy `_posts/` into `content/posts/` unchanged (the YAML blocks parse as they are), then rename the keys from the table above. Rename the dated filenames, or give each a `slug`, then set the collection's `permalink` to the old shape.
 + Rewrite the layouts that section needs, starting with the shell.
 + Replace each plugin with its switch from the table above.

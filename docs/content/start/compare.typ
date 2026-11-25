@@ -69,7 +69,7 @@ A page compiles, so one source can reach more than one target.
   [Feeds, sitemap], [built in], [built in], [built in], [plugin], [integration],
   [Search index], [built in], [built in], [by hand], [plugin], [plugin],
   [Multiple languages], [built in], [built in], [built in], [plugin], [built in],
-  [CSS], [Sass, Tailwind, minified], [Sass], [Sass, PostCSS], [plugin], [Vite],
+  [CSS], [Sass (opt-in), Tailwind, minified], [Sass], [Sass, PostCSS], [plugin], [Vite],
   [JS bundling], [rolldown], [none], [esbuild], [plugin], [Vite],
   [Fingerprint + SRI], [built in], [cachebust], [built in], [plugin], [built in],
   [Image variants], [built in], [built in], [built in], [plugin], [built in],
@@ -116,7 +116,7 @@ page breaks) has no HTML meaning, and an upgrade can change the emitted markup.
 registry, and no plugin API. Typst's package registry is available to pages
 and templates, which helps with content but not with the build.
 
-*PostCSS.* Sass compiles in the build, `assets { tailwind }` generates the
+*PostCSS.* Sass compiles in a build with `--features sass`, `assets { tailwind }` generates the
 utility sheet, and `assets { minify }` runs the result through Lightning CSS.
 There is no PostCSS step, and no LESS or Stylus: run those from
 `hooks { before }`.

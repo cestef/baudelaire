@@ -15,7 +15,13 @@ assets/
   style.scss    -> /assets/style.css
 ```
 
-Nothing to turn on, and no toolchain to install.
+Sass is not in the released binaries. Build one that has it:
+
+```sh
+cargo install baudelaire --features sass
+```
+
+A binary without it leaves a `.scss` where it lies and warns that it did.
 
 ```scss
 // assets/style.scss
@@ -50,8 +56,3 @@ wins.
   [Source maps], [Map the compiled CSS, not the Sass: grass emits no mapping to chain back to.],
   [Output], [Always expanded. `minify` is Lightning CSS's pass, one step later.],
 )
-
-#callout(kind: "note")[
-  Sass is the `sass` cargo feature, on in the default build. A binary without it
-  leaves a `.scss` where it lies and warns that it did.
-]

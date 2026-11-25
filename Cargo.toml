@@ -62,7 +62,6 @@ default = [
   "embedded-fonts",
   "js",
   "css",
-  "sass",
   "tailwind",
   "images",
   "cards",
@@ -86,7 +85,7 @@ js = ["dep:rolldown", "dep:rolldown_common", "dep:tokio"]
 # CSS minification and `url()` + `@import` fingerprint rewriting via lightningcss
 css = ["dep:lightningcss", "dep:parcel_sourcemap"]
 
-# Sass compilation via grass
+# Sass compilation via grass; off by default and in the released binaries
 sass = ["dep:grass", "css"]
 
 # TailwindCSS support via encre-css
