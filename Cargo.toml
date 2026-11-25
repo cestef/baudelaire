@@ -186,7 +186,7 @@ tokio = { version = "1.52.3", features = [
   "time",
   "io-util",
 ], optional = true }
-russh = { version = "0.62.2", default-features = false, features = [
+russh = { version = "0.65.4", default-features = false, features = [
   "ring",
   "rsa",
   "flate2",
@@ -239,7 +239,7 @@ miette = { version = "7" }
 regex = { version = "1" }
 serde_json = { version = "1" }
 criterion = { version = "0.8", features = ["html_reports"] }
-russh = { version = "0.62.2", default-features = false, features = [
+russh = { version = "0.65.4", default-features = false, features = [
   "ring",
   "rsa",
   "flate2",

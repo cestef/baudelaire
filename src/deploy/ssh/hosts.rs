@@ -8,7 +8,7 @@ use parking_lot::Mutex;
 
 use russh::client;
 use russh::keys::known_hosts;
-use russh::keys::{Error as KeyError, HashAlg, PublicKey};
+use russh::keys::{Error as KeyError, HashAlg, PublicKey, PublicKeyOrCertificate};
 
 use crate::config::SshConfig;
 
@@ -96,11 +96,13 @@ impl client::Handler for Client {
     type Error = russh::Error;
 
     /// Checked either way: non-strict still records what the check concluded,
-    /// so the caller warns rather than accepting a key without a word.
+    /// so the caller warns rather than accepting a key without a word. A host
+    /// certificate is checked by the key it certifies.
     fn check_server_key(
         &mut self,
-        key: &PublicKey,
+        presented: &PublicKeyOrCertificate,
     ) -> impl Future<Output = Result<bool, Self::Error>> {
+        let key = &presented.public_key();
         let verdict = self.known.check(key);
         *self.verdict.lock() = Some(Checked {
             verdict,

@@ -21,6 +21,11 @@ chores are visible in the git history and change nothing for a site.
 
 ### Fixed
 
+- **The SSH deploy runs on russh 0.65.** It fixes RUSTSEC-2026-0492, where a hostile
+  server could send channel messages for a channel the client never opened, and moves
+  RSA keys onto the constant-time `rsa` 0.10. A host certificate is checked by the key
+  it certifies.
+
 - **`theme add`, `update` and `remove` no longer follow a symlink out of the theme.** A
   directory inside an installed copy that had been replaced by a link elsewhere let an
   update write, or a remove delete, at the link's target. A path that resolves outside

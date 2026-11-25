@@ -157,7 +157,7 @@ impl Handler for SshServer {
     async fn auth_publickey(
         &mut self,
         _user: &str,
-        _key: &russh::keys::PublicKey,
+        _key: russh::server::VerifiedPublicKey<'_>,
     ) -> Result<Auth, Self::Error> {
         // Force the client onto password auth, ignoring any ssh-agent keys.
         Ok(Auth::reject())

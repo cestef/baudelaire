@@ -29,20 +29,6 @@ all-features = true
 # again. An advisory is never silenced by loosening the whole check, and an
 # entry whose reasoning has expired is a bug in this file.
 ignore = [
-    # RUSTSEC-2023-0071, `rsa`, reached only through `russh` (the `ssh` deploy
-    # backend). A timing sidechannel in RSA private-key operations, with no
-    # fixed version published upstream, so there is nothing to upgrade to.
-    #
-    # Baudelaire's use is an SSH *client* authenticating to a host the user
-    # chose. Recovering the key needs timing observations of those operations,
-    # which means the deploy target itself is the attacker; a host with your
-    # deploy credentials is already past this. It also only involves the `rsa`
-    # crate at all when the key is RSA, and an ed25519 key never touches this
-    # code path, which is why the deploy guide recommends one.
-    #
-    # Revisit when russh publishes a release on a constant-time `rsa`.
-    { id = "RUSTSEC-2023-0071", reason = "ssh client-side RSA only; ed25519 keys are unaffected" },
-
     # RUSTSEC-2026-0194 and -0195, `quick-xml 0.38`, both denial-of-service on
     # malformed XML. Baudelaire itself already uses 0.41, which is patched;
     # 0.38 arrives through `citationberg` -> `hayagriva` -> `typst-library`,
