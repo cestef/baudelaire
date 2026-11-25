@@ -82,6 +82,44 @@ pub enum ContentError {
         span: Option<SourceSpan>,
     },
 
+    #[error(
+        "frontmatter {} in {} names {}, which is not inside the page's folder",
+        Code("verbatim"),
+        Text(.path),
+        Code(.entry)
+    )]
+    #[diagnostic(
+        code(baudelaire::content::verbatim_outside),
+        help("write a path relative to the page's folder, with no `..`: `(\"demo\",)`")
+    )]
+    VerbatimOutside {
+        path: String,
+        entry: String,
+        #[source_code]
+        page: Option<NamedSource<String>>,
+        #[label("outside the page's folder")]
+        span: Option<SourceSpan>,
+    },
+
+    #[error(
+        "frontmatter {} in {} names {}, which is not there",
+        Code("verbatim"),
+        Text(.path),
+        Code(.entry)
+    )]
+    #[diagnostic(
+        code(baudelaire::content::verbatim_missing),
+        help("the path is relative to the page's folder, and a symlink is not followed")
+    )]
+    VerbatimMissing {
+        path: String,
+        entry: String,
+        #[source_code]
+        page: Option<NamedSource<String>>,
+        #[label("no file or folder by this name beside the page")]
+        span: Option<SourceSpan>,
+    },
+
     #[error("{} declares frontmatter with the removed `#frontmatter(..)` call", Text(.path))]
     #[diagnostic(
         code(baudelaire::content::frontmatter_call),
@@ -341,6 +379,38 @@ impl ContentError {
     ) -> (Option<NamedSource<String>>, Option<SourceSpan>) {
         let page = span.map(|_| NamedSource::new(path.display().to_string(), source.to_owned()));
         (page, span)
+    }
+
+    pub fn verbatim_outside(
+        path: &std::path::Path,
+        source: &str,
+        span: Option<SourceSpan>,
+        entry: &str,
+    ) -> Self {
+        let (page, span) = Self::located(path, source, span);
+        Self::VerbatimOutside {
+            path: path.display().to_string(),
+            entry: entry.to_owned(),
+            page,
+            span,
+        }
+    }
+
+    /// A `verbatim` entry naming nothing; `span` is `None` when the page was
+    /// read from the discovery cache and its source is not at hand.
+    pub fn verbatim_missing(
+        path: &std::path::Path,
+        source: &str,
+        span: Option<SourceSpan>,
+        entry: &str,
+    ) -> Self {
+        let (page, span) = Self::located(path, source, span);
+        Self::VerbatimMissing {
+            path: path.display().to_string(),
+            entry: entry.to_owned(),
+            page,
+            span,
+        }
     }
 
     pub fn frontmatter_call(path: &std::path::Path) -> Self {

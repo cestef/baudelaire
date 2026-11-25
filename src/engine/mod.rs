@@ -153,8 +153,9 @@ impl Engine {
     /// its own state; the pipeline itself is [`build::Phase::ORDER`].
     fn run(&self, ui: &Ui) -> Result<Stats> {
         let timer = Timer::start();
-        let statics = self.staged(ui)?;
+        let mut statics = self.staged(ui)?;
         let planned = self.planned("planned build", ui)?;
+        Static::new(&self.config, self.theme.as_ref()).verbatim(&planned.pages, &mut statics)?;
         let warned = ui.warnings();
         self.announce(&planned, ui);
         let hooks = Hooks::new(&self.config);

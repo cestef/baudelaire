@@ -14,6 +14,11 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **A page ships files and folders beside it untouched.** `verbatim: ("demo",)` in a
+  page's frontmatter copies `demo/`, relative to the page's folder, to the same place
+  beside its output, unprocessed. A page source inside it is copied rather than built,
+  and an entry that does not exist or climbs out with `..` fails the build.
+
 - **An S3 request retries a transient failure.** A `429`, a `500`, `502`, `503` or
   `504`, a timeout or a dropped connection is tried up to four times with a doubling
   wait, where one such response used to fail the whole deploy. Other statuses fail at

@@ -1,0 +1,136 @@
+// A page's `verbatim` frontmatter: files and folders beside the page, shipped
+// beside its output exactly as they are.
+
+scenario "a verbatim folder is copied beside the page untouched" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public"; }
+      """#
+    "content/posts/cat/index.typ" #"""
+      #let frontmatter = (title: "Cat", verbatim: ("demo",))
+      Cat.
+      """#
+    "content/posts/cat/demo/index.html" #"""
+      <!doctype html><script src="cat.js"></script>
+      """#
+    "content/posts/cat/demo/js/cat.js" #"""
+      const meow = 1;
+      """#
+  }
+  expect {
+    ok
+    file "posts/cat/index.html" { contains "Cat." }
+    file "posts/cat/demo/index.html" { equals "<!doctype html><script src=\"cat.js\"></script>" }
+    file "posts/cat/demo/js/cat.js" { equals "const meow = 1;" }
+  }
+}
+
+// The entry is resolved against the page's own folder and lands beside the
+// page's output, so a relative link from the page reaches it either way.
+scenario "a verbatim file beside a flat page lands beside its html" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public"; }
+      links { style "flat" }
+      """#
+    "content/posts/cat.typ" #"""
+      #let frontmatter = (title: "Cat", verbatim: ("cat.svg",))
+      Cat.
+      """#
+    "content/posts/cat.svg" #"""
+      <svg/>
+      """#
+  }
+  expect {
+    ok
+    file "posts/cat.html"
+    file "posts/cat.svg" { equals "<svg/>" }
+  }
+}
+
+// Verbatim means nothing inside is processed, so a page source in the folder is
+// a file to copy rather than a page to build.
+scenario "a page inside a verbatim folder is shipped as a file" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public"; }
+      """#
+    "content/posts/cat/index.typ" #"""
+      #let frontmatter = (title: "Cat", verbatim: ("demo",))
+      Cat.
+      """#
+    "content/posts/cat/demo/README.md" #"""
+      # Demo
+      """#
+  }
+  expect {
+    ok
+    file "posts/cat/demo/README.md" { equals "# Demo" }
+    absent "posts/cat/demo/README/index.html"
+    absent "posts/cat/demo/index.html"
+  }
+}
+
+scenario "a verbatim entry naming nothing fails the build" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public"; }
+      """#
+    "content/cat.typ" #"""
+      #let frontmatter = (title: "Cat", verbatim: ("dmeo",))
+      Cat.
+      """#
+  }
+  expect {
+    fails {
+      code "baudelaire::content::verbatim_missing"
+      contains "dmeo"
+    }
+  }
+}
+
+// The entry reaches down from the page's folder and never up, so a page cannot
+// publish a file from elsewhere in the repository.
+scenario "a verbatim entry cannot climb out of the page's folder" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public"; }
+      """#
+    "secret.txt" "hunter2"
+    "content/cat.typ" #"""
+      #let frontmatter = (title: "Cat", verbatim: ("../secret.txt",))
+      Cat.
+      """#
+  }
+  expect {
+    fails { code "baudelaire::content::verbatim_outside" }
+  }
+}
+
+scenario "a markdown page declares verbatim in its frontmatter" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public"; }
+      """#
+    "content/cat/index.md" #"""
+      ---
+      title: Cat
+      verbatim: [demo]
+      ---
+      Cat.
+      """#
+    "content/cat/demo/a.txt" "a"
+  }
+  expect {
+    ok
+    file "cat/demo/a.txt" { equals "a" }
+  }
+}

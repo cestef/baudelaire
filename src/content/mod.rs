@@ -21,6 +21,7 @@ pub mod sourcemap;
 mod stem;
 pub mod strings;
 pub mod taxonomy;
+pub mod verbatim;
 
 pub use cache::DiscoveryCache;
 pub use date::{Iso, Localized};
@@ -37,6 +38,7 @@ pub use slug::Slug;
 pub use sourcemap::{Rebased, SourceMap};
 pub use strings::Strings;
 pub use taxonomy::Taxonomy;
+pub use verbatim::Verbatim;
 
 use crate::config::Config;
 use crate::error::{ContentError, Result};
@@ -115,7 +117,8 @@ impl Plan {
     /// The site's full page set: eligible content pages plus generated taxonomy and
     /// paginated index pages, with permalink collisions rejected.
     pub fn of(config: &Config, project: &Project) -> Result<Self> {
-        let collections = Discovery::all(config, project)?;
+        let mut collections = Discovery::all(config, project)?;
+        Verbatim::withhold(&mut collections)?;
         let held = Held::of(&collections, config);
         for collection in &collections {
             tracing::debug!(

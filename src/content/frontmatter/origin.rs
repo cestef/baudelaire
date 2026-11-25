@@ -291,6 +291,18 @@ impl<'a> At<'a> {
         .into()
     }
 
+    /// A `verbatim` entry that climbs out of the page's directory.
+    pub(super) fn outside(self, entry: &str) -> BaudelaireErrorKind {
+        ContentError::verbatim_outside(self.origin.path, self.origin.text(), self.span(), entry)
+            .into()
+    }
+
+    /// A `verbatim` entry that names nothing beside the page.
+    pub(super) fn absent(self, entry: &str) -> BaudelaireErrorKind {
+        ContentError::verbatim_missing(self.origin.path, self.origin.text(), self.span(), entry)
+            .into()
+    }
+
     /// A name this key does not answer to, underlined where it was written;
     /// `valid` is the set of names it does.
     pub(super) fn name(self, got: &str, valid: &[&str]) -> BaudelaireErrorKind {

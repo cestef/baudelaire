@@ -17,6 +17,8 @@ pub(super) trait ValueExt {
     /// A string that names a URL this page writes, refused when it climbs out
     /// of the output directory.
     fn url(&self, at: At<'_>) -> Result<String>;
+    /// A list of paths under the page's own directory, each of which exists.
+    fn entries(&self, at: At<'_>) -> Result<Vec<String>>;
     /// The list counterpart of [`ValueExt::url`].
     fn urls(&self, at: At<'_>) -> Result<Vec<String>>;
     /// This value's typst type name with the article that reads before it

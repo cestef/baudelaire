@@ -53,6 +53,7 @@ the block is read into the same dict.
   [`alt`], [str], [What that image shows. Empty marks it decorative.],
   [`author`], [str], [Who wrote the page, over the site default for its language.],
   [`exclude`], [list], [The generated files this page declines to appear in. See #link(<exclude>)[Opting out].],
+  [`verbatim`], [list], [Files and folders beside the page, copied beside its output untouched. See #link(<verbatim>)[Shipping files as they are].],
 )
 
 A key with the wrong type stops the build with a message naming the file and
@@ -163,6 +164,44 @@ A name outside that list fails the build rather than being ignored.
   `exclude` names generated *files*, not listings. A page left out of the search
   index is still listed by its collection index, and still reachable: to leave a
   page out of listings, see `content { drafts }` and `expiry` above.
+]
+
+== Shipping files as they are <verbatim>
+
+A demo, a hand-written HTML page or a folder of files that point at each other
+belongs next to the page that talks about it. Name it in `verbatim`:
+
+```typ
+// content/posts/cat/index.typ
+#let frontmatter = (
+  title: "Halloween cat",
+  verbatim: ("demo",),
+)
+
+#html.elem("iframe", attrs: (src: "demo/index.html"))
+```
+
+```text
+content/posts/cat/
+  index.typ          -> /posts/cat/
+  demo/index.html    -> /posts/cat/demo/index.html
+  demo/cat.js        -> /posts/cat/demo/cat.js
+```
+
+#table(
+  columns: 2,
+  align: (left, left),
+  table.header([Detail], [Is]),
+  [Paths], [Relative to the page's folder. A folder or a single file.],
+  [Lands], [Beside the page's output, so a relative link from the page reaches it under `clean` and `flat` URLs alike.],
+  [Processed], [Never. No minifying, no fingerprinting, no link checks inside it.],
+  [Pages inside], [A `.typ` or `.md` in the folder is copied as a file and not built as a page.],
+  [Errors], [A path that does not exist, or that climbs out with `..`, fails the build and is underlined in the frontmatter.],
+)
+
+#callout(kind: "note")[
+  A symlink is not followed out of the page's folder, so `verbatim` can only
+  ship what sits under it.
 ]
 
 == Everything else

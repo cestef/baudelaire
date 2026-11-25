@@ -5,6 +5,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::config::Config;
+use crate::content::{Page, Verbatim};
 use crate::engine::layers::Layers;
 use crate::error::Result;
 use crate::fs;
@@ -47,23 +48,53 @@ impl<'a> Static<'a> {
     pub fn copy(&self) -> Result<Copied> {
         let mut out = Copied::default();
         for source in self.sources.files()? {
-            let file = &source.path;
-            let rel = source.rel.as_path();
-            let len = file.metadata().map_or(0, |m| m.len());
-            out.paths.push(self.dist.join(rel));
-            let dst = self.destination(rel);
-            if Self::current(file, &dst) {
-                continue;
-            }
-            if let Some(parent) = dst.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            fs::copy(file, &dst)?;
-            Self::stamp(file, &dst);
-            out.count += 1;
-            out.bytes += len;
+            self.place(&source.path, &source.rel, &mut out)?;
         }
         Ok(out)
+    }
+
+    /// Copy what each page's `verbatim` entries name to the same place beside
+    /// its output, onto `out`.
+    pub fn verbatim(&self, pages: &[Page], out: &mut Copied) -> Result<()> {
+        for entry in pages
+            .iter()
+            .map(Verbatim::of)
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+        {
+            let rel = entry
+                .output
+                .strip_prefix(self.dist)
+                .unwrap_or(&entry.output);
+            if entry.source.is_file() {
+                self.place(&entry.source, rel, out)?;
+                continue;
+            }
+            for file in fs::Walk::new(&entry.source).files()? {
+                let inner = file.strip_prefix(&entry.source).unwrap_or(&file);
+                self.place(&file, &rel.join(inner), out)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Copy `file` to `rel` under `dist`, unless it is already
+    /// [`current`](Static::current) there.
+    fn place(&self, file: &Path, rel: &Path, out: &mut Copied) -> Result<()> {
+        out.paths.push(self.dist.join(rel));
+        let dst = self.destination(rel);
+        if Self::current(file, &dst) {
+            return Ok(());
+        }
+        if let Some(parent) = dst.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::copy(file, &dst)?;
+        Self::stamp(file, &dst);
+        out.count += 1;
+        out.bytes += file.metadata().map_or(0, |m| m.len());
+        Ok(())
     }
 
     /// Where a static file at `rel` is written: its place under `dist`, unless

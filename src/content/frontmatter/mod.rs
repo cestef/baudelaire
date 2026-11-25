@@ -154,6 +154,14 @@ const FIELDS: &[(&str, Shape, Field)] = &[
         },
     ),
     (
+        "verbatim",
+        || FieldType::List(Box::new(FieldType::Str)),
+        |fm, v, at| {
+            fm.verbatim = v.entries(at)?;
+            Ok(())
+        },
+    ),
+    (
         Frontmatter::SOURCE,
         || FieldType::Str,
         |fm, v, at| {
@@ -246,6 +254,10 @@ pub struct Frontmatter {
     pub template: Option<String>,
     pub order: Option<i64>,
     pub redirect: Vec<String>,
+    /// Files and folders beside the page, each relative to its directory, that
+    /// are copied to the same place beside its output and never processed.
+    #[serde(default)]
+    pub verbatim: Vec<String>,
     /// The name of a `paths { sources { } }` entry whose file is this page's
     /// body, in place of the one written under the frontmatter. A *name*, never
     /// a path, so a page can only ask for a file the config already declared.
@@ -566,6 +578,19 @@ impl ValueExt for Value {
             return Err(at.traversal());
         }
         Ok(url)
+    }
+
+    fn entries(&self, at: At<'_>) -> Result<Vec<String>> {
+        let entries = self.strings(at)?;
+        for (index, entry) in entries.iter().enumerate() {
+            if crate::fs::Contained::new(entry).is_none() {
+                return Err(at.nth(index).outside(entry));
+            }
+            if crate::content::Verbatim::locate(at.origin.path, entry).is_none() {
+                return Err(at.nth(index).absent(entry));
+            }
+        }
+        Ok(entries)
     }
 
     fn urls(&self, at: At<'_>) -> Result<Vec<String>> {
