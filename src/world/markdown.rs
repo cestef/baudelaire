@@ -1,6 +1,10 @@
 //! `#md`: a chunk of markdown rendered inside a Typst page, through the same
 //! [`Markdown`] pass a `.md` page goes through.
 
+// `#[func]` expands to an empty enum beside the function, out of reach of an
+// attribute on the function itself.
+#![allow(clippy::empty_enums)]
+
 use typst::World;
 use typst::comemo::{Track, TrackedMut};
 use typst::diag::{At, SourceResult, bail};
