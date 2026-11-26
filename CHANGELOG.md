@@ -10,7 +10,7 @@ chores are visible in the git history and change nothing for a site.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/spec/v2.0.0.html
 
-## [Unreleased]
+## [0.0.20] - 2026-11-26
 
 ### Added
 
@@ -78,6 +78,12 @@ chores are visible in the git history and change nothing for a site.
   content tree read before the hooks ran, so a hook writing `static/css/main.css`
   shipped the previous build's file. The hooks now run first.
 
+- **Windows: paths reach other tools without the `\\?\` prefix.** The project root
+  was canonicalized into Windows' verbatim form and handed on as it was, so the
+  editor `serve { editor }` opens (`code --goto` failed on it), `git`, the bundler,
+  the `mirror` report and a local theme's recorded path all got `\\?\C:\..` where
+  they expect `C:\..`. Each now gets the plain path.
+
 - **The SSH deploy runs on russh 0.65.** It fixes RUSTSEC-2026-0492, where a hostile
   server could send channel messages for a channel the client never opened, and moves
   RSA keys onto the constant-time `rsa` 0.10. A host certificate is checked by the key
@@ -94,6 +100,30 @@ chores are visible in the git history and change nothing for a site.
   refused, so a fetched theme could publish any other variable (`html { meta { image
   "https://x/${CI_TOKEN}" } }`) in the built site. A `${VAR}` in a theme is now an error;
   `${VAR:-default}` still resolves to its default. The site's own config is unaffected.
+
+### Upgrading
+
+- **One cold rebuild.** The renderer's cache schema moved, so the first build after
+  upgrading recompiles every page.
+
+- **`@baudelaire/*` imports fail.** Rewrite each to its file, as in Changed above:
+
+  ```sh
+  grep -rl '@baudelaire/' templates content | xargs sed -i -E \
+    's#@baudelaire/([a-z-]+):0\.1\.0#/.baudelaire/site/\1.typ#g'
+  ```
+
+  A package directory an earlier `baudelaire mirror` wrote (`--global` or `--path`,
+  or `.baudelaire/generated/packages/`) is no longer read and can be deleted, along
+  with any `--package-path` in your editor's settings.
+
+- **A markdown fence parameter that is no attribute name fails the build.** One that
+  used to be dropped silently (`` ```v <b> ``) is now `baudelaire::markdown::fence_parameter`.
+  A Zola-style info string with commas reads differently too: ```` ```rust,ignore ````
+  is language `rust` with `data-ignore`, where the language used to be `rust,ignore`.
+
+- **`.scss` files need a binary built with `--features sass`.** Without it they warn
+  and are not published; see Changed.
 
 ## [0.0.19] - 2026-10-26
 
@@ -4278,7 +4308,8 @@ take these as warnings.
 - CSS import order, `url()` tails, EXIF rotation in assets
 - Orphans properly cleaned by `clean`
 
-[unreleased]: https://github.com/cestef/baudelaire/compare/v0.0.19...HEAD
+[unreleased]: https://github.com/cestef/baudelaire/compare/v0.0.20...HEAD
+[0.0.20]: https://github.com/cestef/baudelaire/compare/v0.0.19...v0.0.20
 [0.0.19]: https://github.com/cestef/baudelaire/compare/v0.0.18...v0.0.19
 [0.0.18]: https://github.com/cestef/baudelaire/compare/v0.0.17...v0.0.18
 [0.0.17]: https://github.com/cestef/baudelaire/compare/v0.0.16...v0.0.17
