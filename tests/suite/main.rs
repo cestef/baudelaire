@@ -14,6 +14,8 @@ mod build_e2e;
 mod cards_e2e;
 mod cli_e2e;
 mod config_e2e;
+#[cfg(any(feature = "js", feature = "sass"))]
+mod confine_e2e;
 mod deploy_e2e;
 #[cfg(feature = "ssh")]
 mod deploy_ssh_e2e;

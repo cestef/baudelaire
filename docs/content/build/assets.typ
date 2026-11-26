@@ -31,7 +31,7 @@ assets {
   [`bundle`],
   [flag],
   [`#false`],
-  [Bundles `.js`, `.mjs`, `.cjs`, `.jsx`, `.ts`, `.mts`, `.cts` and `.tsx` entry points with #link("https://rolldown.rs")[rolldown], resolving imports and shaking out dead code.],
+  [Bundles `.js`, `.mjs`, `.cjs`, `.jsx`, `.ts`, `.mts`, `.cts` and `.tsx` entry points with #link("https://rolldown.rs")[rolldown], resolving imports and shaking out dead code. An import resolves inside the project or an asset directory, and one that lands anywhere else fails with `baudelaire::asset::outside`.],
 
   [`fingerprint`],
   [flag],

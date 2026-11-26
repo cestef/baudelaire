@@ -9,6 +9,7 @@ use thiserror::Error;
 #[cfg(any(
     feature = "css",
     feature = "js",
+    feature = "sass",
     feature = "images",
     feature = "tailwind"
 ))]
@@ -78,6 +79,18 @@ pub enum AssetError {
     )]
     Tsconfig { path: String },
 
+    /// A theme's script or stylesheet is fetched code, so what it imports is
+    /// kept to the files a build of this site could have published anyway.
+    #[cfg(any(feature = "js", feature = "sass"))]
+    #[error("{} is outside the project", Code(.path))]
+    #[diagnostic(
+        code(baudelaire::asset::outside),
+        help(
+            "an `import` or `@use` reads from the project and the asset directories; copy the file into one of them"
+        )
+    )]
+    Outside { path: String },
+
     #[cfg(feature = "images")]
     #[error("failed to optimize image asset {}", Code(.path))]
     #[diagnostic(code(baudelaire::asset::image))]
@@ -118,6 +131,13 @@ impl AssetError {
         Self::Js {
             path: path.to_string(),
             detail: Text(detail.to_string()),
+        }
+    }
+
+    #[cfg(any(feature = "js", feature = "sass"))]
+    pub fn outside(path: impl std::fmt::Display) -> Self {
+        Self::Outside {
+            path: path.to_string(),
         }
     }
 

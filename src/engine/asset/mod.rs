@@ -1,6 +1,8 @@
 //! The asset pipeline: classify each file under `config.paths.assets`, transform
 //! it through the [`Handler`] that claims it, and write the result into `dist`.
 
+#[cfg(any(feature = "js", feature = "sass"))]
+mod confine;
 #[cfg(feature = "css")]
 mod css;
 #[cfg(feature = "images")]
@@ -40,6 +42,8 @@ use handler::Compiled;
 use handler::{Ctx, Handler, PathExt, Phase, Private, Produced, Variant, builtin};
 use sourcemap::SourceMap;
 
+#[cfg(any(feature = "js", feature = "sass"))]
+use confine::Confine;
 #[cfg(feature = "js")]
 use js::Js;
 #[cfg(feature = "js")]
@@ -228,7 +232,7 @@ impl<'a> Assets<'a> {
                         context: self.js.context,
                         sections: self.js.sections,
                     };
-                    Js::new(&cx)?
+                    Js::new(&cx, Confine::new(self.config, &self.sources.search()))?
                 };
                 let ctx = Ctx {
                     bundler: Some(&js),

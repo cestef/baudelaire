@@ -4,9 +4,13 @@
 
 use std::path::{Path, PathBuf};
 
+use std::borrow::Cow;
+use std::future::Future;
 use std::sync::Arc;
 
-use rolldown::plugin::Pluginable;
+use rolldown::plugin::{
+    HookLoadArgs, HookLoadReturn, HookUsage, Plugin, Pluginable, SharedLoadPluginContext,
+};
 use rolldown::{BundlerBuilder, BundlerOptions, InputItem, OutputFormat, RawMinifyOptions};
 use rolldown_common::CodeSplittingMode;
 use rolldown_common::Output;
@@ -18,6 +22,7 @@ use crate::error::{AssetError, Result};
 use crate::fs;
 use crate::render::AssetMap;
 
+use super::confine::Confine;
 use super::handler::Scripts;
 use super::module::{ModuleCx, Virtual};
 use super::{Ctx, Handler, PathExt, Phase, Produced};
@@ -55,6 +60,31 @@ impl Handler for Script {
     }
 }
 
+/// Refuses a module that resolved outside the project, after the [`Virtual`]
+/// modules have answered for theirs: oxc's resolver takes an absolute or
+/// `../` specifier as written, so a theme's script could otherwise inline any
+/// file of the build machine.
+impl Plugin for Confine {
+    fn name(&self) -> Cow<'static, str> {
+        "baudelaire:confine".into()
+    }
+
+    fn load(
+        &self,
+        _ctx: SharedLoadPluginContext,
+        args: &HookLoadArgs<'_>,
+    ) -> impl Future<Output = HookLoadReturn> + Send {
+        let refused = self
+            .outside(Path::new(args.id))
+            .then(|| AssetError::outside(args.id));
+        async move { refused.map_or(Ok(None), |e| Err(e.into())) }
+    }
+
+    fn register_hook_usage(&self) -> HookUsage {
+        HookUsage::Load
+    }
+}
+
 /// A rolldown-backed JavaScript bundler, owning the Tokio runtime that drives
 /// rolldown's async build and the [`Virtual`] plugin serving the virtual
 /// modules.
@@ -66,7 +96,8 @@ pub(super) struct Js {
     /// The site's pinned `tsconfig.json`, absolute. `None` leaves rolldown on
     /// its own discovery, which walks up from each module as `tsc` does.
     tsconfig: Option<TsConfig>,
-    plugin: Arc<dyn Pluginable>,
+    plugins: Vec<Arc<dyn Pluginable>>,
+    confine: Arc<Confine>,
 }
 
 impl Js {
@@ -74,7 +105,8 @@ impl Js {
     /// asset map is complete, so `baudelaire:assets` resolves every asset.
     /// Fallible because the runtime spawns threads, which a constrained
     /// container refuses.
-    pub(super) fn new(cx: &ModuleCx) -> Result<Self> {
+    pub(super) fn new(cx: &ModuleCx, confine: Confine) -> Result<Self> {
+        let confine = Arc::new(confine);
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
@@ -92,7 +124,8 @@ impl Js {
                 .as_deref()
                 .map(|path| Self::tsconfig(&cx.config.root, path))
                 .transpose()?,
-            plugin: Arc::new(Virtual::new(cx)),
+            plugins: vec![Arc::new(Virtual::new(cx)), Arc::clone(&confine) as _],
+            confine,
         })
     }
 
@@ -126,13 +159,15 @@ impl Js {
         };
         let mut bundler = BundlerBuilder::default()
             .with_options(options)
-            .with_plugins(vec![Arc::clone(&self.plugin)])
+            .with_plugins(self.plugins.clone())
             .build()
             .map_err(|e| AssetError::js(entry.display(), e))?;
-        let output = self
-            .runtime
-            .block_on(bundler.generate())
-            .map_err(|e| AssetError::js(entry.display(), e))?;
+        let output = self.runtime.block_on(bundler.generate()).map_err(|e| {
+            self.confine.refused().map_or_else(
+                || AssetError::js(entry.display(), e),
+                |path| AssetError::outside(path.display()),
+            )
+        })?;
         let mut code = None;
         let mut map = None;
         for asset in &output.assets {

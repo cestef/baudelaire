@@ -32,7 +32,7 @@ impl Layers {
     /// The stack as a search path, the strongest root first, which is the
     /// reverse of the stack's own order: the Sass compiler resolves a `@use` by
     /// searching directories rather than by overwriting.
-    #[cfg(feature = "sass")]
+    #[cfg(any(feature = "js", feature = "sass"))]
     pub(super) fn search(&self) -> Vec<PathBuf> {
         self.0.iter().rev().cloned().collect()
     }
