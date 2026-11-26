@@ -44,27 +44,40 @@ pub struct AnchorConfig {
     #[key(numbers(u8, 1, 6))]
     pub levels: Vec<u8>,
 
-    /// The text of a link back to each heading, e.g. `#`. Unset or empty, no link is emitted, unless `place` is `heading`.
+    /// The text of a link back to each heading, e.g. `§`. Unset, a `place` of `before` or `after` reads `#`; empty, no link is emitted.
     #[key(custom(
         Text,
         |c: &Self| c.link.clone().into(),
         |c: &mut Self, n: &kdl::KdlNode, t: &str| {
-            let text = n.string(t, 0)?;
-            c.link = (!text.is_empty()).then_some(text);
+            c.link = Some(n.string(t, 0)?);
             Ok(())
         },
     ))]
     pub link: Option<String>,
 
     /// Which side of the heading's text that link sits on, or `heading` to make the text itself the link.
-    #[key(choice(Place))]
-    pub place: Place,
+    #[key(opt choice(Place))]
+    pub place: Option<Place>,
 }
 
 impl AnchorConfig {
     /// The class the self link carries, so a stylesheet has one name to reach
     /// it by.
     pub const CLASS: &'static str = "anchor";
+
+    /// The text a link placed beside its heading reads when `link` is unset.
+    pub const GLYPH: &'static str = "#";
+
+    /// The text of the link beside each heading, or `None` when there is none:
+    /// none was asked for, an empty `link` took it back, or the heading is its
+    /// own link.
+    pub fn beside(&self) -> Option<&str> {
+        match (self.place, self.link.as_deref()) {
+            (Some(Place::Heading), _) | (_, Some("")) | (None, None) => None,
+            (_, Some(text)) => Some(text),
+            (Some(_), None) => Some(Self::GLYPH),
+        }
+    }
 
     /// Whether a heading at `level` gets an id; an empty `levels` narrows
     /// nothing and so covers every level.
@@ -80,7 +93,7 @@ impl Default for AnchorConfig {
             labels: true,
             levels: Vec::new(),
             link: None,
-            place: Place::default(),
+            place: None,
         }
     }
 }

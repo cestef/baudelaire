@@ -68,10 +68,10 @@ impl Anchors {
 
     /// Give `heading` the self link `anchors` asks for, if any.
     fn link(heading: &mut HtmlElement, id: &str, anchors: &AnchorConfig) {
-        match (anchors.place, &anchors.link) {
-            (Place::Heading, _) => Self::wrap(heading, id),
-            (place, Some(text)) => Self::beside(heading, id, text, place),
-            (_, None) => {}
+        if anchors.place == Some(Place::Heading) {
+            Self::wrap(heading, id);
+        } else if let Some(text) = anchors.beside() {
+            Self::beside(heading, id, text, anchors.place.unwrap_or_default());
         }
     }
 

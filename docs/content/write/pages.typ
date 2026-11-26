@@ -144,8 +144,8 @@ duplicated.
 html {
   anchors {
     levels 2 3 4
-    link "#"
-    place "after"
+    link "§"
+    place "before"
   }
 }
 ```
@@ -156,8 +156,8 @@ html {
   table.header([Key], [Default], [Does]),
   [`labels`], [on], [Give every Typst label its element as an `id`. See #link(<labels>)[below].],
   [`levels`], [every level], [The heading levels that get an `id`, as `1` to `6`.],
-  [`link`], [none], [The text of a link back to the heading, e.g. `#`. Empty is the same as none, which is how a site takes back a theme's.],
-  [`place`], [`after`], [Which side of the heading's text that link sits on: `after`, `before`, or `heading` to make the heading's own text the link.],
+  [`link`], [none], [The text of a link back to the heading, e.g. `§`. Unset with a `place` of `after` or `before`, it is `#`. Empty means no link, which is how a site takes back a theme's.],
+  [`place`], [none], [Where that link goes: `after` or `before` the heading's text, or `heading` to make the heading's own text the link. Unset with a `link`, it is `after`.],
 )
 
 `place "heading"` needs no `link` text:
@@ -172,7 +172,8 @@ html {
 <h2 id="setup"><a href="#setup" class="anchor">Setup</a></h2>
 ```
 
-Unlike the `#` beside a heading, this link is read out, since it is the heading.
+A link `after` or `before` the text is hidden from screen readers, which have
+just read the heading out. This one is read out, since it is the heading.
 A heading that already holds a link is left as written, because a link cannot
 contain another.
 

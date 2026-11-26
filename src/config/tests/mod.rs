@@ -292,7 +292,7 @@ fn err_unset_env_var_without_default() {
 
 #[test]
 fn anchors_keep_the_flag_and_gain_a_block() {
-    use crate::config::Place;
+    use crate::config::{AnchorConfig, Place};
 
     let default = Config::default().html.anchors;
     assert!(
@@ -311,13 +311,27 @@ fn anchors_keep_the_flag_and_gain_a_block() {
     assert!(anchors.enabled, "the block's presence is still the switch");
     assert_eq!(anchors.levels, vec![2, 3]);
     assert_eq!(anchors.link.as_deref(), Some("#"));
-    assert_eq!(anchors.place, Place::Before);
+    assert_eq!(anchors.place, Some(Place::Before));
     assert!(anchors.covers(2) && anchors.covers(3));
     assert!(!anchors.covers(1) && !anchors.covers(4));
     assert!(default.covers(1) && default.covers(6));
 
     let cleared = parse("html {\n  anchors {\n    link \"\"\n  }\n}");
-    assert_eq!(cleared.html.anchors.link, None);
+    assert_eq!(cleared.html.anchors.beside(), None);
+    let taken = parse("html {\n  anchors {\n    link \"\"\n    place \"before\"\n  }\n}");
+    assert_eq!(
+        taken.html.anchors.beside(),
+        None,
+        "an empty link takes a theme's back"
+    );
+
+    let placed = parse("html {\n  anchors {\n    place \"before\"\n  }\n}");
+    assert_eq!(
+        placed.html.anchors.beside(),
+        Some(AnchorConfig::GLYPH),
+        "a side alone asks for a link"
+    );
+    assert_eq!(default.beside(), None);
 }
 
 /// There are six heading levels, so `levels 0` and `levels 7` are typos.

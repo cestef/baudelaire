@@ -214,6 +214,63 @@ scenario "a self link can lead its heading" {
   }
 }
 
+// A side alone asks for a link, so `place` is never silently a no-op.
+scenario "a place alone links each heading with a #" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      html {
+        anchors { place "before"; }
+      }
+      """#
+    "content/docs/guide.typ" #"""
+      #let frontmatter = (title: "Guide",)
+      == Setup
+      body
+      """#
+  }
+  expect {
+    ok
+    file "docs/guide/index.html" {
+      contains ##"<h3 id="setup"><a href="#setup" class="anchor" aria-hidden="true" tabindex="-1">#</a>Setup</h3>"##
+    }
+  }
+}
+
+// An empty `link` takes a theme's link back even where the theme set `place`.
+scenario "an empty link outweighs a place" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      html {
+        anchors {
+          link ""
+          place "after"
+        }
+      }
+      """#
+    "content/docs/guide.typ" #"""
+      #let frontmatter = (title: "Guide",)
+      == Setup
+      body
+      """#
+  }
+  expect {
+    ok
+    file "docs/guide/index.html" {
+      contains ##"<h3 id="setup">Setup</h3>"##
+    }
+  }
+}
+
 // The heading's own text as the link, for a theme that would rather not add a
 // glyph. It needs no `link` text, and it is read out, since it is the heading.
 scenario "a heading can be its own self link" {
