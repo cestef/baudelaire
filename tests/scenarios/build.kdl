@@ -427,6 +427,63 @@ scenario "the highlight block names the classes and narrows the markup" {
   }
 }
 
+// A scope that maps to no token, or to one the site dropped, still reaches a
+// stylesheet keyed on `data-scope`; with `scopes` off it leaves no span behind.
+scenario "a scoped run with no class keeps its scope stamp" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      html {
+        highlight {
+          tokens "-punctuation"
+          scopes #true
+        }
+      }
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "H",)
+
+      ```rust
+      fn main() { }
+      ```
+
+      """#
+  }
+  expect {
+    ok
+    file "index.html" {
+      contains #"<span data-scope="punctuation.section.block.begin.rust">{</span>"#
+      contains #"<span data-scope="meta.function.rust"> </span>"#
+    }
+  }
+}
+
+scenario "without scopes a run with no class is plain text" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      html {
+        highlight { tokens "-punctuation"; }
+      }
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "H",)
+
+      ```rust
+      fn main() { }
+      ```
+
+      """#
+  }
+  expect {
+    ok
+    file "index.html" {
+      missing "data-scope"
+      contains #"<span class="sx-function">main</span>() {"#
+    }
+  }
+}
+
 // Inline code carries no `<pre>`, so a pass keyed on the wrapper would leave
 // every `#raw(.., lang: ..)` in a sentence marked and unnamed.
 scenario "inline code is classed like a block" {

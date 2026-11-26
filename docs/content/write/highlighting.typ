@@ -111,6 +111,10 @@ Use `scopes` when you need to tell one kind of keyword from another:
 [data-scope^="keyword.control"] { font-style: italic; }
 ```
 
+With `scopes`, every scoped run gets a span, including one no token names or
+whose token you dropped, so `[data-scope="entity.name.constant.v"]` reaches a name
+the vocabulary has no class for.
+
 Without the block the colors stay inline, as Typst emits them. Keep it that way if you want your own `.tmTheme` rendered as written.
 
 == In a theme

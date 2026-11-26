@@ -41,7 +41,9 @@ impl Highlight {
     /// How [`Transform::after`] names this pass.
     pub(super) const NAME: &'static str = "highlight";
 
-    /// Name every marked span under `element`, depth first.
+    /// Name every marked span under `element`, depth first: a token becomes
+    /// its class, a scope stays only when `scopes` asks for it, and a span left
+    /// with neither is spliced back into plain text.
     fn name(element: &mut HtmlElement, config: &HighlightConfig) {
         let mut dropped = false;
         for node in element.children.make_mut() {
@@ -49,18 +51,18 @@ impl Highlight {
                 continue;
             };
             Self::name(child, config);
-            let Some(token) = Self::marked(child) else {
+            if !Self::marked(child) {
                 continue;
-            };
-            match config.class(token) {
-                Some(class) => {
-                    child.attrs.set(attr::class, &class);
-                    child.attrs.remove(TOKEN);
-                    if !config.scopes {
-                        child.attrs.remove(SCOPE);
-                    }
-                }
-                None => dropped = true,
+            }
+            let class = Self::token(child).and_then(|token| config.class(token));
+            child.attrs.remove(TOKEN);
+            match (config.scopes, Self::scope(child)) {
+                (true, Some(scope)) => child.attrs.set(SCOPE, &scope),
+                _ => child.attrs.remove(SCOPE),
+            }
+            match class {
+                Some(class) => child.attrs.set(attr::class, &class),
+                None => dropped |= child.attrs.0.is_empty(),
             }
         }
         if dropped {
@@ -68,22 +70,31 @@ impl Highlight {
         }
     }
 
-    /// The token a span is marked with, or `None` when it carries no mark of
-    /// ours.
-    fn marked(element: &HtmlElement) -> Option<Token> {
-        if element.tag != tag::span {
-            return None;
-        }
+    /// Whether `element` is a span the show rule marked.
+    fn marked(element: &HtmlElement) -> bool {
+        element.tag == tag::span
+            && (element.attrs.get(TOKEN).is_some() || element.attrs.get(SCOPE).is_some())
+    }
+
+    /// The token a marked span names, if it names one.
+    fn token(element: &HtmlElement) -> Option<Token> {
         Token::of(element.attrs.get(TOKEN)?)
     }
 
-    /// Replace each still-marked child with the text it wraps, keeping every
-    /// other node where it is.
+    /// The `data-scope` stamp a marked span keeps: its innermost scope.
+    fn scope(element: &HtmlElement) -> Option<String> {
+        let stack = element.attrs.get(SCOPE)?;
+        stack.rsplit(' ').next().map(str::to_owned)
+    }
+
+    /// Replace each span this pass emptied with the text it wraps, keeping
+    /// every other node where it is. Emptied means no attribute left: a marked
+    /// span carries only the two marks, so nothing else can be bare.
     fn splice(element: &mut HtmlElement) {
         let mut children = EcoVec::with_capacity(element.children.len());
         for node in &element.children {
             match node {
-                HtmlNode::Element(child) if Self::marked(child).is_some() => {
+                HtmlNode::Element(child) if child.tag == tag::span && child.attrs.0.is_empty() => {
                     children.extend(child.children.iter().cloned());
                 }
                 other => children.push(other.clone()),
@@ -102,11 +113,13 @@ mod tests {
 
     /// A `<code>` holding one marked span per `(token, scope, text)`, as the
     /// show rule emits them.
-    fn block(pieces: &[(Token, &str, &str)]) -> HtmlElement {
+    fn block(pieces: &[(Option<Token>, &str, &str)]) -> HtmlElement {
         let mut pre = HtmlElement::new(tag::code);
         for (token, scope, text) in pieces {
             let mut span = HtmlElement::new(tag::span);
-            span.attrs.push(TOKEN, token.name());
+            if let Some(token) = token {
+                span.attrs.push(TOKEN, token.name());
+            }
             span.attrs.push(SCOPE, *scope);
             span.children
                 .push(HtmlNode::Text((*text).into(), Span::detached()));
@@ -140,7 +153,7 @@ mod tests {
 
     fn rewritten(
         config: &HighlightConfig,
-        pieces: &[(Token, &str, &str)],
+        pieces: &[(Option<Token>, &str, &str)],
     ) -> Vec<(Option<String>, Option<String>, String)> {
         let mut pre = block(pieces);
         Highlight::name(&mut pre, config);
@@ -151,7 +164,7 @@ mod tests {
     fn a_mark_becomes_a_prefixed_class_and_loses_its_scope() {
         let out = rewritten(
             &HighlightConfig::default(),
-            &[(Token::Keyword, "keyword.control.rust", "let")],
+            &[(Some(Token::Keyword), "keyword.control.rust", "let")],
         );
         assert_eq!(
             out,
@@ -169,8 +182,8 @@ mod tests {
         let out = rewritten(
             &config,
             &[
-                (Token::Keyword, "keyword.control.rust", "let"),
-                (Token::String, "string.quoted.rust", "\"a\""),
+                (Some(Token::Keyword), "keyword.control.rust", "let"),
+                (Some(Token::String), "string.quoted.rust", "\"a\""),
             ],
         );
         assert_eq!(
@@ -191,8 +204,8 @@ mod tests {
         let out = rewritten(
             &config,
             &[
-                (Token::Keyword, "keyword.control.rust", "let"),
-                (Token::Punctuation, "punctuation.separator.rust", ";"),
+                (Some(Token::Keyword), "keyword.control.rust", "let"),
+                (Some(Token::Punctuation), "punctuation.separator.rust", ";"),
             ],
         );
         assert_eq!(
@@ -205,12 +218,33 @@ mod tests {
     }
 
     #[test]
+    fn a_scope_with_no_token_keeps_a_span_only_when_scopes_are_asked_for() {
+        let piece = [(None, "source.v entity.name.constant.v", ".generate")];
+        assert_eq!(
+            rewritten(&HighlightConfig::default(), &piece),
+            vec![(None, None, ".generate".to_owned())]
+        );
+        let config = HighlightConfig {
+            scopes: true,
+            ..HighlightConfig::default()
+        };
+        assert_eq!(
+            rewritten(&config, &piece),
+            vec![(
+                None,
+                Some("entity.name.constant.v".to_owned()),
+                ".generate".to_owned()
+            )]
+        );
+    }
+
+    #[test]
     fn the_scope_stamp_survives_when_it_is_asked_for() {
         let config = HighlightConfig {
             scopes: true,
             ..HighlightConfig::default()
         };
-        let out = rewritten(&config, &[(Token::Keyword, "keyword.control.rust", "let")]);
+        let out = rewritten(&config, &[(Some(Token::Keyword), "keyword.control.rust", "let")]);
         assert_eq!(
             out,
             vec![(

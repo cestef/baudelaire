@@ -93,13 +93,17 @@ impl Scopes<'_> {
             .map(|(_, token)| token)
     }
 
-    /// The most specific scope in the stack, which is the one a `data-scope`
-    /// stamp names, or empty for a stack with nothing in it.
-    pub(super) fn name(&self) -> String {
-        self.0
-            .last()
-            .map(|scope| scope.build_string())
-            .unwrap_or_default()
+    /// The stack as a `data-scope` stamp spells it, outermost first and
+    /// space-separated, or `None` for text in the grammar's root scope alone,
+    /// which is every run that is not scoped at all.
+    pub(super) fn path(&self) -> Option<String> {
+        (self.0.len() > 1).then(|| {
+            self.0
+                .iter()
+                .map(|scope| scope.build_string())
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
     }
 }
 
@@ -212,12 +216,18 @@ mod tests {
     }
 
     #[test]
-    fn a_stamp_names_the_most_specific_scope() {
-        let stack: Vec<Scope> = ["source.rust", "keyword.control.rust"]
-            .iter()
-            .map(|s| Scope::new(s).expect("a test scope parses"))
-            .collect();
-        assert_eq!(Scopes(&stack).name(), "keyword.control.rust");
+    fn a_stamp_carries_the_stack_outermost_first() {
+        let stack = |names: &[&str]| -> Vec<Scope> {
+            names
+                .iter()
+                .map(|s| Scope::new(s).expect("a test scope parses"))
+                .collect()
+        };
+        assert_eq!(
+            Scopes(&stack(&["source.rust", "keyword.control.rust"])).path(),
+            Some("source.rust keyword.control.rust".to_owned())
+        );
+        assert_eq!(Scopes(&stack(&["source.rust"])).path(), None);
     }
 
     #[test]

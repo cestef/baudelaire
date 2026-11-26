@@ -27,9 +27,12 @@ pub(crate) struct Piece<'a> {
     pub(crate) text: &'a str,
     /// Its byte offset within that line.
     pub(crate) offset: usize,
-    /// The vocabulary entry it resolved to and the grammar's own scope name,
-    /// or `None` for text the vocabulary does not name.
-    pub(crate) token: Option<(Token, EcoString)>,
+    /// The vocabulary entry it resolved to, or `None` for text the vocabulary
+    /// does not name.
+    pub(crate) token: Option<Token>,
+    /// The grammar's own scopes over it, outermost first and space-separated,
+    /// or `None` for text no scope below the grammar's root covers.
+    pub(crate) scope: Option<EcoString>,
 }
 
 /// How typst parses a block of its own code, per the language tag.
@@ -193,6 +196,7 @@ impl Grammar {
                 text,
                 offset: 0,
                 token: None,
+                scope: None,
             });
         }
     }
@@ -219,6 +223,7 @@ impl Grammar {
                     text,
                     offset: 0,
                     token: None,
+                    scope: None,
                 });
                 continue;
             };
@@ -232,6 +237,7 @@ impl Grammar {
                             text: &text[offset..],
                             offset,
                             token: None,
+                            scope: None,
                         });
                     }
                     break;
@@ -244,7 +250,8 @@ impl Grammar {
                     line,
                     text: region,
                     offset,
-                    token: scopes.token().map(|token| (token, scopes.name().into())),
+                    token: scopes.token(),
+                    scope: scopes.path().map(EcoString::from),
                 });
                 offset += region.len();
             }
@@ -273,7 +280,8 @@ impl Grammar {
         }
 
         Self::leaves(&LinkedNode::new(&root), None, &mut |range, tag| {
-            let token = tag.map(|tag| (Token::from(tag), EcoString::from(tag.tm_scope())));
+            let token = tag.map(Token::from);
+            let scope = tag.map(|tag| EcoString::from(tag.tm_scope()));
             let opens = starts
                 .partition_point(|&start| start <= range.start)
                 .saturating_sub(1);
@@ -284,7 +292,8 @@ impl Grammar {
                         line,
                         text: part,
                         offset: at - starts[line],
-                        token: token.clone(),
+                        token,
+                        scope: scope.clone(),
                     });
                 }
                 at += part.len() + 1;
@@ -327,7 +336,7 @@ mod tests {
                 piece.text.to_owned(),
                 piece
                     .token
-                    .map(|(token, _)| token.name().to_owned())
+                    .map(|token| token.name().to_owned())
                     .unwrap_or_default(),
             ));
         });

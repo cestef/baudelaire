@@ -26,8 +26,8 @@ pub const TYPST: &[&str] = &["typ", "typst"];
 /// removed by the transform that names it.
 pub const TOKEN: HtmlAttr = HtmlAttr::constant("data-token");
 
-/// The mark naming the grammar's own scope, kept in the output only when
-/// `highlight { scopes }` asks for it.
+/// The mark naming the grammar's own scopes, outermost first, kept in the
+/// output only when `highlight { scopes }` asks for it.
 pub const SCOPE: HtmlAttr = HtmlAttr::constant("data-scope");
 
 /// The language a fence claimed, as the snippet lint reads it back off the DOM.
@@ -47,10 +47,14 @@ pub(super) const RAW_RULE: ShowFn<RawElem> = |elem, engine, styles| {
         if piece.offset > 0 {
             body = body.set(TextElem::span_offset, piece.offset);
         }
-        if let Some((token, scope)) = piece.token {
+        if piece.token.is_some() || piece.scope.is_some() {
             let mut attrs = HtmlAttrs::new();
-            attrs.push(TOKEN, token.name());
-            attrs.push(SCOPE, scope);
+            if let Some(token) = piece.token {
+                attrs.push(TOKEN, token.name());
+            }
+            if let Some(scope) = piece.scope {
+                attrs.push(SCOPE, scope);
+            }
             body = HtmlElem::new(tag::span)
                 .with_attrs(attrs)
                 .with_body(Some(body))

@@ -14,6 +14,11 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **With `highlight { scopes }`, every scoped run carries `data-scope`.** A scope no
+  token names, or one whose token the site dropped, used to get no span at all, so a
+  stylesheet keyed on the scope could not reach it. Without `scopes` the markup is
+  unchanged.
+
 - **A heading can be its own self link.** `html { anchors { place "heading" } }`
   wraps each heading's text in a link to it, `<h2 id="setup"><a href="#setup"
   class="anchor">Setup</a></h2>`, with no `link` text needed. A heading that already

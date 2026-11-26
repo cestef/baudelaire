@@ -47,7 +47,7 @@ impl fmt::Display for Highlighted<'_> {
         let mut out = vec![String::new(); lines.len()];
         Grammar::named(self.lang).tokens(&lines, &mut |piece| {
             let styled = match piece.token {
-                Some((token, _)) => piece
+                Some(token) => piece
                     .text
                     .if_supports_color(Stdout, |text| text.style(Self::style(token)))
                     .to_string(),
