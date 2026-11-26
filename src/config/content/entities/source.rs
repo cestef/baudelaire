@@ -176,7 +176,7 @@ impl Section for SourcesConfig {
             |c| c.under(SourceConfig::PAGES),
             |c, n, t| {
                 c.0.push(SourceConfig::Pages(PagesSource {
-                    dir: PathBuf::from(n.string(t, 0)?),
+                    dir: n.local(t, 0)?,
                 }));
                 Ok(())
             },
@@ -188,7 +188,7 @@ impl Section for SourcesConfig {
             |c| c.under(SourceConfig::DATA),
             |c, n, t| {
                 c.0.push(SourceConfig::Data(DataSource {
-                    path: PathBuf::from(n.string(t, 0)?),
+                    path: n.local(t, 0)?,
                 }));
                 Ok(())
             },

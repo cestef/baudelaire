@@ -151,6 +151,11 @@ impl Themed {
     pub(super) fn begin() -> Self {
         Self(THEMED.replace(true))
     }
+
+    /// Whether this thread is reading a theme's `theme.kdl` right now.
+    pub(super) fn active() -> bool {
+        THEMED.get()
+    }
 }
 
 impl Drop for Themed {

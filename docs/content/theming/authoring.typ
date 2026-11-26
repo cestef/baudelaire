@@ -51,11 +51,13 @@ Because config is only a default, adopting a theme never touches a site's `site`
 
 === What a theme may not set
 
-Ten blocks are the site's alone, and `theme.kdl` is refused outright for naming any of them: `paths`, `hooks`, `announce`, `deploy`, `profiles`, `serve`, `typst`, `security`, `lint` and `client`. They decide what runs on the machine doing the building, where the result is sent, and what a browser is told to trust. Those are not styling decisions, and a reader of your README would not think to check them. `client` is on the list because its values are written into the bundled JavaScript verbatim, and a config string expands `${VAR}` from the build machine's environment.
+Eleven blocks are the site's alone, and `theme.kdl` is refused outright for naming any of them: `paths`, `hooks`, `announce`, `deploy`, `profiles`, `serve`, `typst`, `security`, `check`, `client` and `cache`. They decide what runs on the machine doing the building, where the result is sent, and what a browser is told to trust. Those are not styling decisions, and a reader of your README would not think to check them. `client` is on the list because its values are written into the bundled JavaScript verbatim, and a config string expands `${VAR}` from the build machine's environment.
 
 Two of them run commands through the system shell: `hooks` around the build, and `check { snippets { run } }` over every code fence. A theme that could set either would run code on every build of every site that adopted it, and for a package theme that code need not appear in the project at all.
 
 Two keys inside blocks a theme *is* allowed are refused for the same reason: a `headers { rules { } }` rule, and a `redirect` whose old path carries a `*`. Both let a fetched theme speak to a browser in the site's name. A header rule sends any header on any path, and `Refresh` alone forwards every page somewhere else; a wildcard redirect claims no output file, so the check that stops a theme's redirect burying a real page has nothing to compare it against.
+
+A path `theme.kdl` names, such as `assets { tailwind { scan } }` or `tsconfig`, is read from the project root and must stay under it: a leading `/` or a `..` is refused with `baudelaire::config::theme_reach`. A site that wants to reach further sets the key in its own `config.kdl`.
 
 Turning the two rule files on stays yours: what goes in `_headers` is then computed from the site's own `headers { cache }` and `csp` blocks, and a literal `redirect` is still held to the collision check every redirect is.
 

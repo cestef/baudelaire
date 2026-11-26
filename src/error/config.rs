@@ -307,6 +307,16 @@ impl ConfigError {
         )
     }
 
+    pub fn theme_reach(source: &str, path: &str, span: SourceSpan) -> Self {
+        Self::at(
+            source,
+            ConfigErrorKind::ThemeReach {
+                path: path.to_owned(),
+            },
+            span,
+        )
+    }
+
     /// A `-html` entry, the one feature that cannot be disabled.
     pub fn feature_removal(source: &str, name: &str, span: SourceSpan) -> Self {
         Self::at(
@@ -810,6 +820,15 @@ pub enum ConfigErrorKind {
         help("name a file relative to `dist`, with no leading `/` and no `..`")
     )]
     EscapingFile { path: String },
+
+    #[error("a theme's config names {}, outside the project", Code(.path))]
+    #[diagnostic(
+        code(baudelaire::config::theme_reach),
+        help(
+            "a theme names paths relative to the project root, with no leading `/` and no `..`; a site that wants this path sets it in its own `config.kdl`"
+        )
+    )]
+    ThemeReach { path: String },
 
     #[error("{} is a filename, not a stem", Code(.got))]
     #[diagnostic(

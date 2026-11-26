@@ -176,6 +176,39 @@ fn a_theme_cannot_read_the_environment() {
     );
 }
 
+/// A theme may set the paths the build reads, but only under the project: a
+/// fetched theme naming `/home/u/.ssh` in `tailwind { scan }` would have it
+/// read and published.
+#[test]
+fn a_theme_cannot_point_the_build_outside_the_project() {
+    use miette::Diagnostic;
+
+    for section in [
+        "assets {\n  tsconfig \"/etc/tsconfig.json\"\n}\n",
+        "assets {\n  tailwind {\n    scan \"content\" \"../../outside\"\n  }\n}\n",
+        "assets {\n  tailwind {\n    config \"/etc/encre.toml\"\n  }\n}\n",
+        "content {\n  entities {\n    people {\n      sources {\n        data \"/etc/roster.kdl\"\n      }\n    }\n  }\n}\n",
+    ] {
+        let site = site();
+        site.write("themes/plume/theme.kdl", section);
+
+        let err = Config::load(&site.read("config.kdl"), &site.root, None).expect_err(section);
+
+        assert_eq!(
+            err.code().map(|code| code.to_string()).as_deref(),
+            Some("baudelaire::config::theme_reach"),
+            "{section}"
+        );
+    }
+
+    let site = site();
+    site.write(
+        "themes/plume/theme.kdl",
+        "assets {\n  tailwind {\n    scan \"content\" \"themes/plume/templates\"\n  }\n}\n",
+    );
+    Config::load(&site.read("config.kdl"), &site.root, None).expect("a path under the project");
+}
+
 /// Two keys a theme may not carry from inside a section it is otherwise
 /// allowed: an arbitrary response header on an arbitrary path, and a wildcard
 /// `redirect`, which claims no output file for the collision check to catch.

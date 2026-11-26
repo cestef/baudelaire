@@ -105,6 +105,11 @@ pub(super) trait NodeExt {
     fn pairs(&self, text: &str) -> Result<Vec<(String, String)>>;
     fn features(&self, text: &str) -> Result<Vec<String>>;
     fn words(&self, text: &str) -> Result<Vec<String>>;
+    /// The node's argument at `idx` as a path the build reads, relative to the
+    /// project root. Inside a theme's `theme.kdl` it must stay under the root.
+    fn local(&self, text: &str, idx: usize) -> Result<std::path::PathBuf>;
+    /// Every positional argument as a path, each judged as [`local`](NodeExt::local) judges one.
+    fn locals(&self, text: &str) -> Result<Vec<std::path::PathBuf>>;
     /// The node's positional integer args, each range-checked by
     /// [`ValueExt::bounded`] at the span of the value: `widths 480 960 1440`.
     fn bounds<T>(&self, text: &str, min: T, max: T) -> Result<Vec<T>>
@@ -148,6 +153,20 @@ impl<'a> Toggle<'a> {
             return Ok(());
         }
         Err(ConfigError::missing_arg(text, node.name().value(), NodeExt::span(node)).into())
+    }
+}
+
+/// How far a configured path may reach: anywhere from the site's own config,
+/// and only under the project root from a theme's, which is fetched and so
+/// may not point the build at the rest of the machine.
+struct Reach;
+
+impl Reach {
+    fn check(node: &KdlNode, text: &str, path: &str) -> Result<()> {
+        if !super::value::Themed::active() || crate::fs::Contained::new(path).is_some() {
+            return Ok(());
+        }
+        Err(ConfigError::theme_reach(text, path, NodeExt::span(node)).into())
     }
 }
 
@@ -472,6 +491,20 @@ impl NodeExt for KdlNode {
         Toggle::required(self, text, seen.len())?;
         out.sort_by_key(|value| T::NAMES.iter().position(|(_, v)| v == value));
         Ok(out)
+    }
+
+    fn local(&self, text: &str, idx: usize) -> Result<std::path::PathBuf> {
+        let path = self.string(text, idx)?;
+        Reach::check(self, text, &path)?;
+        Ok(path.into())
+    }
+
+    fn locals(&self, text: &str) -> Result<Vec<std::path::PathBuf>> {
+        let words = self.words(text)?;
+        for word in &words {
+            Reach::check(self, text, word)?;
+        }
+        Ok(words.into_iter().map(Into::into).collect())
     }
 
     fn contained(&self, text: &str) -> Result<String> {

@@ -63,9 +63,7 @@ macro_rules! rule {
             @$how $t, $key, $field, $doc,
             $crate::config::dispatch::Kind::Path,
             |v: &::std::path::PathBuf| v.clone().into(),
-            |n: &::kdl::KdlNode, t: &str| {
-                $crate::config::node::NodeExt::string(n, t, 0).map(::std::path::PathBuf::from)
-            }
+            |n: &::kdl::KdlNode, t: &str| $crate::config::node::NodeExt::local(n, t, 0)
         )
     };
 
@@ -226,14 +224,7 @@ macro_rules! rule {
             @$how $t, $key, $field, $doc,
             $crate::config::dispatch::Kind::Texts,
             |v: &::std::vec::Vec<::std::path::PathBuf>| v.clone().into(),
-            |n: &::kdl::KdlNode, t: &str| {
-                $crate::config::node::NodeExt::words(n, t).map(|words| {
-                    words
-                        .into_iter()
-                        .map(::std::path::PathBuf::from)
-                        .collect::<::std::vec::Vec<_>>()
-                })
-            }
+            |n: &::kdl::KdlNode, t: &str| $crate::config::node::NodeExt::locals(n, t)
         )
     };
 
