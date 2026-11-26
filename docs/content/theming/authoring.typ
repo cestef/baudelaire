@@ -59,6 +59,8 @@ Two keys inside blocks a theme *is* allowed are refused for the same reason: a `
 
 A path `theme.kdl` names, such as `assets { tailwind { scan } }` or `tsconfig`, is read from the project root and must stay under it: a leading `/` or a `..` is refused with `baudelaire::config::theme_reach`. A site that wants to reach further sets the key in its own `config.kdl`.
 
+Links are followed only while they stay inside the theme. A `static/`, `assets/` or `theme.kdl` that links out of it is read as absent, and a file in a package theme (or any Typst package) that links out of its package fails to load.
+
 Turning the two rule files on stays yours: what goes in `_headers` is then computed from the site's own `headers { cache }` and `csp` blocks, and a literal `redirect` is still held to the collision check every redirect is.
 
 If your theme needs a build step, say so in the README and give the block to copy. A theme sets defaults for how a site looks, and has no say over what the build machine does.

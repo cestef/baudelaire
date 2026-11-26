@@ -209,6 +209,35 @@ fn a_theme_cannot_point_the_build_outside_the_project() {
     Config::load(&site.read("config.kdl"), &site.root, None).expect("a path under the project");
 }
 
+/// A theme's `static/` or `theme.kdl` that is a link out of the theme is read
+/// as absent: a package unpacks its symlinks as written.
+#[test]
+#[cfg(unix)]
+fn a_theme_part_linking_out_of_the_theme_is_ignored() {
+    let site = site();
+    let outside = tempfile::tempdir().expect("tempdir");
+    std::fs::write(outside.path().join("id_rsa"), "SECRET").expect("write");
+    std::fs::write(outside.path().join("theme.kdl"), "lang \"de\"\n").expect("write");
+    std::fs::remove_dir_all(site.path("themes/plume/static")).expect("rm");
+    std::fs::remove_file(site.path("themes/plume/theme.kdl")).expect("rm");
+    std::os::unix::fs::symlink(outside.path(), site.path("themes/plume/static")).expect("link");
+    std::os::unix::fs::symlink(
+        outside.path().join("theme.kdl"),
+        site.path("themes/plume/theme.kdl"),
+    )
+    .expect("link");
+    site.write(
+        "content/index.typ",
+        "#let frontmatter = (title: \"Home\", template: \"page.typ\",)\nHello.\n",
+    );
+
+    site.stats();
+
+    assert!(!site.exists("public/id_rsa"));
+    let config = Config::load(&site.read("config.kdl"), &site.root, None).expect("config");
+    assert_ne!(config.lang, "de", "the linked theme.kdl was read");
+}
+
 /// Two keys a theme may not carry from inside a section it is otherwise
 /// allowed: an arbitrary response header on an arbitrary path, and a wildcard
 /// `redirect`, which claims no output file for the collision check to catch.

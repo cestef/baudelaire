@@ -144,19 +144,32 @@ impl Theme {
     }
 
     /// The theme's asset directory, whether or not it exists.
-    pub fn assets(&self) -> PathBuf {
-        self.root.join(Self::ASSETS)
+    pub fn assets(&self) -> Option<PathBuf> {
+        self.part(Self::ASSETS)
     }
 
     /// The theme's static-passthrough directory, whether or not it exists.
-    pub fn statics(&self) -> PathBuf {
-        self.root.join(Self::STATIC)
+    pub fn statics(&self) -> Option<PathBuf> {
+        self.part(Self::STATIC)
     }
 
     /// The theme's `theme.kdl`, if it ships one.
     pub fn config(&self) -> Option<PathBuf> {
-        let path = self.root.join(Self::CONFIG);
-        path.is_file().then_some(path)
+        self.part(Self::CONFIG).filter(|path| path.is_file())
+    }
+
+    /// `name` under the theme's root, or `None` when it is a link leading out
+    /// of the theme: a package unpacks its symlinks as written, so its
+    /// `static/` could otherwise publish any directory of the machine.
+    fn part(&self, name: &str) -> Option<PathBuf> {
+        let path = self.root.join(name);
+        match (
+            std::fs::canonicalize(&path),
+            std::fs::canonicalize(&self.root),
+        ) {
+            (Ok(real), Ok(root)) if !real.starts_with(&root) => None,
+            _ => Some(path),
+        }
     }
 
     /// Whether the theme carries `templates/<file>`.

@@ -142,7 +142,7 @@ impl<'a> Assets<'a> {
             config,
             #[cfg(feature = "js")]
             js,
-            sources: Layers::new(theme.map(Theme::assets), &config.paths.assets),
+            sources: Layers::new(theme.and_then(Theme::assets), &config.paths.assets),
             dst: config.asset_staging(),
             memo: Memo::new(config),
             prefix: config.asset_prefix(),

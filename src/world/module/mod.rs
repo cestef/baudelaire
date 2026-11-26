@@ -465,14 +465,40 @@ impl FileLoader for Files {
             return Err(Modules::moved(spec));
         }
         if let Some((root, vpath)) = self.mounted(id) {
-            return root.load(&vpath);
+            return Sealed(root).load(&vpath);
         }
         if let Some(path) = self.sources.file(id) {
             return std::fs::read(path)
                 .map(Bytes::new)
                 .map_err(|why| FileError::from_io(why, path));
         }
-        self.system.load(id)
+        match id.root() {
+            VirtualRoot::Package(_) => Sealed(&self.system.root(id)?).load(id.vpath()),
+            VirtualRoot::Project => self.system.load(id),
+        }
+    }
+}
+
+/// A package's root, whose files must really sit inside it: typst refuses a
+/// `..` but follows a symlink, and a package unpacks its symlinks as written.
+///
+/// The project root is not sealed, since a link out of it is one its own author
+/// committed.
+struct Sealed<'a>(&'a FsRoot);
+
+impl Sealed<'_> {
+    fn load(&self, vpath: &VirtualPath) -> FileResult<Bytes> {
+        let path = self.0.resolve(vpath)?;
+        let real = std::fs::canonicalize(&path).map_err(|why| FileError::from_io(why, &path))?;
+        let root = std::fs::canonicalize(self.0.path())
+            .map_err(|why| FileError::from_io(why, self.0.path()))?;
+        if !real.starts_with(&root) {
+            return Err(FileError::Other(Some(EcoString::from(format!(
+                "{} is a link leading out of its package",
+                path.display()
+            )))));
+        }
+        self.0.load(vpath)
     }
 }
 
@@ -480,6 +506,35 @@ impl FileLoader for Files {
 mod tests {
     use super::*;
     use typst::syntax::{RootedPath, package::PackageSpec};
+
+    #[test]
+    #[cfg(unix)]
+    fn a_package_link_leading_out_of_it_is_refused() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let package = tmp.path().join("package");
+        std::fs::create_dir_all(&package).expect("mkdir");
+        std::fs::write(tmp.path().join("secret.txt"), "not yours").expect("write");
+        std::fs::write(package.join("lib.typ"), "ok").expect("write");
+        std::os::unix::fs::symlink(tmp.path().join("secret.txt"), package.join("leak.txt"))
+            .expect("symlink");
+        std::os::unix::fs::symlink(package.join("lib.typ"), package.join("alias.typ"))
+            .expect("symlink");
+        let root = FsRoot::new(package);
+        let vpath = |path: &str| VirtualPath::new(path).expect("a valid vpath");
+
+        assert!(Sealed(&root).load(&vpath("leak.txt")).is_err());
+        assert_eq!(
+            Sealed(&root)
+                .load(&vpath("lib.typ"))
+                .expect("inside")
+                .as_slice(),
+            b"ok"
+        );
+        assert!(
+            Sealed(&root).load(&vpath("alias.typ")).is_ok(),
+            "a link inside is kept"
+        );
+    }
 
     #[test]
     fn a_source_is_served_at_the_path_it_is_bound_to() {

@@ -36,7 +36,7 @@ pub struct Copied {
 impl<'a> Static<'a> {
     pub fn new(config: &'a Config, theme: Option<&Theme>) -> Self {
         Self {
-            sources: Layers::new(theme.map(Theme::statics), &config.paths.r#static),
+            sources: Layers::new(theme.and_then(Theme::statics), &config.paths.r#static),
             dist: &config.paths.dist,
             assets: (config.asset_dist(), config.asset_staging()),
         }
