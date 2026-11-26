@@ -103,7 +103,7 @@ Editions pair on their slug, so a translated slug would break the pairing. Set `
 
 `page.translations` is an array of `(lang, url, title)` including the page's own edition, so a switcher renders the full set and marks the current one by `page.lang`. `page.strings` is the current language's table. See #link("templates.typ")[templates] for the rest of the page object.
 
-The declared languages are also exported by `@baudelaire/site` as `languages`, a list of `(code, name)`.
+The declared languages are also exported by `/.baudelaire/site/site.typ` as `languages`, a list of `(code, name)`.
 
 == Dates
 

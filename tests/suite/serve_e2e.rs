@@ -261,7 +261,7 @@ fn a_data_file_a_page_read_is_watched_without_being_configured() {
     t.write("data/authors.yaml", "keeper: One person\n");
     t.write(
         "templates/page.typ",
-        "#import \"@baudelaire/html:0.1.0\": h\n#let authors = yaml(\"/data/authors.yaml\")\n#let page(page, body) = h(\"main\", { body; h(\"p\", authors.keeper) })\n",
+        "#import \"/.baudelaire/site/html.typ\": h\n#let authors = yaml(\"/data/authors.yaml\")\n#let page(page, body) = h(\"main\", { body; h(\"p\", authors.keeper) })\n",
     );
     t.write(
         "content/index.typ",
@@ -424,7 +424,7 @@ fn a_data_file_a_template_reads_from_its_own_tree_is_watched() {
     t.write("templates/authors.yaml", "keeper: One person\n");
     t.write(
         "templates/page.typ",
-        "#import \"@baudelaire/html:0.1.0\": h\n#let authors = yaml(\"/templates/authors.yaml\")\n#let page(page, body) = h(\"main\", { body; h(\"p\", authors.keeper) })\n",
+        "#import \"/.baudelaire/site/html.typ\": h\n#let authors = yaml(\"/templates/authors.yaml\")\n#let page(page, body) = h(\"main\", { body; h(\"p\", authors.keeper) })\n",
     );
     t.write(
         "content/index.typ",

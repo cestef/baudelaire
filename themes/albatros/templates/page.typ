@@ -3,7 +3,7 @@
 // A template file exports a function named after the file, so this one is bound
 // by `template "page.typ"` in a collection or in a page's frontmatter.
 
-#import "@baudelaire/html:0.1.0": h
+#import "/.baudelaire/site/html.typ": h
 #import "../parts.typ": byline, chips, contents, cover, pager, related, shell
 
 #let page(page, body) = shell(page, h("article", class: "post", {

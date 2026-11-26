@@ -41,7 +41,7 @@ afterwards.
   [`> quote`], [`#quote(block: true)[quote]`], [],
   [`[^1]` and its note], [`#footnote[the note]`], [Written where it is referenced.],
   [a pipe table], [`#table(columns: 2, ..)`], [Cells are content, so `[..]` around anything but a literal.],
-  [`---`], [`#h("hr")`], [From `@baudelaire/html`. Typst's `line` is a paged-layout element.],
+  [`---`], [`#h("hr")`], [From `/.baudelaire/site/html.typ`. Typst's `line` is a paged-layout element.],
   [`<div class="x">`], [`#h("div", class: "x")[..]`], [Raw HTML has no meaning in a Typst page.],
   [`<!-- comment -->`], [`// comment`], [`/* .. */` spans lines.],
   [`---` frontmatter], [`#let frontmatter = (..)`], [The same keys; a Typst dict rather than a fenced block.],
@@ -124,7 +124,7 @@ Where pandoc mangles a self-contained chunk, paste the original Markdown into
 `md` instead.
 
 ````typ
-#import "@baudelaire/markdown:0.1.0": md
+#import "/.baudelaire/site/markdown.typ": md
 
 #md(```md
 | Option | Default |
@@ -154,7 +154,7 @@ the sources for `<` before converting, and rewrite those parts with `h()`.
 
 ```typ
 // templates/parts.typ
-#import "@baudelaire/html:0.1.0": h
+#import "/.baudelaire/site/html.typ": h
 
 #let aside(title, body) = h("aside", class: "note")[
   #h("strong", title)

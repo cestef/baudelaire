@@ -906,7 +906,7 @@ scenario "a marked region is left alone, native elements included" {
       }
       """#
     "content/a.typ" #"""
-      #import "@baudelaire/html:0.1.0": nolint
+      #import "/.baudelaire/site/html.typ": nolint
       #let frontmatter = (title: "A",)
 
       #nolint[
@@ -945,7 +945,7 @@ scenario "a marker inside a marker leaves nothing behind" {
       check { strict }
       """#
     "content/a.typ" #"""
-      #import "@baudelaire/html:0.1.0": nolint
+      #import "/.baudelaire/site/html.typ": nolint
       #let frontmatter = (title: "A",)
 
       #nolint("headings")[
@@ -980,7 +980,7 @@ scenario "a marker names the rules it keeps off" {
       check { }
       """#
     "content/a.typ" #"""
-      #import "@baudelaire/html:0.1.0": nolint
+      #import "/.baudelaire/site/html.typ": nolint
       #let frontmatter = (title: "A",)
 
       #nolint("headings")[

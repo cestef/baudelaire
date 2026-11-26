@@ -6,7 +6,7 @@
 // rather than projects, and those rows carry no cover or summary: the grid
 // renders them as plain cards, which is what a term is.
 
-#import "@baudelaire/html:0.1.0": h
+#import "/.baudelaire/site/html.typ": h
 #import "../parts.typ": label, shell, work-grid
 
 #let list(page, body) = shell(

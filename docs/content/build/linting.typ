@@ -170,7 +170,7 @@ A finding can be correct about the markup and still wrong for the page. `nolint`
 a region the lint does not look at:
 
 ```typ
-#import "@baudelaire/html:0.1.0": nolint
+#import "/.baudelaire/site/html.typ": nolint
 
 #nolint[
   ==== A section that starts deep on purpose

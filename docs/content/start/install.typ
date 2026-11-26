@@ -129,7 +129,7 @@ What `slim` leaves out:
   [`themes`], [The `theme` command is gone, and the four shipped themes are not
     carried; a theme there is a directory you put in the project yourself.],
   [`markdown`], [A `.md` file under `content/` is not a page at all, and
-    `@baudelaire/markdown` is not served, so `md` cannot be imported either.],
+    `/.baudelaire/site/markdown.typ` is not served, so `md` cannot be imported either.],
 )
 
 A site that doesn't use a feature builds the same without it. A

@@ -1,6 +1,6 @@
 //! Editor support for the modules a build serves from memory: `baudelaire
-//! packages` mirrors the `@baudelaire/*` and `baudelaire:*` families to disk so
-//! an editor resolves them.
+//! mirror` writes the typst modules and the `baudelaire:*` declarations to disk
+//! so an editor resolves them, which every build also does.
 //!
 //! Nothing here is read back by a build.
 
@@ -53,7 +53,7 @@ struct Mirrored {
     /// project root for a file whose path is relative to it.
     base: PathBuf,
     generated: Box<dyn Generated>,
-    /// One row per module, as a reader names it: `@baudelaire/pages`.
+    /// One row per module, as a reader names it: `/.baudelaire/site/pages.typ`.
     modules: Vec<String>,
     /// The settings this family still needs to resolve in an editor.
     setup: Vec<Setup>,
@@ -190,23 +190,14 @@ impl Removed {
     }
 }
 
-/// One mirroring run: the project it mirrors, and where its targets write.
+/// One mirroring run, over the project it mirrors.
 pub struct Mirror<'a> {
     config: &'a Config,
-    /// `--path`: where the packages go instead of the default.
-    dir: Option<&'a Path>,
-    /// `--global`: put the packages in typst's own package directory, shared by
-    /// every project on the machine.
-    global: bool,
 }
 
 impl<'a> Mirror<'a> {
-    pub fn new(config: &'a Config, dir: Option<&'a Path>, global: bool) -> Self {
-        Self {
-            config,
-            dir,
-            global,
-        }
+    pub fn new(config: &'a Config) -> Self {
+        Self { config }
     }
 
     pub fn install(&self) -> Result<Install> {
@@ -266,11 +257,7 @@ impl<'a> Mirror<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::world::module::Packages;
-
-    fn mirror<'a>(project: &'a Config, dir: &'a Path) -> Mirror<'a> {
-        Mirror::new(project, Some(dir), false)
-    }
+    use crate::world::module::Mirrored;
 
     fn project(root: &Path) -> Config {
         Config {
@@ -280,37 +267,25 @@ mod tests {
     }
 
     #[test]
-    fn a_mirrored_module_resolves_the_way_typst_resolves_a_package() {
-        use ::typst::syntax::package::PackageSpec;
-        use typst_kit::packages::FsPackages;
-
-        let dir = tempfile::tempdir().unwrap();
+    fn every_module_lands_at_the_path_a_template_imports() {
         let root = tempfile::tempdir().unwrap();
         let config = project(root.path());
-        mirror(&config, dir.path()).install().expect("install");
+        Mirror::new(&config).install().expect("install");
 
-        let packages = FsPackages::new(dir.path());
-        for package in Packages::new(&config).packages() {
-            let spec = PackageSpec {
-                namespace: "baudelaire".into(),
-                name: package.name.into(),
-                version: "0.1.0".parse().expect("a version typst parses"),
-            };
-            assert!(
-                packages.obtain(&spec).is_some(),
-                "typst cannot resolve {}",
-                package.specifier()
-            );
+        for package in Mirrored::new(&config).packages() {
+            let file = root
+                .path()
+                .join(package.specifier().trim_start_matches('/'));
+            assert!(file.is_file(), "nothing at {}", package.specifier());
         }
     }
 
     #[test]
     fn every_family_reports_where_it_wrote_and_what_is_in_it() {
-        let dir = tempfile::tempdir().unwrap();
         let root = tempfile::tempdir().unwrap();
         let config = project(root.path());
 
-        let written = mirror(&config, dir.path()).install().expect("install");
+        let written = Mirror::new(&config).install().expect("install");
 
         assert_eq!(written.families.len(), builtin().len());
         for family in &written.families {
@@ -320,49 +295,28 @@ mod tests {
     }
 
     #[test]
-    fn uninstalling_leaves_everything_it_does_not_own_alone() {
-        let dir = tempfile::tempdir().unwrap();
+    fn uninstalling_removes_what_it_wrote_and_nothing_else() {
         let root = tempfile::tempdir().unwrap();
         let config = project(root.path());
-        let neighbour = dir.path().join("local").join("theme").join("0.1.0");
+        let neighbour = root.path().join(".baudelaire").join("cache");
         std::fs::create_dir_all(&neighbour).unwrap();
-        mirror(&config, dir.path()).install().expect("install");
+        Mirror::new(&config).install().expect("install");
 
-        let removed = mirror(&config, dir.path()).uninstall().expect("uninstall");
+        let removed = Mirror::new(&config).uninstall().expect("uninstall");
 
         assert!(removed.families.iter().all(|f| f.path.is_some()));
-        assert!(!Packages::namespace(dir.path()).exists());
+        assert!(!root.path().join(Mirrored::directory()).exists());
         assert!(neighbour.exists());
-        let again = mirror(&config, dir.path()).uninstall().expect("uninstall");
+        let again = Mirror::new(&config).uninstall().expect("uninstall");
         assert!(again.families.iter().all(|f| f.path.is_none()));
     }
 
     #[test]
-    fn two_projects_do_not_share_a_mirror() {
-        let one = tempfile::tempdir().unwrap();
-        let two = tempfile::tempdir().unwrap();
-        let (first, second) = (project(one.path()), project(two.path()));
-
-        for config in [&first, &second] {
-            Mirror::new(config, None, false).install().expect("install");
-        }
-
-        for config in [&first, &second] {
-            let served = config
-                .root
-                .join(Packages::project())
-                .join("baudelaire/site/0.1.0/lib.typ");
-            assert!(served.exists(), "{} has no mirror", config.root.display());
-        }
-    }
-
-    #[test]
     fn the_tables_mirror_empty_before_a_first_build() {
-        let dir = tempfile::tempdir().unwrap();
         let root = tempfile::tempdir().unwrap();
         let config = project(root.path());
 
-        let written = mirror(&config, dir.path()).install().expect("install");
+        let written = Mirror::new(&config).install().expect("install");
 
         let typst = written.families.first().expect("the typst family is first");
         assert!(
@@ -373,7 +327,7 @@ mod tests {
             "an unbuilt project was not told its tables are empty"
         );
         let source =
-            std::fs::read_to_string(Packages::namespace(dir.path()).join("sections/0.1.0/lib.typ"))
+            std::fs::read_to_string(root.path().join(Mirrored::directory()).join("sections.typ"))
                 .unwrap();
         assert!(source.contains("#let sections(lang)"));
     }

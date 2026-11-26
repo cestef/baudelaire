@@ -1,4 +1,4 @@
-//! The `@baudelaire/*` modules whose source is generated into memory; the
+//! The generated modules whose source is generated into memory; the
 //! file-backed pair (`sections`, `pages`) is a table served by path.
 
 use crate::codegen::Value;
@@ -6,7 +6,7 @@ use crate::world::BuildContext;
 
 use super::{Module, ModuleCx};
 
-/// `@baudelaire/html`: element construction without `html.elem`'s ceremony, and
+/// `/.baudelaire/site/html.typ`: element construction without `html.elem`'s ceremony, and
 /// `svg()`, which inlines an SVG file as real DOM.
 pub struct Html;
 
@@ -43,7 +43,7 @@ impl Module for Html {
     }
 }
 
-/// `@baudelaire/toc`: a table of contents, filled in from the page's own
+/// `/.baudelaire/site/toc.typ`: a table of contents, filled in from the page's own
 /// headings once it has compiled.
 pub struct Toc;
 
@@ -78,22 +78,22 @@ impl Module for Toc {
     }
 }
 
-/// `@baudelaire/site`: site identity and build version as typed bindings, so a
-/// template writes `#import "@baudelaire/site": title` and a typo becomes an
+/// `/.baudelaire/site/site.typ`: site identity and build version as typed bindings, so a
+/// template writes `#import "/.baudelaire/site/site.typ": title` and a typo becomes an
 /// import error rather than a silent `none`.
 ///
 /// Config-derived values only: nothing volatile may be baked in, so `git` and
 /// `date` stay on `sys.inputs`.
 pub(super) struct Site;
 
-/// `@baudelaire/sources`: the files `paths { sources }` declared, each bound to
+/// `/.baudelaire/site/sources.typ`: the files `paths { sources }` declared, each bound to
 /// the path it is served under.
 ///
 /// A page writes a *name* and never a path, so content can reach a declared
 /// file and nothing else.
 ///
 /// ```typ
-/// #import "@baudelaire/sources": notes
+/// #import "/.baudelaire/site/sources.typ": notes
 /// #include notes            // a `.typ` source is a body
 /// #json(notes)              // any other kind is data
 /// ```
@@ -117,7 +117,7 @@ impl Module for Sources {
     }
 }
 
-/// `@baudelaire/markdown`: `md()`, which renders a chunk of markdown inside a
+/// `/.baudelaire/site/markdown.typ`: `md()`, which renders a chunk of markdown inside a
 /// Typst page.
 ///
 /// The body wraps a native function (see [`crate::world::markdown`]) with the

@@ -63,17 +63,17 @@ If your theme needs a build step, say so in the README and give the block to cop
 
 == Three rules for theme authors
 
-- Import siblings relatively. `#import "../parts.typ"` resolves both when the theme is a directory and when it is an installed package. A root-absolute `/parts.typ` resolves against the project root in the first case and the package root in the second, so it cannot be right in both. The same goes for a `show raw` grammar path: write `highlight/kdl.sublime-syntax`.
+- Import siblings relatively. `#import "../parts.typ"` resolves both when the theme is a directory and when it is an installed package. A root-absolute `/parts.typ` resolves against the project root in the first case and the package root in the second, so it cannot be right in both. The same goes for a `show raw` grammar path: write `highlight/kdl.sublime-syntax`. The one exception is `/.baudelaire/site/`, which baudelaire answers under either root.
 - Avoid `svg()`. Its paths are project-root absolute, and a theme does not know where it sits in a project. Build icons as inline SVG elements instead, which is what `parts.typ` does in every shipped theme.
 - Keep shared pieces out of `templates/`. Only `templates/`, `assets/`, and `static/` are layered, so a `templates/parts.typ` can be shadowed by a project file that never meant to. At the theme root it cannot.
 
 == Build the nav from the site
 
-Do not hardcode a menu, as the shipped themes do not. Two #link("../lookup/typst-modules.typ")[virtual modules] hand you the build's own view of the site:
+Do not hardcode a menu, as the shipped themes do not. Two #link("../lookup/typst-modules.typ")[generated modules] hand you the build's own view of the site:
 
 ```typ
-#import "@baudelaire/sections:0.1.0": sections
-#import "@baudelaire/pages:0.1.0": pages
+#import "/.baudelaire/site/sections.typ": sections
+#import "/.baudelaire/site/pages.typ": pages
 
 // every content directory that holds pages, nested
 #let directories = sections(page.lang)

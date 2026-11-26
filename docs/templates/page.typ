@@ -1,6 +1,6 @@
-#import "@baudelaire/html:0.1.0": h
+#import "/.baudelaire/site/html.typ": h
 #import "/templates/theme.typ": shell, link-to
-#import "@baudelaire/sections:0.1.0": sections
+#import "/.baudelaire/site/sections.typ": sections
 
 // Standard content page: title + compiled body inside the site shell, with a
 // tag row when the frontmatter declares tags and a prev/next pager linking the

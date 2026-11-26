@@ -5,7 +5,7 @@
 // the name. An undated listing (the term index) drops the column entirely
 // rather than leaving a ragged gap.
 
-#import "@baudelaire/html:0.1.0": classes, h
+#import "/.baudelaire/site/html.typ": classes, h
 #import "../parts.typ": label, shell
 
 #let list(page, body) = shell(page, {

@@ -169,7 +169,7 @@ struct Compiled {
 /// whole.
 #[derive(std::hash::Hash)]
 pub struct SiteInputs {
-    /// A content hash of the generated `@baudelaire/*` Typst modules, which
+    /// A content hash of the generated Typst modules, which
     /// exist only in memory and so resolve to no path the dependency tracker
     /// could see.
     pub modules: Hash,

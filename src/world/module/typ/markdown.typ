@@ -1,7 +1,7 @@
-// `@baudelaire/markdown`: markdown, rendered inside a Typst page.
+// `/.baudelaire/site/markdown.typ`: markdown, rendered inside a Typst page.
 //
 // Generated and served by baudelaire; nothing for this exists on disk. Import
-// it as `#import "@baudelaire/markdown:0.1.0": md`.
+// it as `#import "/.baudelaire/site/markdown.typ": md`.
 
 // The engine half, looked up in the global scope rather than named outright.
 //

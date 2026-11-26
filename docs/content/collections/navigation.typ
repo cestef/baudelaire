@@ -55,11 +55,11 @@ See #link("../write/i18n.typ")[multiple languages].
 == The whole site, in order
 
 `page.nav` names two neighbors. For the full ordered tree of
-content directories, a template imports `@baudelaire/sections`, which is what a
+content directories, a template imports `/.baudelaire/site/sections.typ`, which is what a
 sidebar is built from:
 
 ```typ
-#import "@baudelaire/sections:0.1.0": sections
+#import "/.baudelaire/site/sections.typ": sections
 ```
 
 See #link("../lookup/typst-modules.typ")[Typst modules] for its shape.

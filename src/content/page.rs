@@ -427,7 +427,7 @@ impl Page {
         out
     }
 
-    /// This page as one catalogue row, the value `@baudelaire/pages` and
+    /// This page as one catalogue row, the value `/.baudelaire/site/pages.typ` and
     /// `baudelaire:pages` are arrays of, in the same shape a generated
     /// listing's entries take.
     pub fn entry(&self, config: &Config) -> crate::codegen::Value {

@@ -4,8 +4,8 @@
 // `h` is `html.elem` without the `attrs:` wrapper: named arguments become
 // attributes, positional ones become children, `true` writes a bare attribute
 // and `none` drops it. `classes` joins class names and skips what is absent.
-#import "@baudelaire/html:0.1.0": classes, h
-#import "@baudelaire/site:0.1.0": title as site-title
+#import "/.baudelaire/site/html.typ": classes, h
+#import "/.baudelaire/site/site.typ": title as site-title
 
 #let link-to(href, label) = h("a", href: href, label)
 

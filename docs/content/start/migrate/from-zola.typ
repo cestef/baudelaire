@@ -189,7 +189,7 @@ around your body instead of a file you extend:
 
 ```typ
 // templates/page.typ
-#import "@baudelaire/html:0.1.0": h
+#import "/.baudelaire/site/html.typ": h
 #import "/templates/base.typ": shell
 
 #let page(page, body) = shell(page)[
@@ -211,7 +211,7 @@ around your body instead of a file you extend:
   [`{% macro %}`], [`#let name(args) = ..`],
   [`{% include %}`], [`#import "/templates/parts.typ": ..`],
   [`{{ get_url(path="style.css") }}`], [`"/assets/style.css"`, rewritten if fingerprinting is on],
-  [`{{ config.base_url }}`], [`url` from `@baudelaire/site`],
+  [`{{ config.base_url }}`], [`url` from `/.baudelaire/site/site.typ`],
   [`{{ config.extra.x }}`], [`sys.inputs.baudelaire.client.x`, from a `client { }` constant],
   [`load_data(path="x.toml")`], [`toml("/data/x.toml")`, in the page or the template],
   [`resize_image()`], [`assets { images { responsive } }`],
@@ -221,7 +221,7 @@ around your body instead of a file you extend:
 
 The last row is deliberate. Nothing site-wide may enter a page's wrapper, or
 every page's cache identity would depend on every other page. Templates reach the
-site through `@baudelaire/sections` and `@baudelaire/pages` instead, which are
+site through `/.baudelaire/site/sections.typ` and `/.baudelaire/site/pages.typ` instead, which are
 tracked as files. See #link("../../write/templates.typ")[templates].
 
 Template names are yours: there is no `page.html` / `section.html` /
@@ -303,7 +303,7 @@ it. Three options:
   table.header([Do], [Get]),
   [`content { markdown { html "drop" } }`], [An inline run loses its tags and keeps its prose; a block loses its contents with them.],
   [a `typ eval` fence], [`html.elem("aside", ..)`, the same element written in the typed form.],
-  [convert the page], [`h("div", class: "x")[..]` from `@baudelaire/html`.],
+  [convert the page], [`h("div", class: "x")[..]` from `/.baudelaire/site/html.typ`.],
 )
 
 An HTML comment is dropped either way.

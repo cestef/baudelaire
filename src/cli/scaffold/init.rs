@@ -92,7 +92,7 @@ impl Init {
             root: target.to_path_buf(),
             ..Config::default()
         };
-        match Mirror::new(&config, None, false).install() {
+        match Mirror::new(&config).install() {
             Ok(install) => Some(install.render(ui)),
             Err(error) => {
                 ui.warn(MirrorSkipped {

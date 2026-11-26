@@ -16,7 +16,7 @@ absences is how you ship stale HTML out of a green build.
 **What typst does not open, no page can record.** `Deps` is built from the file
 store's accessed paths, so anything a build reads by another route is invisible to
 per-page tracking and has to be fingerprinted whole, in `SiteInputs`. There are two:
-the generated `@baudelaire/*` modules (served from memory, so they resolve to no
+the generated `/.baudelaire/site/*.typ` modules (served from memory, so they resolve to no
 path) and the site's own fonts (`typst { fonts { paths } }`, resolved by *name* out
 of a store built by walking a directory). The font case shipped stale: naming a
 directory was in the config hash, replacing a file inside one already named was not,

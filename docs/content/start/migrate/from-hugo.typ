@@ -219,7 +219,7 @@ the order to try them:
   table.header([Do], [Result]),
   [write the element in a `typ eval` fence], [`#html.elem("aside")[..]`, and it goes through the same typed DOM as everything else],
   [`content { markdown { html "drop" } }`], [an inline run loses its tags and keeps the prose between them; a block-level run is dropped whole, contents included],
-  [convert the page to `.typ`], [`h("div", class: "x")[..]`, from `@baudelaire/html`],
+  [convert the page to `.typ`], [`h("div", class: "x")[..]`, from `/.baudelaire/site/html.typ`],
 )
 
 The refusal names the file, the line and the tag, so you can work through a tree
@@ -311,7 +311,7 @@ to a warning, which helps when working through a large tree. See
 
 ```typ
 // templates/page.typ
-#import "@baudelaire/html:0.1.0": h
+#import "/.baudelaire/site/html.typ": h
 #import "/templates/parts.typ": shell, byline
 
 #let page(page, body) = shell(page)[
@@ -334,7 +334,7 @@ to a warning, which helps when working through a large tree. See
   [`{{ .Next }}`, `{{ .Prev }}`], [`page.nav.next`, `page.nav.prev`],
   [`{{ partial "x.html" . }}`], [`#import "/templates/parts.typ": x` then `#x(page)`],
   [`{{ define }}` / `{{ block }}`], [a function that takes the body],
-  [`{{ .Site.Title }}`], [`title` from `@baudelaire/site`],
+  [`{{ .Site.Title }}`], [`title` from `/.baudelaire/site/site.typ`],
   [`{{ .Site.Params.x }}`], [a `client { }` constant],
   [`{{ .Site.Data.authors }}`], [`yaml("/data/authors.yaml")`],
   [`{{ i18n "readMore" }}`], [`page.strings.at("read-more", default: "Read more")`],
@@ -348,8 +348,8 @@ to a warning, which helps when working through a large tree. See
 
 `.Permalink` is absent on purpose: nothing site-wide may go into a page's
 wrapper, or every page's cache identity would depend on every other page. The
-site tree and the page catalogue come from `@baudelaire/sections` and
-`@baudelaire/pages`, which typst tracks as files. See
+site tree and the page catalogue come from `/.baudelaire/site/sections.typ` and
+`/.baudelaire/site/pages.typ`, which typst tracks as files. See
 #link("../../write/templates.typ")[templates].
 
 == Page resources

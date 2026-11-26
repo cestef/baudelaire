@@ -26,6 +26,22 @@ chores are visible in the git history and change nothing for a site.
 
 ### Changed
 
+- **The generated Typst modules are files, not packages.** Import them by path from
+  the project root, with no version:
+
+  ```typ
+  // before
+  #import "@baudelaire/html:0.1.0": h
+  // after
+  #import "/.baudelaire/site/html.typ": h
+  ```
+
+  Every build writes them to `.baudelaire/site/`, so an editor resolves the imports
+  with no `--package-path`. An `@baudelaire/*` import now fails and names the file it
+  became. The same path works from a theme imported as a package. `baudelaire mirror`
+  loses `--global` and `--path`, and a typst package directory written by an earlier
+  `mirror` can be deleted.
+
 - **Sass is no longer in the released binaries.** The `sass` cargo feature is off by
   default, so a `.scss` or `.sass` file under the asset tree now warns and is left
   where it lies. To keep compiling Sass, build with it:

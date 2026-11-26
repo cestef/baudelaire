@@ -217,7 +217,7 @@ pub enum ContentError {
     #[diagnostic(
         code(baudelaire::content::source_on_typst),
         help(
-            "a typst page reaches a declared file by name: `#import \"@baudelaire/sources:0.1.0\": <name>`, then `#include <name>`"
+            "a typst page reaches a declared file by name: `#import \"/.baudelaire/site/sources.typ\": <name>`, then `#include <name>`"
         )
     )]
     SourceOnTypst {

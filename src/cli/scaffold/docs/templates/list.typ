@@ -1,6 +1,6 @@
-#import "@baudelaire/html:0.1.0": h
+#import "/.baudelaire/site/html.typ": h
 #import "/templates/theme.typ": pager, shell
-#import "@baudelaire/sections:0.1.0": sections
+#import "/.baudelaire/site/sections.typ": sections
 
 // The generated index for a collection (`list=` in `config.kdl`), and for any
 // taxonomy you add later. Every entry carries `url`, `label`, an optional

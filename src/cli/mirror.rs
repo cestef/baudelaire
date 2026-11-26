@@ -1,6 +1,4 @@
-//! `baudelaire mirror`: vendor the Typst packages a site imports.
-
-use std::path::PathBuf;
+//! `baudelaire mirror`: write the generated modules where an editor finds them.
 
 use clap::Args;
 
@@ -13,13 +11,6 @@ use crate::mirror::Mirror;
 #[derive(Args, Debug, Clone)]
 #[command(after_help = MirrorArgs::help())]
 pub struct MirrorArgs {
-    /// Write the typst packages into typst's own package directory, shared with
-    /// every other project, instead of into this one.
-    #[arg(long, help_heading = group::TARGETS)]
-    pub global: bool,
-    /// Write the typst packages here instead, wherever that is.
-    #[arg(long, value_name = "DIR", conflicts_with = "global", help_heading = group::TARGETS)]
-    pub path: Option<PathBuf>,
     /// Remove what a previous run wrote, instead of writing.
     #[arg(long, help_heading = group::TARGETS)]
     pub uninstall: bool,
@@ -31,31 +22,21 @@ impl MirrorArgs {
         format!(
             "{}\n{}",
             help::About(
-                "The `@baudelaire/*` typst modules a template imports and the\n\
+                "The `/.baudelaire/site/*.typ` modules a template imports and the\n\
                  `baudelaire:*` modules a bundled script imports are generated during\n\
-                 a build, so an editor has nothing on disk to resolve and marks every\n\
-                 import unknown. This writes both out where an editor finds them: the\n\
-                 typst modules as ordinary packages, the JavaScript ones as one\n\
-                 TypeScript declaration file. Both land in the project, since three\n\
-                 of the four typst modules describe *this* site; `--global` shares\n\
-                 one copy of them between every project instead.\n\
+                 a build. Every build writes both into the project, where an editor\n\
+                 finds them; this writes them without building, for a fresh checkout.\n\
                  \n\
-                 A build never reads what this writes, so a stale copy cannot change a\n\
-                 page. Every build refreshes the declarations; re-run this after\n\
-                 upgrading baudelaire.\n\
+                 A build never reads the in-memory modules back, so a stale copy cannot\n\
+                 change a page.\n\
                  \n\
                  The run ends in the one setting each family needs, so an editor\n\
                  resolves it. `-v` lists every module it wrote."
             ),
             help::Table::examples(&[
-                ("baudelaire mirror", "Into .baudelaire/generated"),
                 (
-                    "baudelaire mirror --global",
-                    "Typst packages into typst's own directory, shared"
-                ),
-                (
-                    "baudelaire mirror --path .typst",
-                    "Typst packages into a directory of your own"
+                    "baudelaire mirror",
+                    "Into .baudelaire/site and .baudelaire/generated"
                 ),
                 ("baudelaire mirror --uninstall", "Take it all back off"),
             ])
@@ -92,7 +73,7 @@ impl MirrorArgs {
 impl Run for MirrorArgs {
     fn run(&self, cx: &Cx) -> Result<()> {
         let config = self.config(cx);
-        let mirror = Mirror::new(&config, self.path.as_deref(), self.global);
+        let mirror = Mirror::new(&config);
         if self.uninstall {
             mirror.uninstall()?.render(cx.ui);
             return Ok(());

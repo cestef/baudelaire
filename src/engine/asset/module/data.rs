@@ -20,7 +20,7 @@ const FEED: &str = include_str!("types/feed.d.ts");
 
 /// `baudelaire:site`: site identity and build version, mirroring what templates
 /// read from `sys.inputs.baudelaire`. The field list is
-/// [`BuildContext::site_fields`], shared with the Typst `@baudelaire/site`.
+/// [`BuildContext::site_fields`], shared with the Typst `/.baudelaire/site/site.typ`.
 pub(super) struct Site;
 
 impl Module for Site {

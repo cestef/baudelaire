@@ -1,10 +1,10 @@
-#import "@baudelaire/html:0.1.0": classes, h, svg
+#import "/.baudelaire/site/html.typ": classes, h, svg
 
 #let link-to(href, label) = h("a", href: href, label)
 
 // Build metadata, injected by baudelaire at `sys.inputs.baudelaire`. Only
 // values that change between builds are read here (site identity comes from
-// `@baudelaire/site`), so a page depends on the commit only if it shows it.
+// `/.baudelaire/site/site.typ`), so a page depends on the commit only if it shows it.
 #let build = sys.inputs.at("baudelaire", default: (:))
 #let git = build.at("git", default: none)
 

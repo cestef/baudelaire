@@ -68,8 +68,8 @@ it, so copy the theme's collection block if you only meant to add one.
 
 ## Navigation
 
-No theme hardcodes a menu. The nav comes from `@baudelaire/sections` (the
-content tree) and `@baudelaire/pages` (the page catalogue), so a new directory
+No theme hardcodes a menu. The nav comes from `/.baudelaire/site/sections.typ` (the
+content tree) and `/.baudelaire/site/pages.typ` (the page catalogue), so a new directory
 or page appears in the nav and a removed one disappears, with no config to keep
 in sync.
 
@@ -91,7 +91,8 @@ Four rules that apply to theme authors:
 - Import siblings relatively. Inside a theme, `#import "../parts.typ"`
   resolves in both modes; a root-absolute `/parts.typ` resolves against the
   project root when the theme is a directory and against the package root
-  when it is published, so it cannot be right in both.
+  when it is published, so it cannot be right in both. `/.baudelaire/site/`
+  is the exception: baudelaire answers it under either root.
 - Do not use `svg()`. Its paths are project-root absolute, and a theme
   does not know where it sits in your project. Build icons as inline `<svg>`
   elements instead, the way `parts.typ` does in each theme here.
@@ -103,4 +104,4 @@ Four rules that apply to theme authors:
 - Do not write a feed `<link rel="alternate">`. baudelaire puts one in the
   head per configured format, with the base URL and the page's language on it. A
   visible feed link goes through `feeds` and `feed-url` from
-  `@baudelaire/site`, so it names the file the build actually wrote.
+  `/.baudelaire/site/site.typ`, so it names the file the build actually wrote.

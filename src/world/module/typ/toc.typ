@@ -1,9 +1,9 @@
-// `@baudelaire/toc`: a table of contents built from the page's own headings.
+// `/.baudelaire/site/toc.typ`: a table of contents built from the page's own headings.
 //
 // Generated and served by baudelaire; nothing for this exists on disk. Import
-// it as `#import "@baudelaire/toc:0.1.0": toc`.
+// it as `#import "/.baudelaire/site/toc.typ": toc`.
 
-#import "@baudelaire/html:0.1.0": h
+#import "/.baudelaire/site/html.typ": h
 
 // A table of contents for the page this sits on:
 //

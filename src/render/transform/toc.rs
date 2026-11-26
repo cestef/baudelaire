@@ -1,4 +1,4 @@
-//! Fills in the tables of contents that `@baudelaire/toc`'s `toc()` marked.
+//! Fills in the tables of contents that `/.baudelaire/site/toc.typ`'s `toc()` marked.
 //!
 //! A page's heading set only exists once typst has produced the DOM, which is
 //! why this is a pass and not a module binding.

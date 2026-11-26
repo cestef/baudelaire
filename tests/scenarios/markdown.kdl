@@ -1210,7 +1210,7 @@ scenario "a typst page renders markdown with md" {
       }
       """#
     "content/a.typ" ##"""
-      #import "@baudelaire/markdown:0.1.0": md
+      #import "/.baudelaire/site/markdown.typ": md
       #let frontmatter = (title: "A")
 
       Typst first.
@@ -1253,7 +1253,7 @@ scenario "md reads the site's markdown extensions" {
       }
       """#
     "content/a.typ" ##"""
-      #import "@baudelaire/markdown:0.1.0": md
+      #import "/.baudelaire/site/markdown.typ": md
       #let frontmatter = (title: "A")
       #md(```md
       | a | b |
@@ -1287,7 +1287,7 @@ scenario "md renders a file beside the page" {
       Shared **prose**.
       """#
     "content/posts/a.typ" ##"""
-      #import "@baudelaire/markdown:0.1.0": md
+      #import "/.baudelaire/site/markdown.typ": md
       #let frontmatter = (title: "A")
       #md(path: "beside.md")
       #md(path: "/fragments/intro.md")
@@ -1321,7 +1321,7 @@ scenario "editing a rendered fragment rebuilds only its page" {
       first **version**
       """#
     "content/a.typ" ##"""
-      #import "@baudelaire/markdown:0.1.0": md
+      #import "/.baudelaire/site/markdown.typ": md
       #let frontmatter = (title: "A")
       #md(path: "/fragments/intro.md")
       """##
@@ -1365,7 +1365,7 @@ scenario "md refuses a content block" {
       }
       """#
     "content/a.typ" ##"""
-      #import "@baudelaire/markdown:0.1.0": md
+      #import "/.baudelaire/site/markdown.typ": md
       #let frontmatter = (title: "A")
       #md[**bold**]
       """##
@@ -1432,7 +1432,7 @@ scenario "md takes its own settings over the site's" {
       }
       """#
     "content/a.typ" ##"""
-      #import "@baudelaire/markdown:0.1.0": md
+      #import "/.baudelaire/site/markdown.typ": md
       #let frontmatter = (title: "A")
       #md(```md
       | a | b |
@@ -1464,7 +1464,7 @@ scenario "md refuses an extension it does not know" {
       }
       """#
     "content/a.typ" ##"""
-      #import "@baudelaire/markdown:0.1.0": md
+      #import "/.baudelaire/site/markdown.typ": md
       #let frontmatter = (title: "A")
       #md("x", extensions: ("tabels",))
       """##

@@ -105,7 +105,7 @@ fn a_blog_theme_builds_posts_an_index_and_a_term_page() {
     }
 }
 
-/// A `home.typ` page lists the collection from `@baudelaire/pages`, the build's
+/// A `home.typ` page lists the collection from `/.baudelaire/site/pages.typ`, the build's
 /// own catalogue.
 #[test]
 fn a_blog_theme_lists_recent_posts_on_a_home_page() {

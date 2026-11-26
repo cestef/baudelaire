@@ -363,7 +363,7 @@ fn retitling_leaves_pages_whose_template_ignores_the_section_tree_cached() {
 #[test]
 fn a_template_that_imports_the_section_tree_rebuilds_when_a_title_changes() {
     let site = templated(
-        "#import \"@baudelaire/sections:0.1.0\": sections\n",
+        "#import \"/.baudelaire/site/sections.typ\": sections\n",
         "  [#sections(page.lang).len()]",
     );
     site.stats();
@@ -388,7 +388,7 @@ fn a_template_that_imports_the_section_tree_rebuilds_when_a_title_changes() {
 #[test]
 fn the_generated_section_tree_is_written_before_the_first_compile() {
     let site = templated(
-        "#import \"@baudelaire/sections:0.1.0\": sections\n",
+        "#import \"/.baudelaire/site/sections.typ\": sections\n",
         "  [#sections(page.lang).len()]",
     );
 
@@ -397,7 +397,9 @@ fn the_generated_section_tree_is_written_before_the_first_compile() {
     assert_eq!(stats.pages, 5);
     // Served from a real file, which is what puts it in the importing page's
     // dependency set.
-    assert!(site.exists(".baudelaire/generated/sections.typ"));
+    assert!(site.exists(".baudelaire/site/sections.typ"));
+    // Beside it, the in-memory modules, written for an editor to resolve.
+    assert!(site.exists(".baudelaire/site/html.typ"));
 }
 
 #[test]

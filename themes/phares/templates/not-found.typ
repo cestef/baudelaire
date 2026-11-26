@@ -10,7 +10,7 @@
 // and the whole of it is one click away. No on-page contents, for the same
 // reason the term pages have none.
 
-#import "@baudelaire/html:0.1.0": h
+#import "/.baudelaire/site/html.typ": h
 #import "../parts.typ": search-trigger, shell
 
 #let not-found(page, body) = shell(

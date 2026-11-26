@@ -4,12 +4,12 @@
 )
 #import "/templates/theme.typ": callout
 
-Seven packages your templates and pages can import without anything existing on
-disk. Nothing is downloaded: typst asks for the package, baudelaire answers it.
+Seven modules your templates and pages can import. Each is a file under
+`/.baudelaire/site/`, generated from your site by every build.
 
 ```typ
-#import "@baudelaire/html:0.1.0": h, classes
-#import "@baudelaire/site:0.1.0": title, url
+#import "/.baudelaire/site/html.typ": h, classes
+#import "/.baudelaire/site/site.typ": title, url
 
 #h("a", class: "brand", href: "/")[#title]
 ```
@@ -18,76 +18,42 @@ disk. Nothing is downloaded: typst asks for the package, baudelaire answers it.
   columns: 3,
   align: (left, left, left),
   table.header([Module], [Exports], [Gives you]),
-  [`@baudelaire/html`], [`h`, `classes`, `svg`, `nolint`], [Element construction, SVG inlining, and keeping the #link("../build/linting.typ")[lint] off a region.],
-  [`@baudelaire/site`], [`version`, `title`, `url`, `lang`, `author`, `languages`, `feeds`], [Site identity as typed bindings.],
-  [`@baudelaire/sections`], [`sections(lang)`], [The site's content tree.],
-  [`@baudelaire/pages`], [`pages(lang)`], [Every authored page as a row.],
-  [`@baudelaire/markdown`], [`md`], [Markdown rendered inside a Typst page.],
-  [`@baudelaire/sources`], [one per declaration], [The files `paths { sources }` declared.],
-  [`@baudelaire/toc`], [`toc`], [A table of contents, from the page's own headings.],
+  [`/.baudelaire/site/html.typ`], [`h`, `classes`, `svg`, `nolint`], [Element construction, SVG inlining, and keeping the #link("../build/linting.typ")[lint] off a region.],
+  [`/.baudelaire/site/site.typ`], [`version`, `title`, `url`, `lang`, `author`, `languages`, `feeds`], [Site identity as typed bindings.],
+  [`/.baudelaire/site/sections.typ`], [`sections(lang)`], [The site's content tree.],
+  [`/.baudelaire/site/pages.typ`], [`pages(lang)`], [Every authored page as a row.],
+  [`/.baudelaire/site/markdown.typ`], [`md`], [Markdown rendered inside a Typst page.],
+  [`/.baudelaire/site/sources.typ`], [one per declaration], [The files `paths { sources }` declared.],
+  [`/.baudelaire/site/toc.typ`], [`toc`], [A table of contents, from the page's own headings.],
 )
 
 They are the Typst counterpart of the #link("js-modules.typ")[`baudelaire:*`
 JavaScript modules] and read from the same build data, so a template and a bundle
 can never disagree about what the site is called.
 
-== Versions
+== Importing
 
-*Every module is served at `0.1.0`, and that is the only version there is.* Write
-`:0.1.0` on every import. Typst's package syntax requires a version. This one
-tracks the module API and does not move when you upgrade baudelaire. Asking for any other version fails
-at the import, naming the one that exists, rather than reaching for the network.
+The path is from the project root, so the same line works in a page, a template
+and a theme. There is no version to write.
 
-== Editor support
-
-These packages only exist while baudelaire is compiling, so an editor has
-nothing to resolve and marks the import unknown. Write them out once:
+Every build writes the modules to `.baudelaire/site/`, so an editor resolves the
+imports with nothing configured once the site has been built. On a fresh
+checkout, write them without building:
 
 ```sh
 baudelaire mirror
 ```
 
-That writes them all into `.baudelaire/generated/packages/`, alongside the
-#link("js-modules.typ")[`baudelaire:*` declarations]. `baudelaire init` does it
-for you.
-
-They go in the project rather than in typst's own package directory because
-three of them describe *this* site, and one machine-global copy would show one
-project's title and pages to every other project's editor. So point typst at
-the directory once:
-
-```sh
-export TYPST_PACKAGE_PATH="$PWD/.baudelaire/generated/packages"
-```
-
-```json
-//! @ignore
-// tinymist
-"tinymist.typstExtraArgs": ["--package-path", "/abs/path/.baudelaire/generated/packages"]
-```
-
-#table(
-  columns: 2,
-  align: (left, left),
-  table.header([Flag], [Does]),
-  [`--global`], [Write into typst's own package directory instead: nothing to configure, one copy shared by every project.],
-  [`--path DIR`], [Write somewhere else again.],
-)
-
-A build never reads what this writes: the compiler answers `@baudelaire/*` from
-memory before typst's package resolution runs, so an installed copy that is
-stale, edited or missing can mislead an editor and never change a page.
+A build never reads the copies back: the compiler answers those paths from
+memory, so a copy that is stale, edited or missing can mislead an editor and
+never change a page. `sections` and `pages` are built from your own pages, so
+they are empty in a project that has never been built. The symbols resolve
+either way.
 
 #callout(kind: "note")[
-  `sections` and `pages` are built from your own pages, so they install with the
-  data from the last build, and empty in a project that has never been built.
-  The symbols resolve either way. Re-run after upgrading baudelaire.
+  Before 0.0.20 these were packages: `#import "@baudelaire/html:0.1.0": h`. That
+  import now fails and names the file it became.
 ]
-
-`baudelaire mirror --uninstall` takes them back off, removing baudelaire's own
-namespace directory and nothing else in there, and the declarations with it.
-`clean` sweeps them too, since they are project state now; a `--global` install
-is not project state, so only `--uninstall --global` takes that one off.
 
 == html
 
@@ -192,7 +158,7 @@ Site identity as plain bindings, rather than a chain of guarded `.at` reads into
 `sys.inputs`:
 
 ```typ
-#import "@baudelaire/site:0.1.0": version, title, url, lang, author, description, languages, feeds
+#import "/.baudelaire/site/site.typ": version, title, url, lang, author, description, languages, feeds
 ```
 
 #table(
@@ -214,7 +180,7 @@ A feed's name and its place both move with config, so link one through `feeds`
 rather than writing `/rss.xml` by hand:
 
 ```typ
-#import "@baudelaire/site:0.1.0": feed-url, feeds
+#import "/.baudelaire/site/site.typ": feed-url, feeds
 
 #for feed in feeds {
   let url = feed-url(feed, page.lang)
@@ -243,7 +209,7 @@ The site's own view of `content/`, as a tree, for a nav that cannot drift from
 the pages.
 
 ```typ
-#import "@baudelaire/sections:0.1.0": sections
+#import "/.baudelaire/site/sections.typ": sections
 
 #let layout(page, body) = {
   for section in sections(page.lang) {
@@ -276,7 +242,7 @@ home page showing the three most recent posts, a portfolio grid, a related list,
 an archive.
 
 ```typ
-#import "@baudelaire/pages:0.1.0": pages
+#import "/.baudelaire/site/pages.typ": pages
 
 #let recent(page) = {
   let posts = pages(page.lang).filter(p => p.collection == "posts")
@@ -326,8 +292,8 @@ A page may import the catalogue itself, which is how this site's home page
 counts its own pages:
 
 ```typ
-#import "@baudelaire/site:0.1.0": lang
-#import "@baudelaire/pages:0.1.0": pages
+#import "/.baudelaire/site/site.typ": lang
+#import "/.baudelaire/site/pages.typ": pages
 
 This site has #pages(lang).len() pages.
 ```
@@ -345,8 +311,8 @@ under. A page writes a *name*; `paths { sources }` is the only place a path is
 written, so a page can reach a declared file and nothing else.
 
 ```typ
-#import "@baudelaire/sources:0.1.0": changelog, data, logo
-#import "@baudelaire/html:0.1.0": svg
+#import "/.baudelaire/site/sources.typ": changelog, data, logo
+#import "/.baudelaire/site/html.typ": svg
 
 #include changelog          // a `.typ` source is a body
 #let counts = json(data)    // any other kind is data
@@ -376,7 +342,7 @@ agree about what a table, a list or a footnote becomes, and it reads this site's
 own `content { markdown { extensions } }`.
 
 ````typ
-#import "@baudelaire/markdown:0.1.0": md
+#import "/.baudelaire/site/markdown.typ": md
 
 #md("A **bold** claim and a [link](https://example.com).")
 
@@ -422,7 +388,7 @@ well as appearing wherever you render it.
 the page it lands on.
 
 ```typ
-#import "@baudelaire/toc:0.1.0": toc
+#import "/.baudelaire/site/toc.typ": toc
 
 #h("aside", class: "sidebar")[
   #h("h2")[On this page]

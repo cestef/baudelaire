@@ -18,7 +18,7 @@ loadLogo(url("/assets/logo.png"));  // the fingerprinted name
 These are served to the bundler, so they need `assets { bundle #true }` and a
 binary with the `js` feature. See the #link("../build/assets.typ")[asset
 pipeline]. They are the JavaScript counterpart of the
-#link("typst-modules.typ")[`@baudelaire/*` Typst modules], built from the same
+#link("typst-modules.typ")[`/.baudelaire/site/*.typ` Typst modules], built from the same
 data.
 
 == TypeScript
@@ -120,7 +120,7 @@ a known asset. The default export is the raw map.
 == pages
 
 An array of rows, one per authored page, the same shape a generated listing hands
-its template and the Typst `@baudelaire/pages` catalogue serves:
+its template and the Typst `/.baudelaire/site/pages.typ` catalogue serves:
 `url`, `label`, `collection`, `lang`, `date`, `display`, `note`, `description`,
 `image`, `alt`, `author`, `taxonomies`, `extra`. Generated listings and the
 not-found page are excluded.

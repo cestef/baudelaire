@@ -10,7 +10,7 @@ theme "themes/paysage"
 ## What you get
 
 - `home.typ`: the landing page: a hero in your own words, then a selection of
-  work read from the `@baudelaire/pages` catalogue. Bind it with
+  work read from the `/.baudelaire/site/pages.typ` catalogue. Bind it with
   `template: "home.typ"`.
 - `project.typ`: one case study: title, a fact row (date, role, client,
   duration, stack), a cover image, the write-up, and a link to the next project.
@@ -65,7 +65,7 @@ than `work`. The `All work →` link goes to the generated index, which lists
 everything.
 
 The top nav needs no menu in config: content directories come from
-`@baudelaire/sections` and the pages beside your landing page come from the page
+`/.baudelaire/site/sections.typ` and the pages beside your landing page come from the page
 catalogue, so adding an `about.typ` adds it to the nav.
 
 ## Images

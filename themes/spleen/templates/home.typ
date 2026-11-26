@@ -2,11 +2,11 @@
 // this theme lists everything, under the command that would have produced them.
 //
 // Bind it from a page's frontmatter (`template: "home.typ"`). The posts come
-// from `@baudelaire/pages`, the build's own catalogue, so the list cannot fall
+// from `/.baudelaire/site/pages.typ`, the build's own catalogue, so the list cannot fall
 // behind what the site publishes.
 
-#import "@baudelaire/html:0.1.0": h
-#import "@baudelaire/pages:0.1.0": pages
+#import "/.baudelaire/site/html.typ": h
+#import "/.baudelaire/site/pages.typ": pages
 #import "../parts.typ": label, shell
 
 // How many posts the home page shows; `recent` in a page's frontmatter

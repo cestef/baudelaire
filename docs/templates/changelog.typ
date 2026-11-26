@@ -1,6 +1,6 @@
-#import "@baudelaire/html:0.1.0": h
+#import "/.baudelaire/site/html.typ": h
 #import "/templates/theme.typ": shell
-#import "@baudelaire/sections:0.1.0": sections
+#import "/.baudelaire/site/sections.typ": sections
 
 // The changelog has a shape the generic page template cannot see: a run of
 // releases, each a stack of sections, each a list of entries. The markdown it

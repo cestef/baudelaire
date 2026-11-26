@@ -14,7 +14,7 @@ rendered CSS or break the hook; there is no upstream contract for either.
 *generated source*: a virtual module's `bindings()` emits `#let` lines through
 `Let` and its `body()` is hand-written `.typ`. That cannot express `md`, because
 lowering markdown is Rust that has to run mid-evaluation, so it is a `#[func]`
-bound into `library.global` and wrapped by `@baudelaire/markdown`. The macro
+bound into `library.global` and wrapped by `/.baudelaire/site/markdown.typ`. The macro
 expands to absolute `::typst_library` / `::typst_utils` paths, which is the whole
 reason those two crates are named in `Cargo.toml`; nothing imports them. Two
 non-obvious consequences: `Library::builder` clones the global scope into `std`

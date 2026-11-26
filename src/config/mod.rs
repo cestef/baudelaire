@@ -1100,9 +1100,12 @@ pub enum Scratch {
     Cache,
     /// Per-backend announce skip-cache: loss forces idempotent re-sends.
     Announce,
-    /// Generated typst modules, their declaration file, and the package mount:
-    /// loss is rebuilt on the next compile.
+    /// The TypeScript declarations of the generated script modules: loss is
+    /// rewritten by the next build.
     Generated,
+    /// The generated typst modules a page imports as `/.baudelaire/site/<name>.typ`:
+    /// loss is rewritten by the next build.
+    Site,
     /// What the external-link check has already seen: loss re-requests every
     /// outbound URL.
     Links,
@@ -1117,6 +1120,7 @@ impl Scratch {
             Self::Cache => Config::CACHE,
             Self::Announce => "announce",
             Self::Generated => "generated",
+            Self::Site => "site",
             Self::Links => "links",
             Self::Snippets => "snippets",
         }

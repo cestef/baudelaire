@@ -157,7 +157,7 @@ scenario "a sourced page may not also have a body" {
   }
 }
 
-// The names are emitted as `#let` bindings in `@baudelaire/sources`, so one
+// The names are emitted as `#let` bindings in `/.baudelaire/site/sources.typ`, so one
 // typst cannot bind breaks that module rather than this config, at the first
 // import, inside a generated file nobody has opened.
 scenario "a source name typst cannot bind is refused" {
@@ -273,8 +273,8 @@ scenario "an svg from a declared source is inlined" {
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><rect width="1" height="1"/></svg>
       """#
     "content/page.typ" #"""
-      #import "@baudelaire/sources:0.1.0": logo
-      #import "@baudelaire/html:0.1.0": svg
+      #import "/.baudelaire/site/sources.typ": logo
+      #import "/.baudelaire/site/html.typ": svg
       #let frontmatter = (title: "Page",)
 
       #svg(logo)
@@ -311,7 +311,7 @@ scenario "a typst page reads a declared source by name" {
       { "count": 7 }
       """#
     "content/page.typ" #"""
-      #import "@baudelaire/sources:0.1.0": notes, data
+      #import "/.baudelaire/site/sources.typ": notes, data
       #let frontmatter = (title: "Page",)
 
       #include notes

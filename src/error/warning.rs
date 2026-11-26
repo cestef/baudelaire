@@ -118,7 +118,7 @@ pub struct VcsUnrunnable {
 #[diagnostic(
     code(baudelaire::mirror::unbuilt),
     severity(advice),
-    help("build the site, then mirror again to fill the tables in")
+    help("build the site once: a build writes the tables in")
 )]
 pub struct MirrorUnbuilt {
     /// Already marked up (see [`crate::ui::markup!`]), not text to be escaped.
@@ -144,7 +144,7 @@ pub struct MirrorDefaults {
 #[diagnostic(
     code(baudelaire::mirror::skipped),
     severity(warning),
-    help("the site still builds; run `baudelaire mirror --path <dir>` to choose a location")
+    help("the site still builds, and the next build writes the modules again")
 )]
 pub struct MirrorSkipped {
     pub reason: String,

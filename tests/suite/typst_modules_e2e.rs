@@ -1,4 +1,4 @@
-//! The `@baudelaire/*` virtual Typst modules: a template imports one and the
+//! The generated `/.baudelaire/site/*.typ` Typst modules: a template imports one and the
 //! compiler resolves it from memory, with nothing on disk.
 
 use crate::common::Site;
@@ -36,7 +36,7 @@ fn site(template: &str) -> Site {
 fn named_arguments_become_attributes() {
     let site = site(
         r#"
-        import "@baudelaire/html:0.1.0": h
+        import "/.baudelaire/site/html.typ": h
         h("button", class: "icon-btn", type: "button", aria-label: "Go")[x]
         "#,
     );
@@ -55,7 +55,7 @@ fn named_arguments_become_attributes() {
 fn values_coerce_and_absent_attributes_disappear() {
     let site = site(
         r#"
-        import "@baudelaire/html:0.1.0": h
+        import "/.baudelaire/site/html.typ": h
         h("input", type: "checkbox", checked: true, disabled: false, name: none, tabindex: 3)
         "#,
     );
@@ -76,7 +76,7 @@ fn values_coerce_and_absent_attributes_disappear() {
 fn classes_joins_conditionally() {
     let site = site(
         r#"
-        import "@baudelaire/html:0.1.0": h, classes
+        import "/.baudelaire/site/html.typ": h, classes
         h("p", class: classes("callout", "callout-" + "note", ("on", true), ("off", false)))[x]
         h("p", class: classes(("off", false)))[y]
         "#,
@@ -92,7 +92,7 @@ fn classes_joins_conditionally() {
     assert!(html.contains("<p>y</p>"), "{html}");
 }
 
-/// `@baudelaire/site` binds site identity, and every key exists even when the
+/// `/.baudelaire/site/site.typ` binds site identity, and every key exists even when the
 /// config leaves it unset, so a theme can read `author` off an authorless site.
 #[test]
 fn site_identity_is_bound() {
@@ -100,7 +100,7 @@ fn site_identity_is_bound() {
     site.write(
         "templates/page.typ",
         r#"
-        #import "@baudelaire/site:0.1.0": title, url, author, lang, languages
+        #import "/.baudelaire/site/site.typ": title, url, author, lang, languages
         #let page(data, body) = [#title|#url|#lang|#repr(author)|#languages.len()]
         "#,
     );
@@ -127,7 +127,7 @@ fn site_feeds_name_what_the_build_writes() {
     site.write(
         "templates/page.typ",
         r#"
-        #import "@baudelaire/site:0.1.0": feed-url, feeds
+        #import "/.baudelaire/site/site.typ": feed-url, feeds
         #let page(data, body) = [
           #for feed in feeds [#feed.format=#feed-url(feed, data.lang);]
         ]
@@ -164,7 +164,7 @@ fn site_feeds_are_empty_without_a_feed() {
     site.write(
         "templates/page.typ",
         r#"
-        #import "@baudelaire/site:0.1.0": feeds
+        #import "/.baudelaire/site/site.typ": feeds
         #let page(data, body) = [count=#feeds.len()]
         "#,
     );
@@ -177,7 +177,7 @@ fn site_feeds_are_empty_without_a_feed() {
     assert!(site.output("index.html").contains("count=0"));
 }
 
-/// `@baudelaire/pages` hands a template the site's own catalogue, in the same
+/// `/.baudelaire/site/pages.typ` hands a template the site's own catalogue, in the same
 /// row shape a generated listing's `entries` carry, listings excluded.
 #[test]
 fn the_page_catalogue_is_bound_per_language() {
@@ -188,7 +188,7 @@ fn the_page_catalogue_is_bound_per_language() {
     site.write(
         "templates/page.typ",
         r#"
-        #import "@baudelaire/pages:0.1.0": pages
+        #import "/.baudelaire/site/pages.typ": pages
         #let page(data, body) = [
           #for entry in pages("en") [
             #entry.collection/#entry.label/#entry.date/#entry.extra.at("hero", default: "-")/#entry.taxonomies.at("tags", default: ()).len()/#(if entry.description == none { "-" } else { entry.description })/#entry.extra.at("summary", default: "gone");
@@ -234,8 +234,8 @@ fn a_content_page_reads_the_catalogue_on_a_first_build() {
         "content/index.typ",
         r#"
         #let frontmatter = (title: "Home",)
-        #import "@baudelaire/site:0.1.0": lang
-        #import "@baudelaire/pages:0.1.0": pages
+        #import "/.baudelaire/site/site.typ": lang
+        #import "/.baudelaire/site/pages.typ": pages
         Pages: #pages(lang).len()
         "#,
     );
@@ -256,7 +256,7 @@ fn the_catalogue_a_content_page_reads_tracks_the_page_set() {
         "content/index.typ",
         r#"
         #let frontmatter = (title: "Home",)
-        #import "@baudelaire/pages:0.1.0": pages
+        #import "/.baudelaire/site/pages.typ": pages
         Pages: #pages("en").len()
         "#,
     );
@@ -281,7 +281,7 @@ fn frontmatter_derived_from_the_catalogue_re_evaluates_once_it_exists() {
     site.write(
         "content/index.typ",
         r#"
-        #import "@baudelaire/pages:0.1.0": pages
+        #import "/.baudelaire/site/pages.typ": pages
         #let frontmatter = (title: "Home: " + str(pages("en").len()),)
         body
         "#,
@@ -304,7 +304,7 @@ fn frontmatter_derived_from_the_catalogue_re_evaluates_once_it_exists() {
 
 #[test]
 fn an_unknown_module_suggests_the_nearest() {
-    let site = site("import \"@baudelaire/htlm:0.1.0\": h\n[x]");
+    let site = site("import \"/.baudelaire/site/htlm.typ\": h\n[x]");
     let err = diagnostics(&site);
     assert!(err.contains("unknown baudelaire module `htlm`"), "{err}");
     // The suggestion and the list travel through typst, which renders no
@@ -319,29 +319,29 @@ fn an_unknown_module_suggests_the_nearest() {
     assert!(err.contains(valid), "{err}");
 }
 
-/// A version the registry does not serve fails at the import instead of
-/// reaching for the network, and answers with the line to write.
+/// The package a module used to be fails at the import instead of reaching
+/// for the network, and answers with the line to write.
 #[test]
-fn an_unserved_version_is_rejected() {
-    let site = site("import \"@baudelaire/html:9.9.9\": h\n[x]");
+fn an_old_package_import_names_its_file() {
+    let site = site("import \"@baudelaire/html:0.1.0\": h\n[x]");
     let err = diagnostics(&site);
-    assert!(err.contains("@baudelaire/html:0.1.0"), "{err}");
-    // The natural wrong guess is baudelaire's own version.
-    assert!(err.contains("not baudelaire's own version"), "{err}");
+    assert!(err.contains("/.baudelaire/site/html.typ"), "{err}");
 }
 
 /// A page importing a virtual module still caches: the module resolves to no
 /// file, and a dependency that cannot be hashed must not read as one that did.
 #[test]
 fn a_page_importing_a_module_still_caches() {
-    let site = site("import \"@baudelaire/html:0.1.0\": h\nh(\"p\")[x]");
+    let site = site("import \"/.baudelaire/site/html.typ\": h\nh(\"p\")[x]");
     assert_eq!(site.stats().cached, 0, "first build compiles");
     assert_eq!(site.stats().cached, 1, "second build reuses");
 }
 
 /// An icon file, and a template that inlines it with `svg()`.
 fn icons(icon: &str, call: &str) -> Site {
-    let site = site(&format!("import \"@baudelaire/html:0.1.0\": svg\n{call}"));
+    let site = site(&format!(
+        "import \"/.baudelaire/site/html.typ\": svg\n{call}"
+    ));
     site.write("icons/i.svg", icon);
     site
 }

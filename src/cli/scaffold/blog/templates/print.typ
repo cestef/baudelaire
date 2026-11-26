@@ -12,7 +12,7 @@
 //
 // `baudelaire init --with pdf` writes that line for you.
 
-#import "@baudelaire/site:0.1.0": title as site-title
+#import "/.baudelaire/site/site.typ": title as site-title
 
 #let print(page, body) = {
   // `std.page`, not `page`: the parameter above shadows Typst's own element,

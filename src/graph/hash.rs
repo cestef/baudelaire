@@ -152,7 +152,7 @@ impl Renderer {
     /// manifest or entry means something new without looking different, or the
     /// same inputs start rendering different markup, since a warm entry reads
     /// as valid under either change.
-    const SCHEMA: u32 = 23;
+    const SCHEMA: u32 = 24;
 
     pub fn current() -> Self {
         Self {

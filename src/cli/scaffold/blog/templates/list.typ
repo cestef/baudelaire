@@ -7,7 +7,7 @@
 // source page's `taxonomies`, and its whole `extra` frontmatter. That is why a
 // dated post index and an undated tag index can share this template.
 
-#import "@baudelaire/html:0.1.0": h, classes
+#import "/.baudelaire/site/html.typ": h, classes
 #import "/templates/layout.typ": layout
 
 // Listings reuse the site shell, so they never drift from a hand-written page.

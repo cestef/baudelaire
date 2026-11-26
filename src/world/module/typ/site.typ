@@ -1,7 +1,7 @@
-// `@baudelaire/site`: site identity as typed bindings.
+// `/.baudelaire/site/site.typ`: site identity as typed bindings.
 //
 // Generated and served by baudelaire; nothing for this exists on disk. Import
-// it as `#import "@baudelaire/site:0.1.0": title, url`. A name that is not
+// it as `#import "/.baudelaire/site/site.typ": title, url`. A name that is not
 // exported fails at the import instead of reading back `none`.
 //
 // Config-derived values only. Build metadata that changes between builds lives
@@ -13,7 +13,7 @@
 // A feed's URL in one language, from `feeds`: the file the build actually
 // wrote, under the scope that language's pages live in.
 //
-//   #import "@baudelaire/site:0.1.0": feeds, feed-url
+//   #import "/.baudelaire/site/site.typ": feeds, feed-url
 //   #for feed in feeds { h("a", href: feed-url(feed, page.lang), upper(feed.format)) }
 //
 // A language the site does not build has no feed, and reads back `none`.

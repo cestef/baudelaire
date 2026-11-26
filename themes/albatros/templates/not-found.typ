@@ -6,8 +6,8 @@
 // Named for its export rather than for the file it publishes as: a Typst
 // identifier cannot start with a digit, so `404.typ` could never be imported.
 
-#import "@baudelaire/html:0.1.0": h
-#import "@baudelaire/sections:0.1.0": sections
+#import "/.baudelaire/site/html.typ": h
+#import "/.baudelaire/site/sections.typ": sections
 #import "../parts.typ": label, shell, titlecase
 
 #let not-found(page, body) = shell(page, h("article", class: "post notfound", {

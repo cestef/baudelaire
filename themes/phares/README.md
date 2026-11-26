@@ -27,7 +27,7 @@ theme "themes/phares"
 
 Directories are the sections. `content/guide/`, `content/reference/`, and
 `content/guide/advanced/` nest in the sidebar as they nest on disk, as reported
-by `@baudelaire/sections`.
+by `/.baudelaire/site/sections.typ`.
 
 Order is set by `order` in frontmatter. Pages without one fall back to source
 path, which is the order a directory reads in. Number the pages that need to

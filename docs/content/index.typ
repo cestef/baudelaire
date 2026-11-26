@@ -2,9 +2,9 @@
   title: "Baudelaire",
   template: "home.typ",
 )
-#import "@baudelaire/html:0.1.0": h
-#import "@baudelaire/site:0.1.0": lang
-#import "@baudelaire/pages:0.1.0": pages
+#import "/.baudelaire/site/html.typ": h
+#import "/.baudelaire/site/site.typ": lang
+#import "/.baudelaire/site/pages.typ": pages
 #import "/templates/theme.typ": cards, demo, emit-explorer, lucide
 
 // This site's own page catalogue. Reading it here is the point: the count below

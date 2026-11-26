@@ -3,14 +3,14 @@
 // `templates/`, `assets/` and `static/` are layered.
 //
 // The work grid is the theme. It is drawn once, here, from the row shape both a
-// generated listing and the `@baudelaire/pages` catalogue carry, so the landing
+// generated listing and the `/.baudelaire/site/pages.typ` catalogue carry, so the landing
 // page's selection and the full index at `/work/` are the same component with
 // different inputs.
 
-#import "@baudelaire/html:0.1.0": h
-#import "@baudelaire/pages:0.1.0": pages
-#import "@baudelaire/sections:0.1.0": sections
-#import "@baudelaire/site:0.1.0": author, feed-url, feeds, title as site-title
+#import "/.baudelaire/site/html.typ": h
+#import "/.baudelaire/site/pages.typ": pages
+#import "/.baudelaire/site/sections.typ": sections
+#import "/.baudelaire/site/site.typ": author, feed-url, feeds, title as site-title
 
 // An icon, as real DOM rather than an `<img>`, so it inherits `currentColor`
 // and follows the theme toggle. A theme cannot use `svg()`: those paths are

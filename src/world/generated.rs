@@ -6,11 +6,10 @@ use std::fmt::Write as _;
 use std::path::PathBuf;
 
 use crate::codegen::{Let, Value};
-use crate::config::Config;
 use crate::generated::{File, Generated};
 
 /// One per-language table, written out as Typst source and imported as
-/// `@baudelaire/<module>`.
+/// `/.baudelaire/site/<module>.typ`.
 ///
 /// A file rather than a field of each page's generated wrapper, whose text is
 /// that page's cache fingerprint and so must name nothing site-wide.
@@ -30,14 +29,14 @@ impl Table {
     }
 
     /// Where this file lives, relative to the project root, under
-    /// [`Config::SCRATCH`], which `clean` wipes and `serve` does not watch.
+    /// [`crate::config::Config::SCRATCH`], which `clean` wipes and `serve` does not watch.
     pub(crate) fn path(&self) -> PathBuf {
         Self::of(self.module)
     }
 
     /// The same path for a module named directly, before any [`Table`] exists.
     pub(crate) fn of(module: &str) -> PathBuf {
-        Config::scratch(crate::config::Scratch::Generated).join(format!("{module}.typ"))
+        super::module::Modules::path(module)
     }
 
     /// The table with nothing in it: what a module reads as before a build has

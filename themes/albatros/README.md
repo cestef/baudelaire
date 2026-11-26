@@ -14,7 +14,7 @@ theme "themes/albatros"
   time), lead image, an optional contents list, body, tag chips, related posts,
   prev/next pager.
 - `home.typ`: a page's own words followed by the newest posts, read from the
-  `@baudelaire/pages` catalogue. Bind it with `template: "home.typ"`.
+  `/.baudelaire/site/pages.typ` catalogue. Bind it with `template: "home.typ"`.
 - `list.typ`: every generated index: the paginated collection index, `/tags/`,
   and each term page.
 - `not-found.typ`: the page a host serves for an unmatched URL. Bind it from
@@ -101,7 +101,7 @@ replaces the theme's whole set.
 
 ## The navigation
 
-The top nav comes from `@baudelaire/sections`, the build's view of `content/`:
+The top nav comes from `/.baudelaire/site/sections.typ`, the build's view of `content/`:
 one link per top-level directory that holds pages. Add `content/notes/` and a
 Notes link appears. It links `/<dir>/`, which exists when that collection
 generates an index (this theme's `posts` does).

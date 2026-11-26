@@ -259,7 +259,7 @@ though it takes a literal URL rather than a pattern.
 
 ```typ
 // templates/post.typ
-#import "@baudelaire/html:0.1.0": h
+#import "/.baudelaire/site/html.typ": h
 #import "/templates/parts.typ": byline
 
 #let post(page, body) = h("article")[
@@ -282,7 +282,7 @@ though it takes a literal URL rather than a pattern.
   [`{% if %}`, `{% unless %}`], [`#if`, `#if not`],
   [`| date: "%Y"`], [`page.date.display`, or `datetime` formatting],
   [`| where`, `| sort`], [`.filter(..)`, `.sorted(key: ..)`],
-  [`{{ site.title }}`], [`title` from `@baudelaire/site`],
+  [`{{ site.title }}`], [`title` from `/.baudelaire/site/site.typ`],
   [`{{ site.data.authors }}`], [`yaml("/data/authors.yaml")`],
   [`{{ page.url }}`], [not available: a page does not know its own URL],
   [`relative_url`], [nothing: a path under a subdirectory `url` is rewritten for you],
@@ -291,7 +291,7 @@ though it takes a literal URL rather than a pattern.
 
 `page.url` is absent on purpose. Nothing site-wide may enter a page's wrapper,
 or every page's cache identity would depend on every other page; the site tree
-and the page catalogue come from `@baudelaire/sections` and `@baudelaire/pages`
+and the page catalogue come from `/.baudelaire/site/sections.typ` and `/.baudelaire/site/pages.typ`
 instead. See #link("../../write/templates.typ")[templates].
 
 == Commands

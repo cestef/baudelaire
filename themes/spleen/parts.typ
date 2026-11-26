@@ -5,9 +5,9 @@
 // Nothing here emits a `<script>`. The theme is a terminal, the colours come
 // from the reader's own preference, and there is nothing left for script to do.
 
-#import "@baudelaire/html:0.1.0": classes, h
-#import "@baudelaire/sections:0.1.0": sections
-#import "@baudelaire/site:0.1.0": author, feed-url, feeds, languages, title as site-title
+#import "/.baudelaire/site/html.typ": classes, h
+#import "/.baudelaire/site/sections.typ": sections
+#import "/.baudelaire/site/site.typ": author, feed-url, feeds, languages, title as site-title
 
 // A UI label, from the site's own string table when it has one, so a
 // non-English site translates the theme through config rather than by editing

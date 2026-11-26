@@ -145,7 +145,7 @@ scenario "a page's own asset url carries the digest its file was written under" 
       """#
     "content/posts/hello/cover.png" png="8x8"
     "templates/post.typ" #"""
-      #import "@baudelaire/html:0.1.0": h
+      #import "/.baudelaire/site/html.typ": h
       #let post(page, body) = h("main", h("img", src: page.assets.at("cover.png")), body)
       """#
   }

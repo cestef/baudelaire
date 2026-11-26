@@ -430,7 +430,7 @@ mod tests {
         );
     }
 
-    /// A generated `@baudelaire/*` module is served from memory and resolves to
+    /// A generated module is served from memory and resolves to
     /// no path, so no page can record one as a dependency and only the salt can
     /// notice it changed.
     #[test]

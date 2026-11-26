@@ -1,11 +1,11 @@
 // The landing page: a hero in the page's own words, then the work.
 //
 // Bind it from the page's frontmatter (`template: "home.typ"`). The selection
-// is read from `@baudelaire/pages`, the build's own catalogue, so adding a
+// is read from `/.baudelaire/site/pages.typ`, the build's own catalogue, so adding a
 // project publishes it here with no second list to keep in step.
 
-#import "@baudelaire/html:0.1.0": h
-#import "@baudelaire/pages:0.1.0": pages
+#import "/.baudelaire/site/html.typ": h
+#import "/.baudelaire/site/pages.typ": pages
 #import "../parts.typ": hero, label, shell, work-grid
 
 // How many projects the landing page shows; `selected` in the page's

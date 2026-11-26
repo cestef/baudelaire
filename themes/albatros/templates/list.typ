@@ -6,7 +6,7 @@
 // uses, so a generated listing and a hand-built list of pages cannot look like
 // two different sites.
 
-#import "@baudelaire/html:0.1.0": h
+#import "/.baudelaire/site/html.typ": h
 #import "../parts.typ": entry-list, label, shell
 
 #let list(page, body) = shell(page, {

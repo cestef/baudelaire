@@ -440,7 +440,7 @@ h1.error {
   gap: 0.75rem;
 }
 
-/* The home page's recent list, from the `@baudelaire/pages` catalogue. */
+/* The home page's recent list, from the `/.baudelaire/site/pages.typ` catalogue. */
 
 .recent {
   margin-top: 2.5rem;

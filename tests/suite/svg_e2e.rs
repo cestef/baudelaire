@@ -1,4 +1,4 @@
-//! `@baudelaire/html`'s `svg()` against a corpus of real-world SVG files.
+//! `/.baudelaire/site/html.typ`'s `svg()` against a corpus of real-world SVG files.
 //!
 //! The fixtures in `tests/fixtures/svg` are the shapes an icon actually arrives
 //! in, and the failure mode is silent: a dropped element leaves a smaller icon.
@@ -21,7 +21,7 @@ fn site(fixture: &str, attrs: &str) -> Site {
     site.write(
         "templates/page.typ",
         &format!(
-            "#import \"@baudelaire/html:0.1.0\": svg\n\
+            "#import \"/.baudelaire/site/html.typ\": svg\n\
              #let page(data, body) = svg(\"/icons/{fixture}\"{attrs})\n"
         ),
     );
@@ -367,7 +367,7 @@ fn two_icons_defining_one_id_do_not_collide() {
     }
     site.write(
         "templates/page.typ",
-        "#import \"@baudelaire/html:0.1.0\": svg\n\
+        "#import \"/.baudelaire/site/html.typ\": svg\n\
          #let page(data, body) = {\n\
            svg(\"/icons/gradient.svg\")\n\
            svg(\"/icons/gradient-2.svg\")\n\

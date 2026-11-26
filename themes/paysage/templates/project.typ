@@ -1,7 +1,7 @@
 // One project, as a case study: cover, a fact table drawn from the project's
 // own frontmatter, the write-up, then the next project.
 
-#import "@baudelaire/html:0.1.0": h
+#import "/.baudelaire/site/html.typ": h
 #import "../parts.typ": label, next-project, posted, shell, titlecase
 
 // The facts a project page shows beside the date, in this order, read from the

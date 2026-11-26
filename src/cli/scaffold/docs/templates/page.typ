@@ -1,5 +1,5 @@
 #import "/templates/theme.typ": pager, shell
-#import "@baudelaire/sections:0.1.0": sections
+#import "/.baudelaire/site/sections.typ": sections
 
 // One documentation page. The template is bound by the collection (`template=`
 // in `config.kdl`) or by a `template:` key in the page's own frontmatter, and

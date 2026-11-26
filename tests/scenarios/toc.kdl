@@ -1,4 +1,4 @@
-// `@baudelaire/toc`: a table of contents built from the page's own headings.
+// `/.baudelaire/site/toc.typ`: a table of contents built from the page's own headings.
 //
 // A page's heading set only exists after typst has produced the DOM, so `toc()`
 // emits an empty `<nav>` and a render pass fills it in. The headings it lists
@@ -27,8 +27,8 @@ defaults {
 scenario "a table of contents nests the page's headings" {
   files {
     "templates/page.typ" #"""
-      #import "@baudelaire/html:0.1.0": h
-      #import "@baudelaire/toc:0.1.0": toc
+      #import "/.baudelaire/site/html.typ": h
+      #import "/.baudelaire/site/toc.typ": toc
 
       #let page(page, body) = {
         h("aside", h("h2")[On this page], toc(class: "toc"))
@@ -55,8 +55,8 @@ scenario "a table of contents nests the page's headings" {
 scenario "a table of contents takes a level range and an ordered list" {
   files {
     "templates/page.typ" #"""
-      #import "@baudelaire/html:0.1.0": h
-      #import "@baudelaire/toc:0.1.0": toc
+      #import "/.baudelaire/site/html.typ": h
+      #import "/.baudelaire/site/toc.typ": toc
 
       #let page(page, body) = {
         h("nav-outer", toc(from: 3, to: 3, ordered: true))
@@ -86,8 +86,8 @@ scenario "a table of contents leaves out the chrome inside the region" {
       html { region { element "main"; ignore "figure" } }
       """#
     "templates/page.typ" #"""
-      #import "@baudelaire/html:0.1.0": h
-      #import "@baudelaire/toc:0.1.0": toc
+      #import "/.baudelaire/site/html.typ": h
+      #import "/.baudelaire/site/toc.typ": toc
 
       #let page(page, body) = {
         h("main", toc(), h("figure", h("h2")[A caption]), body)
@@ -110,8 +110,8 @@ scenario "a page with no heading gets an empty table of contents" {
       No sections here.
       """#
     "templates/page.typ" #"""
-      #import "@baudelaire/html:0.1.0": h
-      #import "@baudelaire/toc:0.1.0": toc
+      #import "/.baudelaire/site/html.typ": h
+      #import "/.baudelaire/site/toc.typ": toc
 
       #let page(page, body) = {
         h("main", toc(class: "toc"), body)

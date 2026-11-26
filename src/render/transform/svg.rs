@@ -1,4 +1,4 @@
-//! Inlines the SVG files that `@baudelaire/html`'s `svg()` marked.
+//! Inlines the SVG files that `/.baudelaire/site/html.typ`'s `svg()` marked.
 //!
 //! Paths are project-absolute, and every file read here is reported through
 //! [`crate::render::Rewrite::read`] so the page depends on it.

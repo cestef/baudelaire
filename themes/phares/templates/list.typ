@@ -4,7 +4,7 @@
 //
 // No on-page contents: a list of links has no headings to collect.
 
-#import "@baudelaire/html:0.1.0": classes, h
+#import "/.baudelaire/site/html.typ": classes, h
 #import "../parts.typ": label, shell
 
 #let list(page, body) = shell(

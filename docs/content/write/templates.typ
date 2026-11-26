@@ -8,7 +8,7 @@ A template is a Typst file in `templates/` exporting one function, named after t
 
 ```typ
 // templates/page.typ
-#import "@baudelaire/html:0.1.0": h
+#import "/.baudelaire/site/html.typ": h
 
 #let page(page, body) = h("main", {
   h("h1", page.frontmatter.title)
@@ -122,7 +122,7 @@ Read optional frontmatter defensively, since a page may not declare it:
 ```
 
 #callout(kind: "note")[
-  `page` knows only about itself: its own URL, collection and directory. It may not name other pages, or every page's cache entry would depend on all of them. The site tree and the page catalogue come from #link("../lookup/typst-modules.typ")[virtual modules] instead: `sections(page.lang)` and `pages(page.lang)`.
+  `page` knows only about itself: its own URL, collection and directory. It may not name other pages, or every page's cache entry would depend on all of them. The site tree and the page catalogue come from #link("../lookup/typst-modules.typ")[generated modules] instead: `sections(page.lang)` and `pages(page.lang)`.
 ]
 
 `page.nav` and `page.backlinks` are the near exceptions: each names a page's neighbours, not the whole site. See #link("../collections/navigation.typ")[prev / next links], #link("backlinks.typ")[backlinks], #link("reading.typ")[reading time], and #link("i18n.typ")[multiple languages] for the fields that have a page of their own.
@@ -151,7 +151,7 @@ A generated index (a paginated collection, a taxonomy term, the term index) has 
 
 ```typ
 // templates/list.typ
-#import "@baudelaire/html:0.1.0": h
+#import "/.baudelaire/site/html.typ": h
 
 #let list(page, body) = h("main", {
   h("h1", page.frontmatter.title)
@@ -184,14 +184,14 @@ Each row:
 
 `page.frontmatter.nav` on a listing is pagination: `prev` and `next` are plain URL strings, not the `(url, title)` dicts `page.nav` uses on a real page. `body` is a generated fallback list, which a template that draws `entries` itself can ignore.
 
-The row shape is shared with `@baudelaire/pages`, so one card component renders a collection index, a term page, and a home-page grid unchanged.
+The row shape is shared with `/.baudelaire/site/pages.typ`, so one card component renders a collection index, a term page, and a home-page grid unchanged.
 
 == `h()`
 
 `html.elem` emits an element but is wordy. `h` is the same thing without the `attrs:` wrapper.
 
 ```typ
-#import "@baudelaire/html:0.1.0": h, classes, svg
+#import "/.baudelaire/site/html.typ": h, classes, svg
 
 // before
 #html.elem("button", attrs: (class: "icon-btn", type: "button"), body)
@@ -202,9 +202,9 @@ The row shape is shared with `@baudelaire/pages`, so one card component renders 
 Named arguments become attributes, positional ones become children. Hyphenated names need no quoting, since a Typst identifier may contain a hyphen: `aria-label: "Close"`.
 
 #callout(kind: "tip")[
-  These packages exist only while baudelaire compiles, so an editor marks the
-  import unresolved. `baudelaire mirror` writes them out where tinymist looks.
-  See #link("../lookup/typst-modules.typ")[typst modules].
+  Every build writes these modules under `.baudelaire/site/`, so an editor
+  resolves the import once the site has been built. See
+  #link("../lookup/typst-modules.typ")[typst modules].
 ]
 
 Values are coerced the way HTML expects, so a template needs fewer guards:
@@ -218,7 +218,7 @@ Values are coerced the way HTML expects, so a template needs fewer guards:
   [anything else], [The coerced value, so `width: size` needs no `str(size)`.],
 )
 
-`classes` joins class names, skipping what is absent and taking a `(name, condition)` pair for a conditional one. `svg` inlines an icon file as real DOM. Both are covered on #link("../lookup/typst-modules.typ")[Typst modules], along with every other `@baudelaire/*` package.
+`classes` joins class names, skipping what is absent and taking a `(name, condition)` pair for a conditional one. `svg` inlines an icon file as real DOM. Both are covered on #link("../lookup/typst-modules.typ")[Typst modules], along with every other generated module.
 
 #callout(kind: "warn")[
   A template must never emit `html`, `head`, or `body` elements. typst-html owns those. If a layout emits a single `html` root, Typst uses it as the document, and everything that appends to the head (meta tags, verification links) silently disappears.

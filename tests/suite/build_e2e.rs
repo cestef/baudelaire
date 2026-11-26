@@ -157,7 +157,7 @@ fn an_unreadable_declared_source_reports_the_real_reason() {
     site.write("shared/adir.typ/keep.txt", "x\n");
     site.write(
         "content/p.typ",
-        "#import \"@baudelaire/sources:0.1.0\": notes\n\
+        "#import \"/.baudelaire/site/sources.typ\": notes\n\
          #let frontmatter = (title: \"P\",)\n\
          #include notes\n",
     );

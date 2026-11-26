@@ -7,8 +7,8 @@
 // here emits those: a template that did would replace the generated head, and
 // every meta tag Baudelaire appends to it would silently vanish.
 
-#import "@baudelaire/html:0.1.0": h
-#import "@baudelaire/site:0.1.0": author, title as site-title
+#import "/.baudelaire/site/html.typ": h
+#import "/.baudelaire/site/site.typ": author, title as site-title
 
 // `h(tag, ..)` is `html.elem` without the ceremony: named arguments become
 // attributes, positional ones become children, and `none` drops an attribute

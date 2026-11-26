@@ -1,6 +1,6 @@
 // A single page or post. The title is a comment line, the way a file opens.
 
-#import "@baudelaire/html:0.1.0": h
+#import "/.baudelaire/site/html.typ": h
 #import "../parts.typ": cover, meta-line, pager, shell
 
 #let page(page, body) = shell(page, h("article", class: "post", {

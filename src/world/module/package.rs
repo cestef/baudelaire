@@ -1,80 +1,50 @@
-//! The generated modules as ordinary typst packages: what the `@baudelaire/*`
-//! half of [`crate::mirror`] writes to disk.
+//! The generated modules as files on disk, under `.baudelaire/site/`, where an
+//! editor resolves a template's imports with nothing configured.
 
-use std::path::{Path, PathBuf};
-
-use typst_kit::packages::FsPackages;
+use std::path::PathBuf;
 
 use crate::codegen::Value;
 use crate::config::Config;
 use crate::generated::{File, Generated};
 use crate::world::BuildContext;
 
-use super::{ENTRYPOINT, Entrypoint, MANIFEST, Modules, NAMESPACE, VERSION};
+use super::{Entrypoint, Modules};
 
-/// One generated module, as the files typst's own resolution looks for.
+/// One generated module, as the file an editor opens.
 pub struct Package {
-    /// The name it is imported under: `@baudelaire/<name>`.
     pub name: &'static str,
     /// Whether the module's data came from a real build, or is the empty
     /// stand-in table.
     pub empty: bool,
-    manifest: String,
-    entrypoint: String,
+    source: String,
 }
 
 impl Package {
-    /// How a template names this module: `@baudelaire/<name>`.
+    /// How a template imports this module: `/.baudelaire/site/<name>.typ`.
     pub fn specifier(&self) -> String {
-        format!("@{NAMESPACE}/{}", self.name)
-    }
-
-    /// This package's directory under a package directory, which is the layout
-    /// typst looks in: `<namespace>/<name>/<version>/`.
-    fn directory(&self) -> PathBuf {
-        Packages::namespace(Path::new(""))
-            .join(self.name)
-            .join(VERSION.to_string())
+        Modules::import(self.name)
     }
 }
 
 impl Generated for Package {
     fn files(&self) -> Vec<File> {
-        let dir = self.directory();
-        vec![
-            File::new(dir.join(MANIFEST), self.manifest.clone()),
-            File::new(dir.join(ENTRYPOINT), self.entrypoint.clone()),
-        ]
+        vec![File::new(Modules::path(self.name), self.source.clone())]
     }
 }
 
-/// The generated modules of one project, ready to be written as packages.
+/// The generated modules of one project, ready to be written under its root.
 ///
-/// A build answers this namespace from memory, so what is written is a mirror
-/// and never a source: an installed copy that is stale or absent can mislead
-/// an editor and can never change a page.
-pub struct Packages {
+/// A build serves the in-memory modules from memory, so what is written is a
+/// copy and never a source: a stale or absent one can mislead an editor and can
+/// never change a page.
+pub struct Mirrored {
     modules: Modules,
 }
 
-impl Packages {
-    /// Where the packages go inside a project, relative to its root, and the
-    /// default, most modules being derived from that project.
-    pub fn project() -> PathBuf {
-        Config::scratch(crate::config::Scratch::Generated).join("packages")
-    }
-
-    /// The directory typst resolves a non-`preview` package from with nothing
-    /// configured, which is what `--global` asks for, or `None` when the
-    /// platform has no data directory and the caller has to name one.
-    pub fn directory() -> Option<PathBuf> {
-        FsPackages::system_data().map(|packages| packages.path().to_path_buf())
-    }
-
-    /// Everything a mirror owns inside a package directory: one namespace
-    /// directory and nothing else, which is what an uninstall removes.
-    pub fn namespace(dir: &Path) -> PathBuf {
-        dir.join(NAMESPACE)
+impl Mirrored {
+    /// The directory the modules are written to, relative to the project root.
+    pub fn directory() -> PathBuf {
+        Config::scratch(crate::config::Scratch::Site)
     }
 
     /// The modules as this project would serve them.
@@ -94,26 +64,34 @@ impl Packages {
         }
     }
 
-    /// Every module as a package, in the order the registry holds them.
+    /// Every module, in the order the registry holds them.
     pub fn packages(&self) -> Vec<Package> {
+        self.modules.entrypoints.iter().map(Self::package).collect()
+    }
+
+    /// The in-memory modules alone, which is what a build writes: the
+    /// file-backed tables are written by the build itself, at the same path.
+    pub fn memory(&self) -> Vec<Package> {
         self.modules
             .entrypoints
             .iter()
-            .map(|(name, entrypoint)| {
-                let (entrypoint, empty) = Self::source(name, entrypoint);
-                Package {
-                    name,
-                    empty,
-                    manifest: Modules::manifest(name),
-                    entrypoint,
-                }
-            })
+            .filter(|(_, entrypoint)| matches!(entrypoint, Entrypoint::Memory(_)))
+            .map(Self::package)
             .collect()
     }
 
-    /// A module's entrypoint source, and whether it is the empty stand-in,
-    /// which is what a project that has never been built has instead of the
-    /// table a build writes.
+    fn package((name, entrypoint): (&&'static str, &Entrypoint)) -> Package {
+        let (source, empty) = Self::source(name, entrypoint);
+        Package {
+            name,
+            empty,
+            source,
+        }
+    }
+
+    /// A module's source, and whether it is the empty stand-in, which is what a
+    /// project that has never been built has instead of the table a build
+    /// writes.
     fn source(name: &'static str, entrypoint: &Entrypoint) -> (String, bool) {
         match entrypoint {
             Entrypoint::Memory(bytes) => (String::from_utf8_lossy(bytes).into_owned(), false),

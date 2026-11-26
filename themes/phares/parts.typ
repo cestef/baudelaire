@@ -3,14 +3,14 @@
 // `templates/`, `assets/` and `static/` are layered.
 //
 // The sidebar is the whole theme, and it is not authored anywhere: it is
-// `@baudelaire/sections`, the build's own view of `content/`, so a new page
+// `/.baudelaire/site/sections.typ`, the build's own view of `content/`, so a new page
 // appears in the nav by existing and a deleted one cannot leave a dead link.
 
-#import "@baudelaire/html:0.1.0": classes, h
-#import "@baudelaire/pages:0.1.0": pages
-#import "@baudelaire/sections:0.1.0": sections
-#import "@baudelaire/toc:0.1.0": toc
-#import "@baudelaire/site:0.1.0": author, title as site-title
+#import "/.baudelaire/site/html.typ": classes, h
+#import "/.baudelaire/site/pages.typ": pages
+#import "/.baudelaire/site/sections.typ": sections
+#import "/.baudelaire/site/toc.typ": toc
+#import "/.baudelaire/site/site.typ": author, title as site-title
 
 // An icon, as real DOM rather than an `<img>`, so it inherits `currentColor`
 // and follows the theme toggle. A theme cannot use `svg()`: those paths are

@@ -1,6 +1,6 @@
-#import "@baudelaire/html:0.1.0": h
+#import "/.baudelaire/site/html.typ": h
 #import "/templates/theme.typ": link-to, shell
-#import "@baudelaire/sections:0.1.0": sections
+#import "/.baudelaire/site/sections.typ": sections
 
 // Generated listing page (taxonomy terms, paginated indexes). Each entry
 // carries `url`, `label`, an optional `date` and `note`, and the source page's

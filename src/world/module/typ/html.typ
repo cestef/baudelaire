@@ -1,7 +1,7 @@
-// `@baudelaire/html`: element construction without the ceremony.
+// `/.baudelaire/site/html.typ`: element construction without the ceremony.
 //
 // Generated and served by baudelaire; nothing for this exists on disk. Import
-// it as `#import "@baudelaire/html:0.1.0": h, classes`.
+// it as `#import "/.baudelaire/site/html.typ": h, classes`.
 
 // An attribute value as HTML sees it: a string.
 //

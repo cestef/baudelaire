@@ -335,9 +335,8 @@ it; a narrowed `clean --cache` does not. Off a terminal the full sweep stops
 rather than answering for itself, so pass `-y` in CI. A target that would swallow
 the project (`paths { dist "." }`) is refused.
 
-`clean` sweeps project state only. The `@baudelaire/*` modules installed for
-editor tooling are machine-global and no config locates them, so they are
-`baudelaire mirror --uninstall`, below.
+`clean` sweeps project state only. The generated modules written for editor
+tooling are `baudelaire mirror --uninstall`, below.
 
 This is not the config's `prune`, which sweeps only files no page claims and runs
 as part of every build.
@@ -388,25 +387,21 @@ printed from the binary you have.
 == mirror
 
 ```sh
-baudelaire mirror              # into .baudelaire/generated/
-baudelaire mirror --global     # typst packages into typst's own directory
+baudelaire mirror              # write them without building
 baudelaire mirror --uninstall  # take it all back off
 ```
 
-Writes every generated module where an editor resolves it: the
-#link("typst-modules.typ")[`@baudelaire/*` modules] as ordinary typst packages
-under `.baudelaire/generated/packages/`, and the
+Writes every generated module where an editor resolves it, without building:
+the #link("typst-modules.typ")[Typst modules] under `.baudelaire/site/`, and the
 #link("js-modules.typ")[`baudelaire:*` modules] as
-`.baudelaire/generated/baudelaire.d.ts`. `init` runs it for you; run it again
-after upgrading baudelaire.
+`.baudelaire/generated/baudelaire.d.ts`. Every build writes both anyway, so this
+is for a fresh checkout. `init` runs it for you.
 
 The run closes on the settings it still needs, ready to paste. `-v` lists every
 module it wrote.
 
 ```
 ◆ editor setup
-➜ typst     --package-path /abs/path/.baudelaire/generated/packages
-  ↳ or TYPST_PACKAGE_PATH; tinymist takes it in typstExtraArgs
 ➜ tsconfig  add .baudelaire/generated/baudelaire.d.ts to the include list
 ```
 
@@ -414,8 +409,6 @@ module it wrote.
   columns: 2,
   align: (left, left),
   table.header([Flag], [Does]),
-  [`--global`], [Put the typst packages in typst's own package directory, where they resolve with nothing configured and every project shares one copy.],
-  [`--path DIR`], [Put the typst packages here (or remove them from here) instead.],
   [`--uninstall`], [Remove what a run wrote, and nothing else in those locations.],
 )
 

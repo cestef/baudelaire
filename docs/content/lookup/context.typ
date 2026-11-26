@@ -35,7 +35,7 @@ commit link in the footer.
 )
 
 `site` mirrors the config, and unset values read as `none`. It is the same data
-`@baudelaire/site` binds by name, which is easier to use: see
+`/.baudelaire/site/site.typ` binds by name, which is easier to use: see
 #link("typst-modules.typ")[Typst modules]. `client` is the same set of constants
 the #link("js-modules.typ")[`baudelaire:config`] module hands your client
 JavaScript, so Typst and the browser read one source.

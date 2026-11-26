@@ -177,7 +177,7 @@ A `source` on a `.typ` page is refused: a typst page reaches a declared file by
 importing it instead, which is the same names by the same rule.
 
 ```typ
-#import "@baudelaire/sources:0.1.0": changelog, data
+#import "/.baudelaire/site/sources.typ": changelog, data
 
 #include changelog          // a `.typ` source is a body
 #let counts = json(data)    // any other kind is data
@@ -203,7 +203,7 @@ chunk of markdown inside a Typst page, through this same parser and these same
 `extensions`:
 
 ```typ
-#import "@baudelaire/markdown:0.1.0": md
+#import "/.baudelaire/site/markdown.typ": md
 
 #md("A **bold** claim.")
 #md(path: "notes.md")

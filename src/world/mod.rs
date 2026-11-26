@@ -160,7 +160,7 @@ impl Project {
         )]
     }
 
-    /// A content fingerprint over the generated `@baudelaire/*` modules, which
+    /// A content fingerprint over the generated modules, which
     /// have no path and so can never appear in a page's dependency set.
     pub fn modules(&self) -> crate::graph::Hash {
         self.files.read().loader().fingerprint()
@@ -195,7 +195,7 @@ impl Project {
         codegen::Value::from(&fresh) == codegen::Value::from(&self.context)
     }
 
-    /// The generated tables (`@baudelaire/sections`, `@baudelaire/pages`) are
+    /// The generated tables (`/.baudelaire/site/sections.typ`, `/.baudelaire/site/pages.typ`) are
     /// on disk; called once per build, by the pass that writes them.
     ///
     /// A page evaluated during discovery was served the empty table, so the

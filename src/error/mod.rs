@@ -27,7 +27,6 @@ pub mod link;
 pub mod lint;
 #[cfg(feature = "markdown")]
 pub mod markdown;
-pub mod mirror;
 pub mod output;
 pub mod remote;
 pub mod scaffold;
@@ -55,7 +54,6 @@ pub use hook::{HookError, Phase as HookPhase};
 pub use image::ImageError;
 pub use link::{Broken, BrokenLinks, Dead, DeadLinks, Orphan, OrphanPages};
 pub use lint::{Flaw, Flaws, Lint, Overweight, Overweights, Sources};
-pub use mirror::MirrorError;
 pub use output::BaseUrlRequired;
 pub use remote::RemoteError;
 pub use scaffold::ScaffoldError;
@@ -158,10 +156,6 @@ pub enum BaudelaireErrorKind {
     #[error(transparent)]
     #[diagnostic(transparent)]
     Markdown(Box<crate::error::markdown::MarkdownError>),
-
-    #[error(transparent)]
-    #[diagnostic(transparent)]
-    Mirror(Box<crate::error::MirrorError>),
 
     #[error(transparent)]
     #[diagnostic(transparent)]

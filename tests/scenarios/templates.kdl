@@ -128,7 +128,7 @@ scenario "sections expose the ordered page set, not filesystem order" {
       """#
     // Every section id and its pages' titles, in order, as a flat trail.
     "templates/page.typ" #"""
-      #import "@baudelaire/sections:0.1.0": sections
+      #import "/.baudelaire/site/sections.typ": sections
       #let page(page, body) = html.elem("body", {
         body
         for section in sections(page.lang) {
@@ -171,7 +171,7 @@ scenario "a subdirectory becomes a nested child section" {
       """#
     // Each section's id + direct-page titles, then one level of children.
     "templates/page.typ" #"""
-      #import "@baudelaire/sections:0.1.0": sections
+      #import "/.baudelaire/site/sections.typ": sections
       #let page(page, body) = html.elem("body", {
         for s in sections(page.lang) {
           html.elem("span", "S:" + s.id)
@@ -381,7 +381,7 @@ scenario "a page carries its own url, collection and colocated files" {
       }
       """#
     "templates/page.typ" #"""
-      #import "@baudelaire/html:0.1.0": h
+      #import "/.baudelaire/site/html.typ": h
       #let page(page, body) = h("main", {
         h("p", "at:" + page.url)
         h("p", "in:" + page.collection)
@@ -441,7 +441,7 @@ scenario "a page carries its own source file, and a generated one carries none" 
       }
       """#
     "templates/page.typ" #"""
-      #import "@baudelaire/html:0.1.0": h
+      #import "/.baudelaire/site/html.typ": h
       #let page(page, body) = h("main", h("p", {
         "from:"
         if page.source == none { "none" } else { page.source }

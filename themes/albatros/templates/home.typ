@@ -1,11 +1,11 @@
 // The home page: the page's own words, then the newest posts under them.
 //
 // Bind it from a page's frontmatter (`template: "home.typ"`). The post list is
-// read from `@baudelaire/pages`, the build's own catalogue, so it needs no
+// read from `/.baudelaire/site/pages.typ`, the build's own catalogue, so it needs no
 // second list in config and cannot fall behind what the site publishes.
 
-#import "@baudelaire/html:0.1.0": h
-#import "@baudelaire/pages:0.1.0": pages
+#import "/.baudelaire/site/html.typ": h
+#import "/.baudelaire/site/pages.typ": pages
 #import "../parts.typ": entry-list, label, shell
 
 // How many posts the home page shows; `recent` in a page's frontmatter

@@ -11,7 +11,7 @@
   search-trigger, shell, sidebar, sun, theme-toggle, updated,
 )
 
-#import "@baudelaire/html:0.1.0": h
+#import "/.baudelaire/site/html.typ": h
 
 // An aside a documentation page can drop into its own prose:
 //

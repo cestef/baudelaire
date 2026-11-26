@@ -6,11 +6,11 @@
 // localized, so translating this theme is a `strings { }` block in config and
 // never an edit to a file here.
 
-#import "@baudelaire/html:0.1.0": classes, h
-#import "@baudelaire/pages:0.1.0": pages
-#import "@baudelaire/sections:0.1.0": sections
-#import "@baudelaire/toc:0.1.0": toc
-#import "@baudelaire/site:0.1.0": author, feed-url, feeds, languages, title as site-title
+#import "/.baudelaire/site/html.typ": classes, h
+#import "/.baudelaire/site/pages.typ": pages
+#import "/.baudelaire/site/sections.typ": sections
+#import "/.baudelaire/site/toc.typ": toc
+#import "/.baudelaire/site/site.typ": author, feed-url, feeds, languages, title as site-title
 
 // An icon, as real DOM rather than an `<img>`, so it inherits `currentColor`
 // and follows the theme toggle. A theme cannot use `svg()`: those paths are
@@ -227,7 +227,7 @@
 }
 
 // One row of a page list, from the row shape every list is made of: a generated
-// listing's `page.frontmatter.entries` and the `@baudelaire/pages` catalogue
+// listing's `page.frontmatter.entries` and the `/.baudelaire/site/pages.typ` catalogue
 // carry the same fields, so this one function renders an index, a term page,
 // and the home page's recent posts.
 #let entry-row(page, entry) = h(

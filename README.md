@@ -60,7 +60,7 @@ feeds, link checking and the incremental cache work as above.
 The layout that wraps it is Typst too. It builds DOM nodes, not strings:
 
 ```typ
-#import "@baudelaire/html:0.1.0": h
+#import "/.baudelaire/site/html.typ": h
 
 #let page(page, body) = {
   h("article", {

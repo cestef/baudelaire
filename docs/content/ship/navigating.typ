@@ -24,7 +24,7 @@ own document; these write artifacts beside it.
 `navigation { spa }` writes `dist/spa.js`. Load it once, from your template:
 
 ```typ
-#import "@baudelaire/html:0.1.0": h
+#import "/.baudelaire/site/html.typ": h
 
 #h("script", type: "module", src: "/spa.js")
 ```

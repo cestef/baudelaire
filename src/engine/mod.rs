@@ -288,7 +288,8 @@ impl Engine {
     /// The compile inputs for `pages`: the wrapper text binding each page to its
     /// template, plus the section trees derived from the whole page set, which
     /// are written out here so a template's `#import` of one resolves on the
-    /// first compile of a fresh checkout.
+    /// first compile of a fresh checkout. The in-memory modules are written
+    /// beside them, for an editor.
     fn prepare<'a>(&'a self, planned: &'a Planned) -> Result<Prepare<'a>> {
         let prepare = Prepare::new(
             &self.config,
@@ -303,6 +304,9 @@ impl Engine {
         for table in prepare.generated() {
             table.write(root)?;
         }
+        crate::world::module::Mirrored::new(&self.config)
+            .memory()
+            .write(root)?;
         #[cfg(feature = "js")]
         crate::engine::asset::Declarations::of(&self.config).write(root)?;
         self.project.tables_written();
