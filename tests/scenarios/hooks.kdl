@@ -29,6 +29,34 @@ scenario "the before and after hooks both run" {
   }
 }
 
+// A before hook that generates into `static/` or `content/` is read by the
+// same build, not the next one: `static/` used to be copied ahead of it.
+scenario "a before hook feeds the static tree and the content of its own build" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+        static "static"
+      }
+      hooks {
+        before "mkdir -p static/css content && echo fresh > static/css/main.css && printf '#let frontmatter = (title: \"G\",)\nmade' > content/generated.typ"
+      }
+      """#
+    "static/css/main.css" "stale"
+    "content/index.typ" #"""
+      #let frontmatter = (title: "H",)
+      body
+      """#
+  }
+  expect {
+    ok
+    file "css/main.css" { contains "fresh" }
+    file "generated/index.html" { contains "made" }
+  }
+}
+
 scenario "a hook exiting non-zero fails the build" {
   files {
     "config.kdl" #"""

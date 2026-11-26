@@ -39,8 +39,10 @@ Output streams straight to your terminal under a dimmed `$ command` line. A non-
 
 == Feeding the pipeline
 
-`before` runs first, so anything it writes into `assets/` is minified, bundled and
-fingerprinted like a file you checked in.
+`before` runs first, ahead of everything that reads a source tree. Anything it
+writes into `assets/` is minified, bundled and fingerprinted like a file you
+checked in, a file it writes into `static/` is published by the same build, and a
+page it writes into `content/` is built.
 
 ```kdl
 hooks {

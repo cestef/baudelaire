@@ -64,6 +64,10 @@ chores are visible in the git history and change nothing for a site.
 
 ### Fixed
 
+- **A `before` hook's output reaches its own build.** `static/` was copied and the
+  content tree read before the hooks ran, so a hook writing `static/css/main.css`
+  shipped the previous build's file. The hooks now run first.
+
 - **The SSH deploy runs on russh 0.65.** It fixes RUSTSEC-2026-0492, where a hostile
   server could send channel messages for a channel the client never opened, and moves
   RSA keys onto the constant-time `rsa` 0.10. A host certificate is checked by the key

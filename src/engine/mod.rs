@@ -150,16 +150,18 @@ impl Engine {
     /// A build: everything the phases need, then the phases.
     ///
     /// What is set up here is what a phase cannot own without borrowing from
-    /// its own state; the pipeline itself is [`build::Phase::ORDER`].
+    /// its own state; the pipeline itself is [`build::Phase::ORDER`]. The
+    /// `before` hooks run ahead of everything that reads a source tree, so what
+    /// they write is in this build rather than the next.
     fn run(&self, ui: &Ui) -> Result<Stats> {
         let timer = Timer::start();
+        let hooks = Hooks::new(&self.config);
+        hooks.before(ui)?;
         let mut statics = self.staged(ui)?;
         let planned = self.planned("planned build", ui)?;
         Static::new(&self.config, self.theme.as_ref()).verbatim(&planned.pages, &mut statics)?;
         let warned = ui.warnings();
         self.announce(&planned, ui);
-        let hooks = Hooks::new(&self.config);
-        hooks.before(ui)?;
         let prepare = self.prepared(&planned, ui)?;
         #[cfg(feature = "js")]
         let modules = Modules::new(self, &prepare);
