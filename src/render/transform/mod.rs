@@ -9,6 +9,7 @@ mod base;
 mod embed;
 mod exempt;
 mod externalize;
+mod fence_attrs;
 mod fences;
 mod fingerprint;
 mod footnotes;
@@ -47,6 +48,7 @@ use base::BasePath;
 use embed::Embed;
 use exempt::Exempt;
 use externalize::Externalize;
+use fence_attrs::FenceAttrs;
 use fences::Fences;
 use fingerprint::Fingerprint;
 use footnotes::Footnotes;
@@ -418,6 +420,7 @@ impl Transforms {
     fn declared() -> Vec<Box<dyn Transform>> {
         vec![
             Box::new(Exempt),
+            Box::new(FenceAttrs),
             Box::new(Links),
             Box::new(Svg),
             Box::new(Lang),

@@ -14,6 +14,13 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **A fence's parameters reach the HTML.** ```` ```v copy ```` ships as
+  `<pre data-copy>` and `title=install.sh` as `data-title="install.sh"`, so a script
+  can tell marked blocks apart. Zola's commas (```` ```v, copy ````) separate
+  parameters too, where the language used to read as `v,`. A Typst page writes the
+  same with `fence(copy: true)[..]` from `/.baudelaire/site/html.typ`. A parameter
+  that is no attribute name fails the build with `baudelaire::markdown::fence_parameter`.
+
 - **A page ships files and folders beside it untouched.** `verbatim: ("demo",)` in a
   page's frontmatter copies `demo/`, relative to the page's folder, to the same place
   beside its output, unprocessed. A page source inside it is copied rather than built,

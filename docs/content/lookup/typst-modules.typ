@@ -18,7 +18,7 @@ Seven modules your templates and pages can import. Each is a file under
   columns: 3,
   align: (left, left, left),
   table.header([Module], [Exports], [Gives you]),
-  [`/.baudelaire/site/html.typ`], [`h`, `classes`, `svg`, `nolint`], [Element construction, SVG inlining, and keeping the #link("../build/linting.typ")[lint] off a region.],
+  [`/.baudelaire/site/html.typ`], [`h`, `classes`, `svg`, `fence`, `nolint`], [Element construction, SVG inlining, attributes on a code block, and keeping the #link("../build/linting.typ")[lint] off a region.],
   [`/.baudelaire/site/site.typ`], [`version`, `title`, `url`, `lang`, `author`, `languages`, `feeds`], [Site identity as typed bindings.],
   [`/.baudelaire/site/sections.typ`], [`sections(lang)`], [The site's content tree.],
   [`/.baudelaire/site/pages.typ`], [`pages(lang)`], [Every authored page as a row.],
@@ -101,6 +101,21 @@ attributes are data:
   `none` and adding it to a string fails the build. An empty `classes` result is
   `none`, which `h` then omits, so you never get a stray `class=""`.
 ]
+
+=== fence
+
+`raw` has no way to put an attribute on the `<pre>` it emits. `fence` does, as
+`data-*` attributes with the value rules of `h`:
+
+````typ
+#fence(copy: true, title: "install.sh")[```sh
+curl -fsSL https://example.com/install.sh | sh
+```]
+````
+
+That is `<pre data-copy data-title="install.sh">`, the same as a markdown
+fence written `sh copy title=install.sh`. The wrapper is gone before the page is
+written.
 
 === svg
 

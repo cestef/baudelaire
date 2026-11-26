@@ -39,6 +39,23 @@ pub enum MarkdownError {
         span: SourceSpan,
     },
 
+    #[error("a code fence in {} has a parameter that is no attribute name: {}", Text(.path), Code(.param))]
+    #[diagnostic(
+        code(baudelaire::markdown::fence_parameter),
+        help(
+            "a parameter is letters, digits, `-` and `_`, alone (`copy`) or with a value \
+             (`title=install.sh`), and becomes `data-copy` or `data-title` on the block"
+        )
+    )]
+    FenceParameter {
+        path: String,
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("in this block's info string")]
+        span: SourceSpan,
+        param: String,
+    },
+
     #[error("frontmatter {} in {} is declared twice", Code(.key), Text(.path))]
     #[diagnostic(
         code(baudelaire::markdown::duplicate_key),

@@ -9,27 +9,59 @@ pub(super) struct Fence {
     pub(super) lang: Option<String>,
     /// Whether the block is Typst to run rather than a sample to show.
     pub(super) eval: bool,
+    /// Every other parameter, as the `data-*` attribute it puts on the block's
+    /// `<pre>` and its value, empty for a bare one.
+    pub(super) attrs: Vec<(String, String)>,
 }
 
 impl Fence {
-    /// The parameter that makes a fence run.
+    /// The parameter that makes a fence run, which is never an attribute.
     pub(super) const EVAL: &'static str = "eval";
 
     /// The languages a fence has to claim before that parameter means anything,
     /// read from the highlighter's own set so the two cannot drift apart.
     pub(super) const TYPST: &'static [&'static str] = crate::world::rules::TYPST;
 
-    pub(super) fn parse(info: &str) -> Self {
-        let mut words = info.split_whitespace();
-        let lang = words.next().filter(|w| !w.is_empty()).map(str::to_owned);
-        let mut eval = false;
+    /// Read an info string, or hand back the parameter that names no attribute.
+    ///
+    /// Parameters are separated by whitespace, or by commas when there are any,
+    /// which is how Zola writes them (`rust, linenos, hl_lines=1 3`).
+    pub(super) fn parse(info: &str) -> Result<Self, String> {
+        let words: Vec<&str> = if info.contains(',') {
+            info.split(',').map(str::trim).collect()
+        } else {
+            info.split_whitespace().collect()
+        };
+        let mut words = words.into_iter().filter(|word| !word.is_empty());
+        let lang = words.next().map(str::to_owned);
+        let mut fence = Self {
+            lang,
+            eval: false,
+            attrs: Vec::new(),
+        };
         for param in words {
-            let (key, value) = param.split_once('=').unwrap_or((param, "true"));
+            let (key, value) = param.split_once('=').unwrap_or((param, ""));
             if key == Self::EVAL {
-                eval = value == "true";
+                fence.eval = value.is_empty() || value == "true";
+                continue;
             }
+            if key.is_empty()
+                || !key
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+            {
+                return Err(param.to_owned());
+            }
+            let value = value
+                .strip_prefix('"')
+                .and_then(|inner| inner.strip_suffix('"'))
+                .unwrap_or(value);
+            fence.attrs.push((
+                format!("data-{}", key.to_ascii_lowercase()),
+                value.to_owned(),
+            ));
         }
-        Self { lang, eval }
+        Ok(fence)
     }
 
     /// Whether this fence runs, which needs three things to agree: the page
@@ -101,7 +133,52 @@ impl Html<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::Html;
+    use super::{Fence, Html};
+
+    fn attrs(info: &str) -> Vec<(String, String)> {
+        Fence::parse(info).expect("a valid info string").attrs
+    }
+
+    #[test]
+    fn a_parameter_becomes_a_data_attribute() {
+        assert_eq!(attrs("v copy"), [("data-copy".to_owned(), String::new())]);
+        assert_eq!(
+            attrs("sh title=install.sh"),
+            [("data-title".to_owned(), "install.sh".to_owned())]
+        );
+        assert_eq!(
+            attrs(r#"sh title="install.sh""#),
+            [("data-title".to_owned(), "install.sh".to_owned())]
+        );
+        assert_eq!(Fence::parse("v copy").unwrap().lang.as_deref(), Some("v"));
+    }
+
+    #[test]
+    fn eval_is_read_and_never_emitted() {
+        let fence = Fence::parse("typ eval copy").unwrap();
+        assert!(fence.eval);
+        assert_eq!(fence.attrs, [("data-copy".to_owned(), String::new())]);
+        assert!(!Fence::parse("typ eval=false").unwrap().eval);
+    }
+
+    #[test]
+    fn zola_commas_separate_the_language_from_its_parameters() {
+        let fence = Fence::parse("v, copy, hl_lines=1 3").unwrap();
+        assert_eq!(fence.lang.as_deref(), Some("v"));
+        assert_eq!(
+            fence.attrs,
+            [
+                ("data-copy".to_owned(), String::new()),
+                ("data-hl_lines".to_owned(), "1 3".to_owned()),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_parameter_that_names_no_attribute_is_refused() {
+        assert_eq!(Fence::parse("v <b>").err().as_deref(), Some("<b>"));
+        assert_eq!(Fence::parse("v =x").err().as_deref(), Some("=x"));
+    }
 
     #[test]
     fn a_run_of_only_comments_is_a_comment() {

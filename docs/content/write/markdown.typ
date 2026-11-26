@@ -98,8 +98,8 @@ or let the site drop it (`html "drop"`, further down).
 
 == Fenced blocks
 
-A fence's info string is a language, then space-separated `key` or `key=value`
-parameters:
+A fence's info string is a language, then `key` or `key=value` parameters,
+separated by spaces, or by commas as Zola writes them (`v, copy`):
 
 ````md
 ```kdl
@@ -116,7 +116,25 @@ site "Example"
   align: (left, left, left),
   table.header([Parameter], [Default], [Does]),
   [`eval`], [off], [Run the block as Typst instead of showing it. `typ` only.],
+  [anything else], [none], [A `data-*` attribute on the block's `<pre>`: `copy` is `data-copy`, `title=install.sh` is `data-title="install.sh"`.],
 )
+
+That last row is for a script or a stylesheet to tell blocks apart, such as a
+copy button only on the ones marked for it:
+
+````md
+```sh copy title=install.sh
+curl -fsSL https://example.com/install.sh | sh
+```
+````
+
+```html
+<pre data-copy data-title="install.sh"><code data-lang="sh">..</code></pre>
+```
+
+A parameter name is letters, digits, `-` and `_`. Anything else fails the build
+rather than being dropped. A Typst page marks a block the same way with
+#link("../lookup/typst-modules.typ")[`fence()`].
 
 A fence is a sample by default, including a Typst one, so a page can document
 Typst without running it. `eval` is how a markdown page reaches a template

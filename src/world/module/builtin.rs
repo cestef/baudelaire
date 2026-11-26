@@ -21,6 +21,14 @@ impl Html {
     /// The binding `typ/html.typ` writes the lint marker through, so the
     /// attribute is spelled once, in [`crate::render::lint`].
     const LINT_BINDING: &'static str = "_lint-marker";
+
+    /// The transient attribute on the wrapper `fence()` puts around a code
+    /// block, whose other attributes [`crate::render`] moves onto the block's
+    /// `<pre>` before dropping the wrapper.
+    pub(crate) const FENCE: &'static str = "data-baudelaire-fence";
+
+    /// The binding `typ/html.typ` reads that marker through.
+    const FENCE_BINDING: &'static str = "_fence-marker";
 }
 
 impl Module for Html {
@@ -35,6 +43,7 @@ impl Module for Html {
                 Self::LINT_BINDING.to_owned(),
                 Value::str(crate::render::lint::EXEMPT.resolve()),
             ),
+            (Self::FENCE_BINDING.to_owned(), Value::str(Self::FENCE)),
         ]
     }
 

@@ -1,6 +1,6 @@
 // `/.baudelaire/site/html.typ`: element construction without the ceremony.
 //
-// Generated and served by baudelaire; nothing for this exists on disk. Import
+// Generated and served by baudelaire, and written to disk for an editor. Import
 // it as `#import "/.baudelaire/site/html.typ": h, classes`.
 
 // An attribute value as HTML sees it: a string.
@@ -69,6 +69,23 @@
   let body = items.pop()
   let value = if items.len() == 0 { "off" } else { items.join(" ") }
   h("div", ..((_lint-marker, value),).to-dict(), body)
+}
+
+// Data attributes on a code block's `<pre>`, which `raw` has no way to set:
+//
+//   fence(copy: true, title: "install.sh")[```sh
+//   curl -fsSL https://example.com/install.sh | sh
+//   ```]
+//
+// Each named argument becomes `data-<name>`, with the value rules of `h`. A
+// markdown fence spells the same thing `sh copy title=install.sh`. The wrapper
+// is removed before the page is written, so the attributes land on the `<pre>`.
+#let fence(..attrs, body) = {
+  let marked = ((_fence-marker, ""),).to-dict()
+  for (name, value) in attrs.named() {
+    marked.insert("data-" + name, value)
+  }
+  h("div", ..marked, body)
 }
 
 // Join class names, dropping anything absent and taking a `(name, condition)`

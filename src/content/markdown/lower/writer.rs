@@ -270,10 +270,7 @@ impl<'a> Writer<'a> {
 
     pub(super) fn event(&mut self, event: &Event<'_>) -> Result<()> {
         match event {
-            Event::Start(tag) => {
-                self.start(tag);
-                Ok(())
-            }
+            Event::Start(tag) => self.start(tag),
             Event::End(tag) => {
                 self.end(*tag);
                 Ok(())
@@ -362,7 +359,7 @@ impl<'a> Writer<'a> {
         }
     }
 
-    pub(super) fn start(&mut self, tag: &Tag<'_>) {
+    pub(super) fn start(&mut self, tag: &Tag<'_>) -> Result<()> {
         match tag {
             Tag::Heading { level, .. } => {
                 let level = i64::try_from(Self::depth(*level)).unwrap_or(1);
@@ -380,10 +377,16 @@ impl<'a> Writer<'a> {
                 self.push(&call);
             }
             Tag::CodeBlock(kind) => {
-                let fence = match kind {
-                    CodeBlockKind::Fenced(info) => Fence::parse(info),
-                    CodeBlockKind::Indented => Fence::parse(""),
+                let info = match kind {
+                    CodeBlockKind::Fenced(info) => info.as_ref(),
+                    CodeBlockKind::Indented => "",
                 };
+                let fence = Fence::parse(info).map_err(|param| MarkdownError::FenceParameter {
+                    path: self.path.to_owned(),
+                    src: self.at.source(self.path),
+                    span: self.at.span(),
+                    param,
+                })?;
                 self.buffered.push(Buffered::Code { fence });
                 self.stack.push(Buffer::default());
             }
@@ -447,6 +450,29 @@ impl<'a> Writer<'a> {
             | Tag::Superscript
             | Tag::Subscript => {}
         }
+        Ok(())
+    }
+
+    /// A code block carrying its fence's attributes, which `raw` cannot put
+    /// on the `<pre>` it emits, so they ride on a wrapper the render pass
+    /// moves them off: the shape `/.baudelaire/site/html.typ`'s `fence()` writes.
+    fn marked(fence: &Fence, raw: Call<'_>) -> String {
+        if fence.attrs.is_empty() {
+            return raw.to_string();
+        }
+        let attrs = std::iter::once((crate::world::module::Html::FENCE.to_owned(), Value::str("")))
+            .chain(
+                fence
+                    .attrs
+                    .iter()
+                    .map(|(key, value)| (key.clone(), Value::str(value))),
+            )
+            .collect();
+        Call::new("html.elem")
+            .pos(Value::str("div"))
+            .named("attrs", Value::Dict(attrs))
+            .pos(Value::Raw(raw.bare().to_string()))
+            .to_string()
     }
 
     pub(super) fn end(&mut self, tag: TagEnd) {
@@ -474,10 +500,11 @@ impl<'a> Writer<'a> {
                     return;
                 }
                 let mut call = Call::new("raw").named("block", Value::Bool(true));
-                if let Some(name) = fence.lang {
-                    call = call.named("lang", Value::str(&name));
+                if let Some(name) = &fence.lang {
+                    call = call.named("lang", Value::str(name));
                 }
-                self.push(&call.pos(Value::str(&text)).to_string());
+                let raw = call.pos(Value::str(&text));
+                self.push(&Self::marked(&fence, raw));
                 if let Some(source) = self.at.range() {
                     self.out().record(at, source, Shape::Whole);
                 }

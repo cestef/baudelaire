@@ -1,0 +1,145 @@
+// A fence's parameters, and `fence()` in a typst page, become `data-*`
+// attributes on the code block's `<pre>`, so a script can tell marked blocks
+// from the rest.
+
+scenario "a markdown fence parameter lands on the pre" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public"; }
+      """#
+    "content/a.md" #"""
+      ---
+      title: A
+      ---
+      ```v copy
+      fn main() {}
+      ```
+
+      ```sh title=install.sh
+      echo hi
+      ```
+
+      ```v
+      plain
+      ```
+      """#
+  }
+  expect {
+    ok
+    file "a/index.html" {
+      contains "<pre data-copy>"
+      contains #"<pre data-title="install.sh">"#
+      contains #"data-lang="v""#
+      // The block without parameters carries none, and no wrapper survives.
+      contains "<pre><code"
+      missing "data-baudelaire-fence"
+      missing "<div"
+    }
+  }
+}
+
+// Zola writes parameters after a comma, and the language would otherwise read
+// as `v,`, which no grammar knows.
+scenario "a zola style fence separates its parameters by commas" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public"; }
+      """#
+    "content/a.md" #"""
+      ---
+      title: A
+      ---
+      ```v, copy
+      fn main() {}
+      ```
+      """#
+  }
+  expect {
+    ok
+    file "a/index.html" {
+      contains "<pre data-copy>"
+      contains #"data-lang="v""#
+      missing #"data-lang="v,""#
+    }
+  }
+}
+
+scenario "eval is a fence's own parameter and never an attribute" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public"; }
+      content { markdown { eval #true } }
+      """#
+    "content/a.md" #"""
+      ---
+      title: A
+      ---
+      ```typ eval
+      #strong[ran]
+      ```
+      """#
+  }
+  expect {
+    ok
+    file "a/index.html" {
+      contains "<strong>ran</strong>"
+      missing "data-eval"
+    }
+  }
+}
+
+scenario "a typst page marks a block with fence" {
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public"; }
+      """#
+    "content/a.typ" #"""
+      #import "/.baudelaire/site/html.typ": fence
+      #let frontmatter = (title: "A")
+      #fence(copy: true, title: "install.sh", hidden: false)[```sh
+      echo hi
+      ```]
+      """#
+  }
+  expect {
+    ok
+    file "a/index.html" {
+      contains "<pre data-copy "
+      contains #"data-title="install.sh""#
+      missing "data-hidden"
+      missing "data-baudelaire-fence"
+      missing "<div"
+    }
+  }
+}
+
+scenario "a fence parameter that is no attribute name fails the build" {
+  requires "markdown"
+  files {
+    "config.kdl" #"""
+      site "Test"
+      paths { content "content"; dist "public"; }
+      """#
+    "content/a.md" #"""
+      ---
+      title: A
+      ---
+      ```v <b>
+      x
+      ```
+      """#
+  }
+  expect {
+    fails {
+      code "baudelaire::markdown::fence_parameter"
+      contains "<b>"
+    }
+  }
+}

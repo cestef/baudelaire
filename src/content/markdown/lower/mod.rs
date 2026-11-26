@@ -180,7 +180,9 @@ mod tests {
     fn fence_parameters_parse_as_flags_or_pairs() {
         assert!(lower("```typ eval=true\n#emph[x]\n```\n").contains("#emph[x]"));
         assert!(lower("```typ eval=false\n#emph[x]\n```\n").contains("#raw(block: true"));
-        assert!(lower("```typ linenos\n#emph[x]\n```\n").contains("#raw(block: true"));
+        let marked = lower("```typ linenos\n#emph[x]\n```\n");
+        assert!(marked.contains(r#"data-linenos: """#), "{marked}");
+        assert!(marked.contains("raw(block: true"), "{marked}");
     }
 
     #[test]
