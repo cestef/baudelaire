@@ -214,6 +214,40 @@ scenario "a self link can lead its heading" {
   }
 }
 
+// The heading's own text as the link, for a theme that would rather not add a
+// glyph. It needs no `link` text, and it is read out, since it is the heading.
+scenario "a heading can be its own self link" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      paths {
+        content "content"
+        dist "public"
+      }
+      html {
+        anchors { place "heading"; }
+      }
+      """#
+    "content/docs/guide.typ" #"""
+      #let frontmatter = (title: "Guide",)
+      == Setup *now*
+      body
+
+      == See #link("https://example.com")[here]
+      body
+      """#
+  }
+  expect {
+    ok
+    file "docs/guide/index.html" {
+      contains ##"<h3 id="setup-now"><a href="#setup-now" class="anchor">Setup <strong>now</strong></a></h3>"##
+      // A heading that already links somewhere is left as written: a link
+      // cannot hold another.
+      contains ##"<h3 id="see-here">See <a href="https://example.com">here</a></h3>"##
+    }
+  }
+}
+
 // `levels` narrows which headings are covered: a layout's own `<h1>` is not a
 // section heading, and a table of contents rarely wants every `<h6>`.
 scenario "levels narrow which headings get an anchor" {

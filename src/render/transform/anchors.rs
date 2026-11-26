@@ -55,9 +55,7 @@ impl Transform for Anchors {
                         None => return,
                     },
                 };
-                if let Some(text) = &anchors.link {
-                    Self::link(element, &id, text, anchors.place);
-                }
+                Self::link(element, &id, anchors);
             });
         }
         cx.found.anchors.extend(seen);
@@ -68,8 +66,36 @@ impl Anchors {
     /// How [`Transform::after`] names this pass.
     pub(super) const NAME: &'static str = "anchors";
 
-    /// Put the self link inside `heading`, on the side `place` names.
-    fn link(heading: &mut HtmlElement, id: &str, text: &str, place: Place) {
+    /// Give `heading` the self link `anchors` asks for, if any.
+    fn link(heading: &mut HtmlElement, id: &str, anchors: &AnchorConfig) {
+        match (anchors.place, &anchors.link) {
+            (Place::Heading, _) => Self::wrap(heading, id),
+            (place, Some(text)) => Self::beside(heading, id, text, place),
+            (_, None) => {}
+        }
+    }
+
+    /// Make `heading`'s own content the link, unless it already holds one,
+    /// which a link may not contain.
+    ///
+    /// Not hidden from assistive technology, as the link beside a heading is:
+    /// here the link is the heading's text.
+    fn wrap(heading: &mut HtmlElement, id: &str) {
+        let mut linked = false;
+        heading.visit(&mut |node| linked |= node.tag == tag::a);
+        if linked {
+            return;
+        }
+        let link = HtmlElement::new(tag::a)
+            .with_attr(attr::href, format!("#{id}"))
+            .with_attr(attr::class, AnchorConfig::CLASS)
+            .with_children(std::mem::take(&mut heading.children));
+        heading.children = std::iter::once(HtmlNode::from(link)).collect();
+    }
+
+    /// Put a self link reading `text` inside `heading`, on the side `place`
+    /// names.
+    fn beside(heading: &mut HtmlElement, id: &str, text: &str, place: Place) {
         let link = HtmlNode::from(
             HtmlElement::new(tag::a)
                 .with_attr(attr::href, format!("#{id}"))
@@ -82,8 +108,8 @@ impl Anchors {
                 ),
         );
         match place {
-            Place::After => heading.children.push(link),
             Place::Before => heading.children.insert(0, link),
+            Place::After | Place::Heading => heading.children.push(link),
         }
     }
 

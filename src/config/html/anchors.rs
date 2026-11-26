@@ -14,11 +14,16 @@ pub enum Place {
     #[default]
     After,
     Before,
+    /// The heading's own text is the link, and `link` is not used.
+    Heading,
 }
 
 impl Named for Place {
-    const NAMES: &'static [(&'static str, Self)] =
-        &[("after", Self::After), ("before", Self::Before)];
+    const NAMES: &'static [(&'static str, Self)] = &[
+        ("after", Self::After),
+        ("before", Self::Before),
+        ("heading", Self::Heading),
+    ];
 }
 
 /// Deep-linkable headings: which get an `id`, and whether a reader is given
@@ -39,7 +44,7 @@ pub struct AnchorConfig {
     #[key(numbers(u8, 1, 6))]
     pub levels: Vec<u8>,
 
-    /// The text of a link back to each heading, e.g. `#`. Unset or empty, no link is emitted.
+    /// The text of a link back to each heading, e.g. `#`. Unset or empty, no link is emitted, unless `place` is `heading`.
     #[key(custom(
         Text,
         |c: &Self| c.link.clone().into(),
@@ -51,7 +56,7 @@ pub struct AnchorConfig {
     ))]
     pub link: Option<String>,
 
-    /// Which side of the heading's text that link sits on.
+    /// Which side of the heading's text that link sits on, or `heading` to make the text itself the link.
     #[key(choice(Place))]
     pub place: Place,
 }

@@ -157,8 +157,24 @@ html {
   [`labels`], [on], [Give every Typst label its element as an `id`. See #link(<labels>)[below].],
   [`levels`], [every level], [The heading levels that get an `id`, as `1` to `6`.],
   [`link`], [none], [The text of a link back to the heading, e.g. `#`. Empty is the same as none, which is how a site takes back a theme's.],
-  [`place`], [`after`], [Which side of the heading's text that link sits on.],
+  [`place`], [`after`], [Which side of the heading's text that link sits on: `after`, `before`, or `heading` to make the heading's own text the link.],
 )
+
+`place "heading"` needs no `link` text:
+
+```kdl
+html {
+  anchors { place "heading" }
+}
+```
+
+```html
+<h2 id="setup"><a href="#setup" class="anchor">Setup</a></h2>
+```
+
+Unlike the `#` beside a heading, this link is read out, since it is the heading.
+A heading that already holds a link is left as written, because a link cannot
+contain another.
 
 `html { anchors #false }` stops ids being derived. Ids you wrote yourself are
 still collected, so the deep-link check keeps working on those, and a link naming

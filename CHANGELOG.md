@@ -14,6 +14,11 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **A heading can be its own self link.** `html { anchors { place "heading" } }`
+  wraps each heading's text in a link to it, `<h2 id="setup"><a href="#setup"
+  class="anchor">Setup</a></h2>`, with no `link` text needed. A heading that already
+  holds a link is left alone.
+
 - **A fence's parameters reach the HTML.** ```` ```v copy ```` ships as
   `<pre data-copy>` and `title=install.sh` as `data-title="install.sh"`, so a script
   can tell marked blocks apart. Zola's commas (```` ```v, copy ````) separate
