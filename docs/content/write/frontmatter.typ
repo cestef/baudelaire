@@ -193,7 +193,7 @@ content/posts/cat/
   align: (left, left),
   table.header([Detail], [Is]),
   [Paths], [Relative to the page's folder. A folder or a single file.],
-  [Lands], [Beside the page's output, so a relative link from the page reaches it under `clean` and `flat` URLs alike.],
+  [Lands], [Beside the page's output, so a relative link from the page reaches it under `clean` and `flat` URLs alike. Under `clean`, the page's URL must end in `/`: `serve` and most static hosts redirect `/posts/cat` there, but a bucket behind a CDN may not, so link to pages with the slash.],
   [Processed], [Never. No minifying, no fingerprinting, no link checks inside it.],
   [Pages inside], [A `.typ` or `.md` in the folder is copied as a file and not built as a page.],
   [Errors], [A path that does not exist, or that climbs out with `..`, fails the build and is underlined in the frontmatter.],

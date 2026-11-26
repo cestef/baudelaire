@@ -177,7 +177,7 @@ fn serve_answers_inside_a_language_with_that_language_s_404() {
 }
 
 #[test]
-fn serve_resolves_without_trailing_slash() {
+fn serve_sends_a_folder_to_its_trailing_slash() {
     let t = Site::new();
     t.write(
         "config.kdl",
@@ -194,7 +194,10 @@ fn serve_resolves_without_trailing_slash() {
     );
     let srv = Serve::start(&t, &["--no-watch"]);
     let (code, _) = srv.get("/posts/hello");
-    assert_eq!(code, 200);
+    assert_eq!(
+        code, 301,
+        "a page's relative links resolve against its folder"
+    );
     let (code, _) = srv.get("/posts/hello/");
     assert_eq!(code, 200);
 }

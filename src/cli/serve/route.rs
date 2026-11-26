@@ -49,19 +49,40 @@ pub(super) struct Route {
     hosts: Vec<String>,
 }
 
+/// What a URL names under `dist`.
+#[derive(Debug, PartialEq, Eq)]
+enum Found {
+    File(PathBuf),
+    /// A directory index asked for without its trailing slash, answered with a
+    /// redirect to this URL, as a static host does, so a relative link on the
+    /// page resolves against the page's own folder.
+    Slash(String),
+}
+
 impl Route {
     /// Resolve a URL path to a file under [`dist`](Route::dist), honoring clean
     /// URLs. Every candidate is checked to stay within it (see
     /// [`within`](Route::within)), so a `..`-laden or symlinked request can
     /// never escape the served root.
-    fn resolve(&self, url: &str) -> Option<PathBuf> {
-        let path = url.split('?').next().unwrap_or(url);
+    fn resolve(&self, url: &str) -> Option<Found> {
+        let (path, query) = url
+            .split_once('?')
+            .map_or((url, None), |(p, q)| (p, Some(q)));
         let rel = Self::below(&self.base, path).trim_start_matches('/');
         let rel = Percent::decode(rel);
         let base = self.dist.join(&rel);
-        self.within(&base)
-            .or_else(|| self.within(&base.join(Config::INDEX)))
-            .or_else(|| self.within(&self.dist.join(format!("{rel}.html"))))
+        if let Some(file) = self.within(&base) {
+            return Some(Found::File(file));
+        }
+        if let Some(index) = self.within(&base.join(Config::INDEX)) {
+            return Some(if path.ends_with('/') {
+                Found::File(index)
+            } else {
+                Found::Slash(query.map_or_else(|| format!("{path}/"), |q| format!("{path}/?{q}")))
+            });
+        }
+        self.within(&self.dist.join(format!("{rel}.html")))
+            .map(Found::File)
     }
 
     /// `url` with the site's base path removed, which only happens where the
@@ -186,11 +207,21 @@ impl Handler {
             self.open(req, &url);
             return;
         }
-        let file = self.route.lock().resolve(&url);
-        match file {
-            Some(file) => self.serve_file(req, &file, 200),
+        let found = self.route.lock().resolve(&url);
+        match found {
+            Some(Found::File(file)) => self.serve_file(req, &file, 200),
+            Some(Found::Slash(location)) => self.redirect(req, &url, &location),
             None => self.respond_404(req, &url),
         }
+    }
+
+    fn redirect(&self, req: Request, url: &str, location: &str) {
+        self.ui.request(301, url);
+        let mut response = Response::empty(301);
+        if let Ok(header) = Header::from_bytes(b"Location", location.as_bytes()) {
+            response = response.with_header(header);
+        }
+        let _ = req.respond(response);
     }
 
     /// Serve a file under `status` with content-type guessing, injecting the
@@ -338,13 +369,35 @@ mod tests {
             ("/", "index.html"),
             ("/index.html", "index.html"),
             ("/posts/a/", "posts/a/index.html"),
-            ("/posts/a", "posts/a/index.html"),
             ("/posts/flat", "posts/flat.html"),
             ("/posts/a/?x=1", "posts/a/index.html"),
         ] {
-            assert_eq!(route.resolve(url), Some(route.dist.join(expected)), "{url}");
+            assert_eq!(
+                route.resolve(url),
+                Some(Found::File(route.dist.join(expected))),
+                "{url}"
+            );
         }
         assert_eq!(route.resolve("/nowhere/"), None);
+    }
+
+    /// Served at `/posts/a`, the page's `./clip.mp4` would resolve against
+    /// `/posts/`, so the server sends the browser to `/posts/a/` first.
+    #[test]
+    fn a_folder_without_its_slash_is_redirected_to_it() {
+        let (_tmp, mut route) = served();
+        for (url, location) in [("/posts/a", "/posts/a/"), ("/posts/a?x=1", "/posts/a/?x=1")] {
+            assert_eq!(
+                route.resolve(url),
+                Some(Found::Slash(location.to_owned())),
+                "{url}"
+            );
+        }
+        route.base = "/docs".to_owned();
+        assert_eq!(
+            route.resolve("/docs"),
+            Some(Found::Slash("/docs/".to_owned()))
+        );
     }
 
     /// `Sec-Fetch-Site` is computed by the browser from the *origin*, so a page
@@ -379,9 +432,12 @@ mod tests {
         route.base = "/docs".to_owned();
         assert_eq!(
             route.resolve("/docs/posts/a/"),
-            Some(route.dist.join("posts/a/index.html"))
+            Some(Found::File(route.dist.join("posts/a/index.html")))
         );
-        assert_eq!(route.resolve("/docs/"), Some(route.dist.join("index.html")));
+        assert_eq!(
+            route.resolve("/docs/"),
+            Some(Found::File(route.dist.join("index.html")))
+        );
         assert_eq!(route.resolve("/docsposts/a/"), None);
         route.langs = vec!["fr".to_owned()];
         assert_eq!(route.scope("/docs/fr/x/"), Some("fr"));
@@ -418,7 +474,7 @@ mod tests {
             .expect("symlink");
         assert_eq!(
             route.resolve("/alias.html"),
-            Some(route.dist.join("index.html"))
+            Some(Found::File(route.dist.join("index.html")))
         );
     }
 
@@ -434,7 +490,7 @@ mod tests {
         route.base = "/docs".to_owned();
         assert_eq!(
             route.resolve("/docs/posts/a/"),
-            Some(route.dist.join("posts/a/index.html"))
+            Some(Found::File(route.dist.join("posts/a/index.html")))
         );
     }
 
