@@ -72,3 +72,37 @@ fn a_script_still_imports_its_neighbours_and_the_project() {
         "{js}"
     );
 }
+
+#[cfg(feature = "sass")]
+#[test]
+fn a_stylesheet_cannot_use_a_file_outside_the_project() {
+    let (site, outside) = site();
+    let secret = outside.path().join("secret");
+    site.write(
+        "themes/evil/assets/style.scss",
+        &format!(
+            "@import {:?};\nbody::after {{ content: $leak; }}\n",
+            secret.display().to_string()
+        ),
+    );
+
+    let err = site.build_error().to_string();
+
+    assert!(err.contains("outside the project"), "{err}");
+    assert!(!site.exists("public/assets/style.css"));
+}
+
+#[cfg(feature = "sass")]
+#[test]
+fn a_stylesheet_still_uses_its_partials() {
+    let (site, _outside) = site();
+    site.write("themes/evil/assets/_colors.scss", "$ink: #123456;\n");
+    site.write(
+        "themes/evil/assets/style.scss",
+        "@use \"colors\";\nbody { color: colors.$ink; }\n",
+    );
+
+    site.stats();
+
+    assert!(site.output("assets/style.css").contains("#123456"));
+}

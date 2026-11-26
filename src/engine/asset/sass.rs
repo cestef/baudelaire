@@ -9,6 +9,7 @@ use grass::{Options, OutputStyle};
 use crate::config::Config;
 use crate::error::{AssetError, Result};
 
+use super::confine::Confine;
 use super::{Ctx, PathExt};
 
 /// The Sass compiler over one file.
@@ -31,10 +32,38 @@ impl Sass {
     /// Compile `file` to CSS, always expanded: minification is lightningcss's,
     /// one pass later.
     pub(super) fn compile(file: &Path, ctx: &Ctx) -> Result<String> {
+        let confine = Confine::new(ctx.config, &ctx.roots);
         let options = Options::default()
             .style(OutputStyle::Expanded)
-            .load_paths(&ctx.roots);
-        Ok(grass::from_path(file, &options).map_err(|e| AssetError::sass(file.display(), e))?)
+            .load_paths(&ctx.roots)
+            .fs(&confine);
+        Ok(grass::from_path(file, &options).map_err(|e| {
+            confine.refused().map_or_else(
+                || AssetError::sass(file.display(), e),
+                |path| AssetError::outside(path.display()),
+            )
+        })?)
+    }
+}
+
+/// grass's own file system, where a stylesheet outside the project does not
+/// exist: grass takes an absolute or `../` `@use` as written, and panics on a
+/// read that fails, so the refusal is made where it looks for the file.
+impl grass::Fs for Confine {
+    fn is_dir(&self, path: &Path) -> bool {
+        path.is_dir()
+    }
+
+    fn is_file(&self, path: &Path) -> bool {
+        !self.outside(path) && path.is_file()
+    }
+
+    fn read(&self, path: &Path) -> std::io::Result<Vec<u8>> {
+        std::fs::read(path)
+    }
+
+    fn canonicalize(&self, path: &Path) -> std::io::Result<PathBuf> {
+        std::fs::canonicalize(path)
     }
 }
 

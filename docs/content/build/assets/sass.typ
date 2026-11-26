@@ -46,6 +46,9 @@ asset roots (the project's tree, then the theme's), so a sheet you wrote can
 pull in a partial your theme ships, and a partial you add under the same name
 wins.
 
+A sheet outside the project and the asset roots is never read: an `@use` that
+lands there fails with `baudelaire::asset::outside`.
+
 #table(
   columns: 2,
   align: (left, left),
