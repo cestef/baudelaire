@@ -177,6 +177,14 @@ pub(super) struct Inert {
 
 const INERT: &[Inert] = &[
     Inert {
+        setting: "html { highlight { stack } }",
+        asked: |config| config.html.highlight.stack,
+        needs: "html { highlight { scopes } }",
+        met: |config| config.html.highlight.scopes,
+        effect: "no span carries a scope at all",
+        help: "turn on `scopes` beside it, or drop `stack`",
+    },
+    Inert {
         setting: "artifacts { bundles }",
         asked: |config| !config.artifacts.bundles.is_empty(),
         needs: "a `collections` list or `site` on each bundle",

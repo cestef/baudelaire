@@ -458,6 +458,36 @@ scenario "a scoped run with no class keeps its scope stamp" {
   }
 }
 
+// With `stack`, an enclosing scope reaches the markup too, so `~=` matches the
+// option a `--` belongs to rather than only the punctuation it is.
+scenario "the stack stamps every enclosing scope outermost first" {
+  files {
+    "config.kdl" #"""
+      site "T"
+      html {
+        highlight {
+          scopes #true
+          stack #true
+        }
+      }
+      """#
+    "content/index.typ" #"""
+      #let frontmatter = (title: "H",)
+
+      ```bash
+      git log --oneline
+      ```
+
+      """#
+  }
+  expect {
+    ok
+    file "index.html" {
+      contains #"data-scope="source.shell.bash meta.function-call.arguments.shell variable.parameter.option.shell punctuation.definition.parameter.shell""#
+    }
+  }
+}
+
 scenario "without scopes a run with no class is plain text" {
   files {
     "config.kdl" #"""

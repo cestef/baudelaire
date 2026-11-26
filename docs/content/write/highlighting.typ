@@ -115,6 +115,25 @@ With `scopes`, every scoped run gets a span, including one no token names or
 whose token you dropped, so `[data-scope="entity.name.constant.v"]` reaches a name
 the vocabulary has no class for.
 
+`stack` stamps every enclosing scope too, outermost first and space-separated,
+so a selector can match the scope a run sits inside:
+
+```kdl
+html {
+  highlight {
+    scopes #true
+    stack #true
+  }
+}
+```
+
+```css
+/* the `--` of `--oneline` takes the option's colour */
+[data-scope~="variable.parameter.option.shell"] { color: var(--sx-parameter); }
+```
+
+`stack` without `scopes` does nothing, and the build says so.
+
 Without the block the colors stay inline, as Typst emits them. Keep it that way if you want your own `.tmTheme` rendered as written.
 
 == In a theme

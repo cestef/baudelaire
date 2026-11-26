@@ -14,6 +14,11 @@ chores are visible in the git history and change nothing for a site.
 
 ### Added
 
+- **`html { highlight { stack } }` stamps the whole scope stack.** With `scopes`,
+  `data-scope` carries every enclosing scope, outermost first and space-separated,
+  so `[data-scope~="variable.parameter.option.shell"]` reaches the `--` inside
+  `--git`. Off by default; `data-scope` keeps the innermost scope.
+
 - **With `highlight { scopes }`, every scoped run carries `data-scope`.** A scope no
   token names, or one whose token the site dropped, used to get no span at all, so a
   stylesheet keyed on the scope could not reach it. Without `scopes` the markup is

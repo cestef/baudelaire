@@ -126,6 +126,10 @@ pub struct HighlightConfig {
     /// Also stamp each span with the grammar's own scope, as `data-scope`.
     #[key(flag)]
     pub scopes: bool,
+
+    /// Stamp the whole scope stack, outermost first and space-separated, rather than the innermost scope.
+    #[key(flag)]
+    pub stack: bool,
 }
 
 impl Default for HighlightConfig {
@@ -136,6 +140,7 @@ impl Default for HighlightConfig {
             tokens: Token::all(),
             classes: Vec::new(),
             scopes: false,
+            stack: false,
         }
     }
 }

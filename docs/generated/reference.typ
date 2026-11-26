@@ -153,6 +153,7 @@
   (path: "html.highlight.tokens", key: "tokens", shape: "[-](comment* | string* | escape* | number* | constant* | keyword* | operator* | punctuation* | function* | type* | namespace* | tag* | attribute* | property* | variable* | parameter* | heading* | strong* | emph* | link* | raw* | label* | invalid*) ..", doc: "The tokens that reach the page, or `-name` to drop one. All are on.", depth: 2, section: false),
   (path: "html.highlight.classes", key: "classes", shape: "key value ..", doc: "Per-token class names, prefix aside: `keyword \"kw\"` writes `sx-kw`.", depth: 2, section: false),
   (path: "html.highlight.scopes", key: "scopes", shape: "flag", doc: "Also stamp each span with the grammar's own scope, as `data-scope`.", depth: 2, section: false),
+  (path: "html.highlight.stack", key: "stack", shape: "flag", doc: "Stamp the whole scope stack, outermost first and space-separated, rather than the innermost scope.", depth: 2, section: false),
   (path: "links", key: "links", shape: "block", doc: "The shape of generated URLs, and how strictly links are checked.", depth: 0, section: true),
   (path: "links.style", key: "style", shape: "clean | flat", doc: "Whether URLs are directories (`clean`) or `.html` files (`flat`).", depth: 1, section: false),
   (path: "links.backlinks", key: "backlinks", shape: "flag", doc: "Hand each page the pages whose content links to it, as `page.backlinks`.", depth: 1, section: false),

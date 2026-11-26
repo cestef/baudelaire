@@ -56,7 +56,7 @@ impl Highlight {
             }
             let class = Self::token(child).and_then(|token| config.class(token));
             child.attrs.remove(TOKEN);
-            match (config.scopes, Self::scope(child)) {
+            match (config.scopes, Self::scope(child, config.stack)) {
                 (true, Some(scope)) => child.attrs.set(SCOPE, &scope),
                 _ => child.attrs.remove(SCOPE),
             }
@@ -81,10 +81,14 @@ impl Highlight {
         Token::of(element.attrs.get(TOKEN)?)
     }
 
-    /// The `data-scope` stamp a marked span keeps: its innermost scope.
-    fn scope(element: &HtmlElement) -> Option<String> {
-        let stack = element.attrs.get(SCOPE)?;
-        stack.rsplit(' ').next().map(str::to_owned)
+    /// The `data-scope` stamp a marked span keeps: the whole stack under
+    /// `stack`, its innermost scope otherwise.
+    fn scope(element: &HtmlElement, stack: bool) -> Option<String> {
+        let scopes = element.attrs.get(SCOPE)?;
+        if stack {
+            return Some(scopes.to_string());
+        }
+        scopes.rsplit(' ').next().map(str::to_owned)
     }
 
     /// Replace each span this pass emptied with the text it wraps, keeping
@@ -239,12 +243,37 @@ mod tests {
     }
 
     #[test]
+    fn the_stack_stamps_every_enclosing_scope() {
+        let config = HighlightConfig {
+            scopes: true,
+            stack: true,
+            ..HighlightConfig::default()
+        };
+        let piece = [(
+            Some(Token::Punctuation),
+            "source.shell variable.parameter.option.shell punctuation.definition.parameter.shell",
+            "--",
+        )];
+        assert_eq!(
+            rewritten(&config, &piece),
+            vec![(
+                Some("sx-punctuation".to_owned()),
+                Some(piece[0].1.to_owned()),
+                "--".to_owned()
+            )]
+        );
+    }
+
+    #[test]
     fn the_scope_stamp_survives_when_it_is_asked_for() {
         let config = HighlightConfig {
             scopes: true,
             ..HighlightConfig::default()
         };
-        let out = rewritten(&config, &[(Some(Token::Keyword), "keyword.control.rust", "let")]);
+        let out = rewritten(
+            &config,
+            &[(Some(Token::Keyword), "keyword.control.rust", "let")],
+        );
         assert_eq!(
             out,
             vec![(
