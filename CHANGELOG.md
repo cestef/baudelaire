@@ -10,6 +10,37 @@ chores are visible in the git history and change nothing for a site.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/spec/v2.0.0.html
 
+## [0.0.21] - 2026-11-27
+
+### Security
+
+A theme could read files outside the project and publish them with the site. Each
+of these is now refused:
+
+- **A path in a theme's `theme.kdl` stays inside the project.** `assets {
+  tsconfig }`, `tailwind { scan config }` and an entity's `path` or `dir` with a
+  leading `/` or a `..` fail with `baudelaire::config::theme_reach`. A site's own
+  `config.kdl` still names any path.
+
+- **A bundled import stays inside the project.** A JS or TS import, or a Sass
+  `@use`, that resolves outside the project root and the asset folders fails with
+  `baudelaire::asset::outside`.
+
+- **A package's symlink stays inside the package.** A file in a theme or a Typst
+  package that links out of it fails to load, and a theme's `static/`, `assets/` or
+  `theme.kdl` that links out of the theme is ignored. Symlinks in the project
+  itself are still followed.
+
+### Fixed
+
+- **`serve` redirects a folder to its trailing slash.** `/posts/hello` answers
+  `301` to `/posts/hello/`, the way a static host does, so relative links in a page
+  bundle resolve against the page rather than its parent.
+
+- **`html { anchors { place } }` alone gives each heading a self link.** `place
+  "before"` or `"after"` with no `link` emits `#`, where it used to emit nothing.
+  `link ""` still turns the link off.
+
 ## [0.0.20] - 2026-11-26
 
 ### Added
@@ -4308,7 +4339,8 @@ take these as warnings.
 - CSS import order, `url()` tails, EXIF rotation in assets
 - Orphans properly cleaned by `clean`
 
-[unreleased]: https://github.com/cestef/baudelaire/compare/v0.0.20...HEAD
+[unreleased]: https://github.com/cestef/baudelaire/compare/v0.0.21...HEAD
+[0.0.21]: https://github.com/cestef/baudelaire/compare/v0.0.20...v0.0.21
 [0.0.20]: https://github.com/cestef/baudelaire/compare/v0.0.19...v0.0.20
 [0.0.19]: https://github.com/cestef/baudelaire/compare/v0.0.18...v0.0.19
 [0.0.18]: https://github.com/cestef/baudelaire/compare/v0.0.17...v0.0.18
